@@ -1,0 +1,22 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:3000",
+      "localStorage": [
+        {
+          "name": "accessToken",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjbW5vZ3Vmc3owMDM4ZHNwM2k4cmR3dDJxIiwiaWF0IjoxNzc1NTYwOTUxLCJleHAiOjE3NzU1NjE4NTF9.S8xWRrxS5rhSO0MdpjCI43IlvB3iYPcJ68Dla48KdL0"
+        },
+        {
+          "name": "user",
+          "value": "{\"id\":\"cmnogufsz0038dsp3i8rdwt2q\",\"name\":\"Carlos Mendez\",\"email\":\"admin@qametrics.com\",\"role\":{\"id\":\"cmnogufmo0000dsp32gy33vde\",\"name\":\"ADMIN\",\"permissions\":[{\"resource\":\"users\",\"action\":\"create\"},{\"resource\":\"users\",\"action\":\"read\"},{\"resource\":\"users\",\"action\":\"update\"},{\"resource\":\"users\",\"action\":\"delete\"},{\"resource\":\"roles\",\"action\":\"create\"},{\"resource\":\"roles\",\"action\":\"read\"},{\"resource\":\"roles\",\"action\":\"update\"},{\"resource\":\"roles\",\"action\":\"delete\"},{\"resource\":\"clients\",\"action\":\"create\"},{\"resource\":\"clients\",\"action\":\"read\"},{\"resource\":\"clients\",\"action\":\"update\"},{\"resource\":\"clients\",\"action\":\"delete\"},{\"resource\":\"projects\",\"action\":\"create\"},{\"resource\":\"projects\",\"action\":\"read\"},{\"resource\":\"projects\",\"action\":\"update\"},{\"resource\":\"projects\",\"action\":\"delete\"},{\"resource\":\"cycles\",\"action\":\"create\"},{\"resource\":\"cycles\",\"action\":\"read\"},{\"resource\":\"cycles\",\"action\":\"update\"},{\"resource\":\"cycles\",\"action\":\"delete\"},{\"resource\":\"testers\",\"action\":\"create\"},{\"resource\":\"testers\",\"action\":\"read\"},{\"resource\":\"testers\",\"action\":\"update\"},{\"resource\":\"testers\",\"action\":\"delete\"},{\"resource\":\"records\",\"action\":\"create\"},{\"resource\":\"records\",\"action\":\"read\"},{\"resource\":\"records\",\"action\":\"update\"},{\"resource\":\"records\",\"action\":\"delete\"},{\"resource\":\"assignments\",\"action\":\"create\"},{\"resource\":\"assignments\",\"action\":\"read\"},{\"resource\":\"assignments\",\"action\":\"update\"},{\"resource\":\"assignments\",\"action\":\"delete\"},{\"resource\":\"reports\",\"action\":\"create\"},{\"resource\":\"reports\",\"action\":\"read\"},{\"resource\":\"reports\",\"action\":\"update\"},{\"resource\":\"reports\",\"action\":\"delete\"}]}}"
+        },
+        {
+          "name": "refreshToken",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjbW5vZ3Vmc3owMDM4ZHNwM2k4cmR3dDJxIiwiaWF0IjoxNzc1NTYwOTUxLCJleHAiOjE3NzYxNjU3NTF9.ktaFhWJPn4oAzLOELfRxQd8F1DiYYi6Qcjs_Mx359zs"
+        }
+      ]
+    }
+  ]
+}

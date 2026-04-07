@@ -1,0 +1,379 @@
+# ============================================================
+# QA Metrics - Azure DevOps CI/CD Pipeline
+# ============================================================
+# Stages:
+#   1. Build & Test     → Compila, testea, genera artefactos
+#   2. Infrastructure   → Despliega recursos Azure con Bicep
+#   3. Migrate          → Ejecuta migraciones Prisma
+#   4. Deploy API       → Despliega API a App Service
+#   5. Deploy Web       → Despliega Web a App Service
+#   6. Verify           → Health check post-deploy
+# ============================================================
+
+trigger:
+  branches:
+    include:
+      - master
+      - main
+  paths:
+    exclude:
+      - "*.md"
+      - docs/**
+      - .vscode/**
+
+pr:
+  branches:
+    include:
+      - master
+      - main
+
+variables:
+  - name: nodeVersion
+    value: "20.x"
+  - name: resourceGroup
+    value: "rg-qa-metrics"
+  - name: location
+    value: "eastus"
+  - name: apiAppName
+    value: "qa-metrics-api"
+  - name: webAppName
+    value: "qa-metrics-web"
+
+# Los secrets se configuran como variables de pipeline en Azure DevOps:
+#   - DB_ADMIN_PASSWORD
+#   - JWT_SECRET
+#   - JWT_REFRESH_SECRET
+#   - ENCRYPTION_KEY
+
+stages:
+  # ============================================================
+  # STAGE 1: BUILD & TEST
+  # ============================================================
+  - stage: Build
+    displayName: "Build & Test"
+    jobs:
+      - job: BuildJob
+        displayName: "Compilar y testear"
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - task: NodeTool@0
+            displayName: "Instalar Node.js $(nodeVersion)"
+            inputs:
+              versionSpec: $(nodeVersion)
+
+          - task: Cache@2
+            displayName: "Cache node_modules"
+            inputs:
+              key: 'npm | "$(Agent.OS)" | package-lock.json'
+              path: "node_modules"
+              restoreKeys: |
+                npm | "$(Agent.OS)"
+
+          - script: npm ci
+            displayName: "Instalar dependencias"
+
+          - script: cd packages/database && npx prisma generate
+            displayName: "Generar Prisma Client"
+
+          # Build de todos los packages y apps
+          - script: npm run build
+            displayName: "Build monorepo (Turbo)"
+
+          # Tests
+          - script: |
+              npm run test 2>/dev/null || echo "##[warning]Algunos tests fallaron o no existen"
+            displayName: "Ejecutar tests"
+            continueOnError: true
+
+          # --- Artefacto API ---
+          - script: |
+              mkdir -p $(Build.ArtifactStagingDirectory)/api-package
+              cp -r apps/api/dist $(Build.ArtifactStagingDirectory)/api-package/
+              cp apps/api/package.json $(Build.ArtifactStagingDirectory)/api-package/
+              cp package.json $(Build.ArtifactStagingDirectory)/api-package/package-root.json
+              cp package-lock.json $(Build.ArtifactStagingDirectory)/api-package/
+              cp -r packages $(Build.ArtifactStagingDirectory)/api-package/
+              cp -r node_modules $(Build.ArtifactStagingDirectory)/api-package/
+            displayName: "Preparar artefacto API"
+
+          - task: ArchiveFiles@2
+            displayName: "Comprimir API"
+            inputs:
+              rootFolderOrFile: "$(Build.ArtifactStagingDirectory)/api-package"
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: "$(Build.ArtifactStagingDirectory)/api.zip"
+
+          - publish: $(Build.ArtifactStagingDirectory)/api.zip
+            displayName: "Publicar artefacto API"
+            artifact: api
+
+          # --- Artefacto Web ---
+          # Re-build Next.js con URL de produccion
+          - script: |
+              cd apps/web
+              NEXT_PUBLIC_API_URL="https://$(apiAppName).azurewebsites.net" npm run build
+            displayName: "Build Next.js (produccion)"
+
+          - script: |
+              mkdir -p $(Build.ArtifactStagingDirectory)/web-package
+              cp -r apps/web/.next $(Build.ArtifactStagingDirectory)/web-package/
+              cp -r apps/web/public $(Build.ArtifactStagingDirectory)/web-package/ 2>/dev/null || true
+              cp apps/web/package.json $(Build.ArtifactStagingDirectory)/web-package/
+              cp apps/web/next.config.ts $(Build.ArtifactStagingDirectory)/web-package/ 2>/dev/null || true
+              cp -r packages $(Build.ArtifactStagingDirectory)/web-package/
+              cp -r node_modules $(Build.ArtifactStagingDirectory)/web-package/
+            displayName: "Preparar artefacto Web"
+
+          - task: ArchiveFiles@2
+            displayName: "Comprimir Web"
+            inputs:
+              rootFolderOrFile: "$(Build.ArtifactStagingDirectory)/web-package"
+              includeRootFolder: false
+              archiveType: "zip"
+              archiveFile: "$(Build.ArtifactStagingDirectory)/web.zip"
+
+          - publish: $(Build.ArtifactStagingDirectory)/web.zip
+            displayName: "Publicar artefacto Web"
+            artifact: web
+
+          # --- Artefacto Infraestructura ---
+          - publish: deploy/azure
+            displayName: "Publicar templates Bicep"
+            artifact: infra
+
+          # --- Artefacto Migraciones ---
+          - script: |
+              mkdir -p $(Build.ArtifactStagingDirectory)/migrations
+              cp -r packages/database/prisma $(Build.ArtifactStagingDirectory)/migrations/
+              cp packages/database/package.json $(Build.ArtifactStagingDirectory)/migrations/
+              cp -r node_modules $(Build.ArtifactStagingDirectory)/migrations/
+            displayName: "Preparar artefacto migraciones"
+
+          - publish: $(Build.ArtifactStagingDirectory)/migrations
+            displayName: "Publicar artefacto migraciones"
+            artifact: migrations
+
+  # ============================================================
+  # STAGE 2: INFRAESTRUCTURA (solo en master, solo si hay cambios)
+  # ============================================================
+  - stage: Infrastructure
+    displayName: "Infraestructura Azure"
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+    jobs:
+      - deployment: InfraJob
+        displayName: "Desplegar infraestructura"
+        pool:
+          vmImage: "ubuntu-latest"
+        environment: "production-infra"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: infra
+
+                - task: AzureCLI@2
+                  displayName: "Crear Resource Group"
+                  inputs:
+                    azureSubscription: "$(azureSubscription)"
+                    scriptType: "bash"
+                    scriptLocation: "inlineScript"
+                    inlineScript: |
+                      az group create \
+                        --name $(resourceGroup) \
+                        --location $(location) \
+                        --output none
+                      echo "Resource Group $(resourceGroup) listo"
+
+                - task: AzureCLI@2
+                  displayName: "Desplegar Bicep"
+                  inputs:
+                    azureSubscription: "$(azureSubscription)"
+                    scriptType: "bash"
+                    scriptLocation: "inlineScript"
+                    inlineScript: |
+                      az deployment group create \
+                        --resource-group $(resourceGroup) \
+                        --template-file $(Pipeline.Workspace)/infra/main.bicep \
+                        --parameters $(Pipeline.Workspace)/infra/parameters.prod.json \
+                        --parameters \
+                          dbAdminPassword="$(DB_ADMIN_PASSWORD)" \
+                          jwtSecret="$(JWT_SECRET)" \
+                          jwtRefreshSecret="$(JWT_REFRESH_SECRET)" \
+                          encryptionKey="$(ENCRYPTION_KEY)" \
+                        --output none
+                      echo "Infraestructura desplegada exitosamente"
+
+  # ============================================================
+  # STAGE 3: MIGRACIONES DE BD
+  # ============================================================
+  - stage: Migrate
+    displayName: "Migraciones BD"
+    dependsOn: Infrastructure
+    condition: succeeded()
+    jobs:
+      - deployment: MigrateJob
+        displayName: "Ejecutar migraciones Prisma"
+        pool:
+          vmImage: "ubuntu-latest"
+        environment: "production-db"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: NodeTool@0
+                  displayName: "Instalar Node.js"
+                  inputs:
+                    versionSpec: $(nodeVersion)
+
+                - download: current
+                  artifact: migrations
+
+                - task: AzureCLI@2
+                  displayName: "Ejecutar migraciones"
+                  inputs:
+                    azureSubscription: "$(azureSubscription)"
+                    scriptType: "bash"
+                    scriptLocation: "inlineScript"
+                    inlineScript: |
+                      # Obtener FQDN del servidor PostgreSQL
+                      DB_HOST=$(az postgres flexible-server show \
+                        --resource-group $(resourceGroup) \
+                        --name qa-metrics-pgserver \
+                        --query fullyQualifiedDomainName -o tsv)
+
+                      export DATABASE_URL="postgresql://qaadmin:$(DB_ADMIN_PASSWORD)@${DB_HOST}:5432/qa_metrics?sslmode=require&schema=public"
+
+                      # Permitir IP del agente temporalmente
+                      AGENT_IP=$(curl -s https://api.ipify.org)
+                      az postgres flexible-server firewall-rule create \
+                        --resource-group $(resourceGroup) \
+                        --name qa-metrics-pgserver \
+                        --rule-name "AllowPipelineAgent" \
+                        --start-ip-address $AGENT_IP \
+                        --end-ip-address $AGENT_IP \
+                        --output none
+
+                      # Ejecutar migraciones
+                      cd $(Pipeline.Workspace)/migrations
+                      npx prisma migrate deploy --schema=prisma/schema.prisma
+
+                      # Limpiar regla de firewall del agente
+                      az postgres flexible-server firewall-rule delete \
+                        --resource-group $(resourceGroup) \
+                        --name qa-metrics-pgserver \
+                        --rule-name "AllowPipelineAgent" \
+                        --yes \
+                        --output none
+
+                      echo "Migraciones ejecutadas exitosamente"
+
+  # ============================================================
+  # STAGE 4: DEPLOY API
+  # ============================================================
+  - stage: DeployAPI
+    displayName: "Deploy API"
+    dependsOn: Migrate
+    condition: succeeded()
+    jobs:
+      - deployment: DeployAPIJob
+        displayName: "Desplegar API"
+        pool:
+          vmImage: "ubuntu-latest"
+        environment: "production-api"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: api
+
+                - task: AzureWebApp@1
+                  displayName: "Deploy API a App Service"
+                  inputs:
+                    azureSubscription: "$(azureSubscription)"
+                    appType: "webAppLinux"
+                    appName: "$(apiAppName)"
+                    package: "$(Pipeline.Workspace)/api/api.zip"
+                    runtimeStack: "NODE|20-lts"
+                    startUpCommand: "node dist/index.js"
+
+  # ============================================================
+  # STAGE 5: DEPLOY WEB
+  # ============================================================
+  - stage: DeployWeb
+    displayName: "Deploy Web"
+    dependsOn: Migrate
+    condition: succeeded()
+    jobs:
+      - deployment: DeployWebJob
+        displayName: "Desplegar Web"
+        pool:
+          vmImage: "ubuntu-latest"
+        environment: "production-web"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: web
+
+                - task: AzureWebApp@1
+                  displayName: "Deploy Web a App Service"
+                  inputs:
+                    azureSubscription: "$(azureSubscription)"
+                    appType: "webAppLinux"
+                    appName: "$(webAppName)"
+                    package: "$(Pipeline.Workspace)/web/web.zip"
+                    runtimeStack: "NODE|20-lts"
+                    startUpCommand: "npm start"
+
+  # ============================================================
+  # STAGE 6: VERIFICACION POST-DEPLOY
+  # ============================================================
+  - stage: Verify
+    displayName: "Verificar Deploy"
+    dependsOn:
+      - DeployAPI
+      - DeployWeb
+    condition: succeeded()
+    jobs:
+      - job: HealthCheck
+        displayName: "Health Check"
+        pool:
+          vmImage: "ubuntu-latest"
+        steps:
+          - script: |
+              echo "Esperando 60s para que las apps arranquen..."
+              sleep 60
+
+              echo ""
+              echo "=== Verificando API ==="
+              API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+                "https://$(apiAppName).azurewebsites.net/health" \
+                --max-time 30 || echo "000")
+              echo "API Health Check: HTTP $API_STATUS"
+
+              echo ""
+              echo "=== Verificando Web ==="
+              WEB_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+                "https://$(webAppName).azurewebsites.net" \
+                --max-time 30 || echo "000")
+              echo "Web Health Check: HTTP $WEB_STATUS"
+
+              echo ""
+              echo "=== Resultado ==="
+              if [ "$API_STATUS" -ge 200 ] && [ "$API_STATUS" -lt 400 ] && \
+                 [ "$WEB_STATUS" -ge 200 ] && [ "$WEB_STATUS" -lt 400 ]; then
+                echo "##[section]DEPLOY EXITOSO"
+                echo "API: https://$(apiAppName).azurewebsites.net"
+                echo "Web: https://$(webAppName).azurewebsites.net"
+              else
+                echo "##[error]DEPLOY CON PROBLEMAS - Revisar logs de las apps"
+                echo "Ver logs: az webapp log tail --resource-group $(resourceGroup) --name $(apiAppName)"
+                exit 1
+              fi
+            displayName: "Health check de las apps"

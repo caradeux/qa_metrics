@@ -1,0 +1,59 @@
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjbW5vZ3VmeGMwMDNhZHNwM2wwNnowMjFjIiwiaWF0IjoxNzc1NTYyOTc1LCJleHAiOjE3NzU1NjM4NzV9.DN7BBo-tOAr23wCItIUZ-3t1E0pCq-_Catz7jjyCiuI",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjbW5vZ3VmeGMwMDNhZHNwM2wwNnowMjFjIiwiaWF0IjoxNzc1NTYyOTc1LCJleHAiOjE3NzYxNjc3NzV9.TorfkMjHIL_EabFw4AEUiG5XT9jmf7qMXkFe6JECJW8",
+  "user": {
+    "id": "cmnogufxc003adsp3l06z021c",
+    "name": "Ana Garcia",
+    "email": "ana.garcia@qametrics.com",
+    "role": {
+      "id": "cmnogufmv0002dsp3cje2le0r",
+      "name": "QA_ANALYST",
+      "permissions": [
+        {
+          "resource": "clients",
+          "action": "read"
+        },
+        {
+          "resource": "projects",
+          "action": "read"
+        },
+        {
+          "resource": "cycles",
+          "action": "read"
+        },
+        {
+          "resource": "testers",
+          "action": "read"
+        },
+        {
+          "resource": "records",
+          "action": "read"
+        },
+        {
+          "resource": "assignments",
+          "action": "read"
+        },
+        {
+          "resource": "reports",
+          "action": "read"
+        },
+        {
+          "resource": "records",
+          "action": "create"
+        },
+        {
+          "resource": "assignments",
+          "action": "create"
+        },
+        {
+          "resource": "records",
+          "action": "update"
+        },
+        {
+          "resource": "assignments",
+          "action": "update"
+        }
+      ]
+    }
+  }
+}

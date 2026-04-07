@@ -1,0 +1,76 @@
+import "dotenv/config";
+import express from "express";
+import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import { env } from "./config/env.js";
+import { logger } from "./middleware/logger.js";
+import { errorHandler } from "./middleware/error-handler.js";
+import authRoutes from "./routes/auth.routes.js";
+import clientsRoutes from "./routes/clients.routes.js";
+import projectsRoutes from "./routes/projects.routes.js";
+import cyclesRoutes from "./routes/cycles.routes.js";
+import testersRoutes from "./routes/testers.routes.js";
+import usersRoutes from "./routes/users.routes.js";
+import rolesRoutes from "./routes/roles.routes.js";
+import recordsRoutes from "./routes/records.routes.js";
+import assignmentsRoutes from "./routes/assignments.routes.js";
+import metricsRoutes from "./routes/metrics.routes.js";
+import reportsRoutes from "./routes/reports.routes.js";
+
+const app = express();
+
+// CORS must be BEFORE helmet to handle preflight correctly
+app.use(
+  cors({
+    origin: env.CORS_ORIGIN,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+
+// Helmet with cross-origin policies relaxed for API
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: false,
+  })
+);
+
+app.use(express.json({ limit: "10mb" }));
+
+// Rate limiting
+const isDevOrTest = env.NODE_ENV !== "production";
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: isDevOrTest ? 5000 : 200 }));
+app.use(
+  "/api/auth/login",
+  rateLimit({ windowMs: 15 * 60 * 1000, max: isDevOrTest ? 500 : 10 })
+);
+
+// Routes
+app.use("/api/auth", authRoutes);
+app.use("/api/clients", clientsRoutes);
+app.use("/api/projects", projectsRoutes);
+app.use("/api/cycles", cyclesRoutes);
+app.use("/api/testers", testersRoutes);
+app.use("/api/users", usersRoutes);
+app.use("/api/roles", rolesRoutes);
+app.use("/api/records", recordsRoutes);
+app.use("/api/assignments", assignmentsRoutes);
+app.use("/api/metrics", metricsRoutes);
+app.use("/api/reports", reportsRoutes);
+
+// Health check
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
+// Error handler (must be last)
+app.use(errorHandler);
+
+app.listen(env.PORT, () => {
+  logger.info(`API running on port ${env.PORT}`);
+});
+
+export default app;

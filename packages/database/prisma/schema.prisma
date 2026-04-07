@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  isSystem    Boolean          @default(false)
+  users       User[]
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+}
+
+model Permission {
+  id       String           @id @default(cuid())
+  resource String
+  action   String
+  roles    RolePermission[]
+
+  @@unique([resource, action])
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  name         String
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id])
+  active       Boolean  @default(true)
+  refreshToken String?
+  createdAt    DateTime @default(now())
+  clients      Client[]
+}
+
+model Client {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  projects  Project[]
+
+  @@index([userId])
+}
+
+model Project {
+  id         String      @id @default(cuid())
+  name       String
+  clientId   String
+  client     Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  modality   Modality
+  adoOrgUrl  String?
+  adoProject String?
+  adoToken   String?
+  createdAt  DateTime    @default(now())
+  cycles     TestCycle[]
+  testers    Tester[]
+
+  @@index([clientId])
+}
+
+model Tester {
+  id          String             @id @default(cuid())
+  name        String
+  projectId   String
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  records     WeeklyRecord[]
+  assignments TesterAssignment[]
+
+  @@index([projectId])
+}
+
+model TesterAssignment {
+  id             String           @id @default(cuid())
+  testerId       String
+  tester         Tester           @relation(fields: [testerId], references: [id], onDelete: Cascade)
+  storyId        String
+  story          UserStory        @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  startDate      DateTime
+  endDate        DateTime?
+  status         AssignmentStatus @default(REGISTERED)
+  executionCycle String?
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([testerId, storyId])
+  @@index([testerId])
+  @@index([storyId])
+}
+
+model TestCycle {
+  id        String         @id @default(cuid())
+  name      String
+  projectId String
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  startDate DateTime?
+  endDate   DateTime?
+  records   WeeklyRecord[]
+  stories   UserStory[]
+
+  @@index([projectId])
+}
+
+model UserStory {
+  id          String             @id @default(cuid())
+  externalId  String?
+  title       String
+  complexity  Complexity
+  cycleId     String
+  cycle       TestCycle          @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  assignments TesterAssignment[]
+
+  @@index([cycleId])
+}
+
+model WeeklyRecord {
+  id                  String    @id @default(cuid())
+  testerId            String
+  tester              Tester    @relation(fields: [testerId], references: [id], onDelete: Cascade)
+  cycleId             String
+  cycle               TestCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  weekStart           DateTime
+  // Diseno
+  designedTotal       Int       @default(0)
+  designedFunctional  Int       @default(0)
+  designedRegression  Int       @default(0)
+  designedSmoke       Int       @default(0)
+  designedExploratory Int       @default(0)
+  // Ejecucion
+  executedTotal       Int       @default(0)
+  executedFunctional  Int       @default(0)
+  executedRegression  Int       @default(0)
+  executedSmoke       Int       @default(0)
+  executedExploratory Int       @default(0)
+  // Defectos
+  defectsCritical     Int       @default(0)
+  defectsHigh         Int       @default(0)
+  defectsMedium       Int       @default(0)
+  defectsLow          Int       @default(0)
+  // Auditoria
+  source              String    @default("MANUAL")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([testerId, cycleId, weekStart])
+  @@index([testerId])
+  @@index([cycleId])
+}
+
+enum Modality {
+  AZURE_DEVOPS
+  MANUAL
+}
+
+enum Complexity {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum AssignmentStatus {
+  REGISTERED
+  ANALYSIS
+  TEST_DESIGN
+  EXECUTION
+  RETURNED_TO_DEV
+  WAITING_UAT
+  UAT
+  PRODUCTION
+}

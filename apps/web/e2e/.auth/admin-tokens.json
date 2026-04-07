@@ -1,0 +1,159 @@
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjbW5vZ3Vmc3owMDM4ZHNwM2k4cmR3dDJxIiwiaWF0IjoxNzc1NTYyOTc1LCJleHAiOjE3NzU1NjM4NzV9.U-e9vWH6zH4zmRxZqd-9T0Ax-h0Uri_Mj3awyhhMpzw",
+  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjbW5vZ3Vmc3owMDM4ZHNwM2k4cmR3dDJxIiwiaWF0IjoxNzc1NTYyOTc1LCJleHAiOjE3NzYxNjc3NzV9.fCZE31x1_HbS1MqoJq3ByWRt2S7TibOpk-_pRiF5uBU",
+  "user": {
+    "id": "cmnogufsz0038dsp3i8rdwt2q",
+    "name": "Carlos Mendez",
+    "email": "admin@qametrics.com",
+    "role": {
+      "id": "cmnogufmo0000dsp32gy33vde",
+      "name": "ADMIN",
+      "permissions": [
+        {
+          "resource": "users",
+          "action": "create"
+        },
+        {
+          "resource": "users",
+          "action": "read"
+        },
+        {
+          "resource": "users",
+          "action": "update"
+        },
+        {
+          "resource": "users",
+          "action": "delete"
+        },
+        {
+          "resource": "roles",
+          "action": "create"
+        },
+        {
+          "resource": "roles",
+          "action": "read"
+        },
+        {
+          "resource": "roles",
+          "action": "update"
+        },
+        {
+          "resource": "roles",
+          "action": "delete"
+        },
+        {
+          "resource": "clients",
+          "action": "create"
+        },
+        {
+          "resource": "clients",
+          "action": "read"
+        },
+        {
+          "resource": "clients",
+          "action": "update"
+        },
+        {
+          "resource": "clients",
+          "action": "delete"
+        },
+        {
+          "resource": "projects",
+          "action": "create"
+        },
+        {
+          "resource": "projects",
+          "action": "read"
+        },
+        {
+          "resource": "projects",
+          "action": "update"
+        },
+        {
+          "resource": "projects",
+          "action": "delete"
+        },
+        {
+          "resource": "cycles",
+          "action": "create"
+        },
+        {
+          "resource": "cycles",
+          "action": "read"
+        },
+        {
+          "resource": "cycles",
+          "action": "update"
+        },
+        {
+          "resource": "cycles",
+          "action": "delete"
+        },
+        {
+          "resource": "testers",
+          "action": "create"
+        },
+        {
+          "resource": "testers",
+          "action": "read"
+        },
+        {
+          "resource": "testers",
+          "action": "update"
+        },
+        {
+          "resource": "testers",
+          "action": "delete"
+        },
+        {
+          "resource": "records",
+          "action": "create"
+        },
+        {
+          "resource": "records",
+          "action": "read"
+        },
+        {
+          "resource": "records",
+          "action": "update"
+        },
+        {
+          "resource": "records",
+          "action": "delete"
+        },
+        {
+          "resource": "assignments",
+          "action": "create"
+        },
+        {
+          "resource": "assignments",
+          "action": "read"
+        },
+        {
+          "resource": "assignments",
+          "action": "update"
+        },
+        {
+          "resource": "assignments",
+          "action": "delete"
+        },
+        {
+          "resource": "reports",
+          "action": "create"
+        },
+        {
+          "resource": "reports",
+          "action": "read"
+        },
+        {
+          "resource": "reports",
+          "action": "update"
+        },
+        {
+          "resource": "reports",
+          "action": "delete"
+        }
+      ]
+    }
+  }
+}

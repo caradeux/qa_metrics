@@ -1,0 +1,22 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:3000",
+      "localStorage": [
+        {
+          "name": "accessToken",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjbW5vZ3VmeGMwMDNhZHNwM2wwNnowMjFjIiwiaWF0IjoxNzc1NTYwOTUyLCJleHAiOjE3NzU1NjE4NTJ9.nZuzoKkVLyVy62-xkKVCdoU5K--zEXkT5idZ6tXz_Dk"
+        },
+        {
+          "name": "user",
+          "value": "{\"id\":\"cmnogufxc003adsp3l06z021c\",\"name\":\"Ana Garcia\",\"email\":\"ana.garcia@qametrics.com\",\"role\":{\"id\":\"cmnogufmv0002dsp3cje2le0r\",\"name\":\"QA_ANALYST\",\"permissions\":[{\"resource\":\"clients\",\"action\":\"read\"},{\"resource\":\"projects\",\"action\":\"read\"},{\"resource\":\"cycles\",\"action\":\"read\"},{\"resource\":\"testers\",\"action\":\"read\"},{\"resource\":\"records\",\"action\":\"read\"},{\"resource\":\"assignments\",\"action\":\"read\"},{\"resource\":\"reports\",\"action\":\"read\"},{\"resource\":\"records\",\"action\":\"create\"},{\"resource\":\"assignments\",\"action\":\"create\"},{\"resource\":\"records\",\"action\":\"update\"},{\"resource\":\"assignments\",\"action\":\"update\"}]}}"
+        },
+        {
+          "name": "refreshToken",
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjbW5vZ3VmeGMwMDNhZHNwM2wwNnowMjFjIiwiaWF0IjoxNzc1NTYwOTUyLCJleHAiOjE3NzYxNjU3NTJ9.DB59Kvy2pkExmKyZN9mtoiQu1lr5bf_rVkd6IE9v5Nc"
+        }
+      ]
+    }
+  ]
+}
