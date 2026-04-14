@@ -26,13 +26,16 @@ export async function authMiddleware(
   next: NextFunction
 ) {
   try {
+    const cookieToken = (req as any).cookies?.qa_access as string | undefined;
     const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
+    let token: string | undefined = cookieToken;
+    if (!token && authHeader?.startsWith("Bearer ")) {
+      token = authHeader.substring(7);
+    }
+    if (!token) {
       res.status(401).json({ error: "Token no proporcionado" });
       return;
     }
-
-    const token = authHeader.substring(7);
     const payload = jwt.verify(token, env.JWT_SECRET) as { userId: string };
 
     const user = await prisma.user.findUnique({
