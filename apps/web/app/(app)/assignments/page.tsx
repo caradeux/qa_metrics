@@ -7,9 +7,10 @@ import { usePermissions } from "@/hooks/usePermissions";
 
 interface Assignment {
   id: string; startDate: string; endDate: string | null;
-  status: string; executionCycle: string | null; notes: string | null;
-  tester: { id: string; name: string; project: { id: string; name: string; client: { name: string } } };
-  story: { id: string; title: string; complexity: string; cycle: { name: string } };
+  status: string; notes: string | null;
+  tester: { id: string; name: string; allocation?: number; project: { id: string; name: string; client: { name: string } } };
+  cycle: { id: string; name: string };
+  story: { id: string; title: string; designComplexity: string; executionComplexity: string };
 }
 interface Project { id: string; name: string; }
 
@@ -72,9 +73,9 @@ export default function AssignmentsPage() {
   const filtered = filterStatus ? assignments.filter(a => a.status === filterStatus) : assignments;
 
   // Group by tester
-  const groups = new Map<string, { name: string; project: string; client: string; assignments: Assignment[] }>();
+  const groups = new Map<string, { name: string; allocation: number; project: string; client: string; assignments: Assignment[] }>();
   for (const a of filtered) {
-    if (!groups.has(a.tester.id)) groups.set(a.tester.id, { name: a.tester.name, project: a.tester.project.name, client: a.tester.project.client.name, assignments: [] });
+    if (!groups.has(a.tester.id)) groups.set(a.tester.id, { name: a.tester.name, allocation: a.tester.allocation ?? 100, project: a.tester.project.name, client: a.tester.project.client.name, assignments: [] });
     groups.get(a.tester.id)!.assignments.push(a);
   }
 
@@ -223,6 +224,9 @@ export default function AssignmentsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="text-sm font-bold text-gray-900">{group.name}</h3>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${group.allocation === 100 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                        {group.allocation}%
+                      </span>
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${isFree ? "bg-emerald-100 text-emerald-700" : hasReturned ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-700"}`}>
                         {isFree ? "Disponible" : hasReturned ? "Bloqueado" : `${activeCount} activa${activeCount > 1 ? "s" : ""}`}
                       </span>
@@ -254,16 +258,15 @@ export default function AssignmentsPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className={`text-sm font-medium ${isProd ? "text-gray-400" : "text-gray-800"}`}>{a.story.title}</p>
-                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${complexityBadge[a.story.complexity] || ""}`}>
-                              {a.story.complexity === "HIGH" ? "Alta" : a.story.complexity === "MEDIUM" ? "Media" : "Baja"}
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${complexityBadge[a.story.executionComplexity] || ""}`}>
+                              {a.story.executionComplexity === "HIGH" ? "Alta" : a.story.executionComplexity === "MEDIUM" ? "Media" : "Baja"}
                             </span>
                           </div>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold ${s.bg}`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />{s.label}
                             </span>
-                            <span className="text-[10px] text-gray-400">{a.story.cycle.name}</span>
-                            {a.executionCycle && <span className="text-[10px] text-cyan-600 font-medium">{a.executionCycle}</span>}
+                            <span className="text-[10px] text-gray-400">{a.cycle?.name}</span>
                             <span className="text-[10px] text-gray-300 font-mono">{fmtDate(a.startDate)}{a.endDate ? ` → ${fmtDate(a.endDate)}` : ""}</span>
                           </div>
                           {a.notes && (

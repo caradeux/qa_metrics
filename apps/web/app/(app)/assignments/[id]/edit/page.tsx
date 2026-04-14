@@ -6,7 +6,7 @@ import { apiClient } from "@/lib/api-client";
 
 interface Assignment {
   id: string; startDate: string; endDate: string | null;
-  status: string; executionCycle: string | null; notes: string | null;
+  status: string; notes: string | null;
   tester: { id: string; name: string; project: { name: string; client: { name: string } } };
   story: { id: string; title: string };
 }
@@ -28,7 +28,6 @@ export default function EditAssignmentPage({ params }: { params: Promise<{ id: s
   const [info, setInfo] = useState<Assignment | null>(null);
   const [status, setStatus] = useState("REGISTERED");
   const [endDate, setEndDate] = useState("");
-  const [executionCycle, setExecutionCycle] = useState("");
   const [notes, setNotes] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -42,7 +41,6 @@ export default function EditAssignmentPage({ params }: { params: Promise<{ id: s
           setInfo(a);
           setStatus(a.status);
           setEndDate(a.endDate ? a.endDate.split("T")[0] : "");
-          setExecutionCycle(a.executionCycle || "");
           setNotes(a.notes || "");
         } else setError("Asignacion no encontrada");
         setLoaded(true);
@@ -59,7 +57,6 @@ export default function EditAssignmentPage({ params }: { params: Promise<{ id: s
         body: JSON.stringify({
           status,
           endDate: endDate || null,
-          executionCycle: executionCycle || null,
           notes: notes || null,
         }),
       });
@@ -93,10 +90,6 @@ export default function EditAssignmentPage({ params }: { params: Promise<{ id: s
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Fecha Fin</label>
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inp} />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Ciclo de Ejecucion</label>
-          <input type="text" value={executionCycle} onChange={(e) => setExecutionCycle(e.target.value)} className={inp} placeholder="Opcional" />
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Notas</label>

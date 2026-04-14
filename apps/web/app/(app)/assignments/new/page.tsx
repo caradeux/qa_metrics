@@ -6,13 +6,18 @@ import { apiClient } from "@/lib/api-client";
 
 interface Project { id: string; name: string; }
 interface Tester { id: string; name: string; }
+interface Cycle { id: string; name: string; }
+interface Story { id: string; title: string; externalId?: string | null; }
 
 export default function NewAssignmentPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [testers, setTesters] = useState<Tester[]>([]);
+  const [cycles, setCycles] = useState<Cycle[]>([]);
+  const [stories, setStories] = useState<Story[]>([]);
   const [projectId, setProjectId] = useState("");
   const [testerId, setTesterId] = useState("");
+  const [cycleId, setCycleId] = useState("");
   const [storyId, setStoryId] = useState("");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState("");
@@ -25,13 +30,15 @@ export default function NewAssignmentPage() {
   }, []);
 
   useEffect(() => {
-    if (!projectId) { setTesters([]); setTesterId(""); return; }
+    if (!projectId) { setTesters([]); setCycles([]); setStories([]); setTesterId(""); setCycleId(""); setStoryId(""); return; }
     apiClient<Tester[]>(`/api/testers?projectId=${projectId}`).then(setTesters).catch(() => setTesters([]));
+    apiClient<Cycle[]>(`/api/cycles?projectId=${projectId}`).then(setCycles).catch(() => setCycles([]));
+    apiClient<Story[]>(`/api/stories?projectId=${projectId}`).then(setStories).catch(() => setStories([]));
   }, [projectId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!testerId || !storyId || !startDate) { setError("Completa los campos obligatorios"); return; }
+    if (!testerId || !storyId || !cycleId || !startDate) { setError("Completa los campos obligatorios"); return; }
     setSaving(true); setError("");
     try {
       await apiClient("/api/assignments", {
@@ -39,8 +46,9 @@ export default function NewAssignmentPage() {
         body: JSON.stringify({
           testerId,
           storyId,
-          startDate,
-          endDate: endDate || null,
+          cycleId,
+          startDate: new Date(startDate).toISOString(),
+          endDate: endDate ? new Date(endDate).toISOString() : null,
           notes: notes || null,
         }),
       });
@@ -60,7 +68,7 @@ export default function NewAssignmentPage() {
       <form onSubmit={handleSubmit} className="space-y-5 bg-card p-6 rounded-xl border border-border">
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Proyecto</label>
-          <select value={projectId} onChange={(e) => { setProjectId(e.target.value); setTesterId(""); setStoryId(""); }} className={inp}>
+          <select value={projectId} onChange={(e) => { setProjectId(e.target.value); setTesterId(""); setStoryId(""); setCycleId(""); }} className={inp}>
             <option value="">Seleccionar...</option>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
@@ -74,9 +82,19 @@ export default function NewAssignmentPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">ID Historia de Usuario</label>
-            <input type="text" value={storyId} onChange={(e) => setStoryId(e.target.value)} className={inp} placeholder="ID de la HU" />
+            <label className="block text-sm font-medium text-foreground mb-1">Ciclo</label>
+            <select value={cycleId} onChange={(e) => setCycleId(e.target.value)} disabled={!projectId} className={inp}>
+              <option value="">Seleccionar...</option>
+              {cycles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
           </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Historia de Usuario</label>
+          <select value={storyId} onChange={(e) => setStoryId(e.target.value)} disabled={!projectId} className={inp}>
+            <option value="">Seleccionar...</option>
+            {stories.map((s) => <option key={s.id} value={s.id}>{s.externalId ? `[${s.externalId}] ` : ""}{s.title}</option>)}
+          </select>
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
