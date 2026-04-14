@@ -30,6 +30,7 @@ function encrypt(text: string): string {
 }
 
 async function main() {
+  await prisma.assignmentStatusLog.deleteMany();
   await prisma.testerAssignment.deleteMany();
   await prisma.dailyRecord.deleteMany();
   await prisma.cycleBreakdown.deleteMany();
@@ -66,7 +67,7 @@ async function main() {
   });
 
   // Create permissions
-  const resources = ["users", "roles", "clients", "projects", "cycles", "testers", "records", "assignments", "reports"];
+  const resources = ["users", "roles", "clients", "projects", "cycles", "testers", "records", "assignments", "reports", "stories"];
   const actions = ["create", "read", "update", "delete"];
   const permissions: Record<string, { id: string }> = {};
   for (const resource of resources) {
@@ -82,7 +83,7 @@ async function main() {
   }
 
   // QA Lead gets most permissions except user/role management
-  const leadResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports"];
+  const leadResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports", "stories"];
   for (const resource of leadResources) {
     for (const action of actions) {
       await prisma.rolePermission.create({ data: { roleId: qaLeadRole.id, permissionId: permissions[`${resource}:${action}`].id } });
@@ -92,7 +93,7 @@ async function main() {
   await prisma.rolePermission.create({ data: { roleId: qaLeadRole.id, permissionId: permissions["roles:read"].id } });
 
   // QA Analyst
-  const analystReadResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports"];
+  const analystReadResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports", "stories"];
   for (const resource of analystReadResources) {
     await prisma.rolePermission.create({ data: { roleId: qaAnalystRole.id, permissionId: permissions[`${resource}:read`].id } });
   }
@@ -102,7 +103,7 @@ async function main() {
   }
 
   // CLIENT_PM permissions (read-only subset)
-  const clientPmResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports"];
+  const clientPmResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports", "stories"];
   for (const resource of clientPmResources) {
     await prisma.rolePermission.create({ data: { roleId: clientPmRole.id, permissionId: permissions[`${resource}:read`].id } });
   }
@@ -145,14 +146,14 @@ async function main() {
   const stories1 = [];
   for (let i = 0; i < 12; i++) {
     const s = await prisma.userStory.create({
-      data: { title: `HU-${i+1}: Funcionalidad ${i+1} del Core Bancario`, complexity: complexities[i], cycleId: cycle1.id },
+      data: { title: `HU-${i+1}: Funcionalidad ${i+1} del Core Bancario`, designComplexity: complexities[i], executionComplexity: complexities[i], projectId: project1.id },
     });
     stories1.push(s);
   }
   const stories2 = [];
   for (let i = 0; i < 8; i++) {
     const s = await prisma.userStory.create({
-      data: { title: `HU-${i+13}: Mejora ${i+1} del Core Bancario`, complexity: complexities[i % complexities.length], cycleId: cycle2.id },
+      data: { title: `HU-${i+13}: Mejora ${i+1} del Core Bancario`, designComplexity: complexities[i % complexities.length], executionComplexity: complexities[i % complexities.length], projectId: project1.id },
     });
     stories2.push(s);
   }
@@ -177,7 +178,7 @@ async function main() {
   const complexities2 = ["HIGH","HIGH","MEDIUM","MEDIUM","MEDIUM","MEDIUM","LOW","LOW"] as const;
   for (let i = 0; i < 8; i++) {
     await prisma.userStory.create({
-      data: { title: `HU-PA-${i+1}: Funcionalidad ${i+1} del Portal`, complexity: complexities2[i], cycleId: cycle3.id },
+      data: { title: `HU-PA-${i+1}: Funcionalidad ${i+1} del Portal`, designComplexity: complexities2[i], executionComplexity: complexities2[i], projectId: project2.id },
     });
   }
 
@@ -240,33 +241,39 @@ async function main() {
   console.log("✓ CycleBreakdowns creados");
 
   // Asignaciones con flujo realista de QA
-  const stories3 = await prisma.userStory.findMany({ where: { cycleId: cycle3.id }, take: 4 });
+  const stories3 = await prisma.userStory.findMany({ where: { projectId: project2.id }, take: 4 });
 
-  await prisma.testerAssignment.create({ data: { testerId: testers1[0].id, storyId: stories1[0].id, startDate: new Date("2026-01-05"), endDate: new Date("2026-01-23"), status: "PRODUCTION", notes: "Desplegado en produccion sin incidentes" } });
-  await prisma.testerAssignment.create({ data: { testerId: testers1[0].id, storyId: stories1[1].id, startDate: new Date("2026-01-10"), endDate: new Date("2026-02-05"), status: "PRODUCTION" } });
-  await prisma.testerAssignment.create({ data: { testerId: testers1[0].id, storyId: stories2[0].id, startDate: new Date("2026-03-02"), endDate: new Date("2026-04-10"), status: "EXECUTION", executionCycle: "Sprint 5-8 Ciclo 2" } });
-  await prisma.testerAssignment.create({ data: { testerId: testers1[0].id, storyId: stories2[1].id, startDate: new Date("2026-03-16"), endDate: new Date("2026-04-17"), status: "TEST_DESIGN" } });
+  async function createAssignment(data: { testerId: string; storyId: string; cycleId: string; startDate: Date; endDate?: Date | null; status: any; notes?: string }) {
+    const a = await prisma.testerAssignment.create({ data });
+    await prisma.assignmentStatusLog.create({ data: { assignmentId: a.id, status: data.status } });
+    return a;
+  }
 
-  await prisma.testerAssignment.create({ data: { testerId: testers1[1].id, storyId: stories1[3].id, startDate: new Date("2026-01-15"), endDate: new Date("2026-02-10"), status: "PRODUCTION" } });
-  await prisma.testerAssignment.create({ data: { testerId: testers1[1].id, storyId: stories2[2].id, startDate: new Date("2026-03-02"), endDate: new Date("2026-04-08"), status: "EXECUTION", executionCycle: "Sprint 5-8 Ciclo 1" } });
-  await prisma.testerAssignment.create({ data: { testerId: testers1[1].id, storyId: stories2[3].id, startDate: new Date("2026-03-10"), endDate: new Date("2026-04-20"), status: "RETURNED_TO_DEV", notes: "3 defectos criticos encontrados en regresion. Devuelto a desarrollo." } });
-  await prisma.testerAssignment.create({ data: { testerId: testers1[1].id, storyId: stories2[4].id, startDate: new Date("2026-04-01"), endDate: new Date("2026-04-25"), status: "ANALYSIS" } });
+  await createAssignment({ testerId: testers1[0].id, storyId: stories1[0].id, cycleId: cycle1.id, startDate: new Date("2026-01-05"), endDate: new Date("2026-01-23"), status: "PRODUCTION", notes: "Desplegado en produccion sin incidentes" });
+  await createAssignment({ testerId: testers1[0].id, storyId: stories1[1].id, cycleId: cycle1.id, startDate: new Date("2026-01-10"), endDate: new Date("2026-02-05"), status: "PRODUCTION" });
+  await createAssignment({ testerId: testers1[0].id, storyId: stories2[0].id, cycleId: cycle2.id, startDate: new Date("2026-03-02"), endDate: new Date("2026-04-10"), status: "EXECUTION" });
+  await createAssignment({ testerId: testers1[0].id, storyId: stories2[1].id, cycleId: cycle2.id, startDate: new Date("2026-03-16"), endDate: new Date("2026-04-17"), status: "TEST_DESIGN" });
 
-  await prisma.testerAssignment.create({ data: { testerId: testers1[2].id, storyId: stories1[2].id, startDate: new Date("2026-01-12"), endDate: new Date("2026-02-14"), status: "PRODUCTION" } });
-  await prisma.testerAssignment.create({ data: { testerId: testers1[2].id, storyId: stories2[5].id, startDate: new Date("2026-03-05"), endDate: new Date("2026-04-12"), status: "UAT", notes: "En revision por el cliente" } });
-  await prisma.testerAssignment.create({ data: { testerId: testers1[2].id, storyId: stories2[6].id, startDate: new Date("2026-03-20"), endDate: new Date("2026-04-18"), status: "WAITING_UAT" } });
+  await createAssignment({ testerId: testers1[1].id, storyId: stories1[3].id, cycleId: cycle1.id, startDate: new Date("2026-01-15"), endDate: new Date("2026-02-10"), status: "PRODUCTION" });
+  await createAssignment({ testerId: testers1[1].id, storyId: stories2[2].id, cycleId: cycle2.id, startDate: new Date("2026-03-02"), endDate: new Date("2026-04-08"), status: "EXECUTION" });
+  await createAssignment({ testerId: testers1[1].id, storyId: stories2[3].id, cycleId: cycle2.id, startDate: new Date("2026-03-10"), endDate: new Date("2026-04-20"), status: "RETURNED_TO_DEV", notes: "3 defectos criticos encontrados en regresion. Devuelto a desarrollo." });
+  await createAssignment({ testerId: testers1[1].id, storyId: stories2[4].id, cycleId: cycle2.id, startDate: new Date("2026-04-01"), endDate: new Date("2026-04-25"), status: "ANALYSIS" });
+
+  await createAssignment({ testerId: testers1[2].id, storyId: stories1[2].id, cycleId: cycle1.id, startDate: new Date("2026-01-12"), endDate: new Date("2026-02-14"), status: "PRODUCTION" });
+  await createAssignment({ testerId: testers1[2].id, storyId: stories2[5].id, cycleId: cycle2.id, startDate: new Date("2026-03-05"), endDate: new Date("2026-04-12"), status: "UAT", notes: "En revision por el cliente" });
+  await createAssignment({ testerId: testers1[2].id, storyId: stories2[6].id, cycleId: cycle2.id, startDate: new Date("2026-03-20"), endDate: new Date("2026-04-18"), status: "WAITING_UAT" });
 
   if (stories3.length > 0) {
-    await prisma.testerAssignment.create({ data: { testerId: testers2[0].id, storyId: stories3[0].id, startDate: new Date("2026-02-02"), endDate: new Date("2026-04-15"), status: "EXECUTION", executionCycle: "Fase Inicial Ciclo 1" } });
+    await createAssignment({ testerId: testers2[0].id, storyId: stories3[0].id, cycleId: cycle3.id, startDate: new Date("2026-02-02"), endDate: new Date("2026-04-15"), status: "EXECUTION" });
   }
   if (stories3.length > 1) {
-    await prisma.testerAssignment.create({ data: { testerId: testers2[0].id, storyId: stories3[1].id, startDate: new Date("2026-04-01"), endDate: new Date("2026-04-30"), status: "REGISTERED" } });
+    await createAssignment({ testerId: testers2[0].id, storyId: stories3[1].id, cycleId: cycle3.id, startDate: new Date("2026-04-01"), endDate: new Date("2026-04-30"), status: "REGISTERED" });
   }
   if (stories3.length > 2) {
-    await prisma.testerAssignment.create({ data: { testerId: testers2[1].id, storyId: stories3[2].id, startDate: new Date("2026-02-02"), endDate: new Date("2026-03-10"), status: "PRODUCTION" } });
+    await createAssignment({ testerId: testers2[1].id, storyId: stories3[2].id, cycleId: cycle3.id, startDate: new Date("2026-02-02"), endDate: new Date("2026-03-10"), status: "PRODUCTION" });
   }
   if (stories3.length > 3) {
-    await prisma.testerAssignment.create({ data: { testerId: testers2[1].id, storyId: stories3[3].id, startDate: new Date("2026-04-10"), endDate: new Date("2026-05-05"), status: "ANALYSIS", notes: "Pendiente liberacion de recurso en abril" } });
+    await createAssignment({ testerId: testers2[1].id, storyId: stories3[3].id, cycleId: cycle3.id, startDate: new Date("2026-04-10"), endDate: new Date("2026-05-05"), status: "ANALYSIS", notes: "Pendiente liberacion de recurso en abril" });
   }
 
   console.log("Seed completado:");

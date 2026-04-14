@@ -47,7 +47,7 @@ model User {
   refreshToken String?
   createdAt    DateTime @default(now())
   clients      Client[]
-  tester       Tester?
+  testers      Tester[]
   managedProjects Project[] @relation("ProjectManagerOfProject")
 }
 
@@ -76,6 +76,7 @@ model Project {
   createdAt  DateTime    @default(now())
   cycles     TestCycle[]
   testers    Tester[]
+  stories    UserStory[]
 
   @@index([clientId])
   @@index([projectManagerId])
@@ -86,8 +87,9 @@ model Tester {
   name        String
   projectId   String
   project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  userId      String?            @unique
+  userId      String?
   user        User?              @relation(fields: [userId], references: [id])
+  allocation  Int                @default(100)
   records     DailyRecord[]
   assignments TesterAssignment[]
 
@@ -100,17 +102,30 @@ model TesterAssignment {
   tester         Tester           @relation(fields: [testerId], references: [id], onDelete: Cascade)
   storyId        String
   story          UserStory        @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  cycleId        String
+  cycle          TestCycle        @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   startDate      DateTime
   endDate        DateTime?
   status         AssignmentStatus @default(REGISTERED)
-  executionCycle String?
   notes          String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
+  statusLogs     AssignmentStatusLog[]
 
-  @@unique([testerId, storyId])
+  @@unique([testerId, storyId, cycleId])
   @@index([testerId])
   @@index([storyId])
+  @@index([cycleId])
+}
+
+model AssignmentStatusLog {
+  id           String           @id @default(cuid())
+  assignmentId String
+  assignment   TesterAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  status       AssignmentStatus
+  changedAt    DateTime         @default(now())
+
+  @@index([assignmentId])
 }
 
 model TestCycle {
@@ -122,21 +137,22 @@ model TestCycle {
   endDate   DateTime?
   records   DailyRecord[]
   breakdown CycleBreakdown?
-  stories   UserStory[]
+  assignments TesterAssignment[]
 
   @@index([projectId])
 }
 
 model UserStory {
-  id          String             @id @default(cuid())
-  externalId  String?
-  title       String
-  complexity  Complexity
-  cycleId     String
-  cycle       TestCycle          @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  assignments TesterAssignment[]
+  id                  String             @id @default(cuid())
+  externalId          String?
+  title               String
+  designComplexity    Complexity         @default(MEDIUM)
+  executionComplexity Complexity         @default(MEDIUM)
+  projectId           String
+  project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignments         TesterAssignment[]
 
-  @@index([cycleId])
+  @@index([projectId])
 }
 
 model DailyRecord {
