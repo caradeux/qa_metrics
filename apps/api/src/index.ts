@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import { env } from "./config/env.js";
@@ -43,6 +44,7 @@ app.use(
 );
 
 app.use(express.json({ limit: "10mb" }));
+app.use(cookieParser());
 
 // Rate limiting
 const isDevOrTest = env.NODE_ENV !== "production";
@@ -82,6 +84,13 @@ app.listen(env.PORT, () => {
 });
 
 export default app;
+
+
+
+
+
+
+
 
 
 
