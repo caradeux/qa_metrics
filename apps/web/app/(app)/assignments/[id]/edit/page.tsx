@@ -21,6 +21,7 @@ const STATUSES = [
   { value: "WAITING_UAT", label: "Espera UAT" },
   { value: "UAT", label: "En UAT" },
   { value: "PRODUCTION", label: "Produccion" },
+  { value: "ON_HOLD", label: "Detenido" },
 ];
 
 export default function EditAssignmentPage({ params }: { params: Promise<{ id: string }> }) {

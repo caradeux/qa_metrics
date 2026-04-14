@@ -17,6 +17,7 @@ const STATUSES = [
   { value: "WAITING_UAT", label: "Espera UAT", short: "ESP", color: "#f59e0b" },
   { value: "UAT", label: "En UAT", short: "UAT", color: "#d946ef" },
   { value: "PRODUCTION", label: "Produccion", short: "PRD", color: "#10b981" },
+  { value: "ON_HOLD", label: "Detenido", short: "HOLD", color: "#64748b" },
 ] as const;
 
 const statusMap = Object.fromEntries(STATUSES.map((s) => [s.value, s]));

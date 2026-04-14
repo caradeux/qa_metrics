@@ -25,7 +25,10 @@ const STATUSES = [
   { value: "WAITING_UAT", label: "Espera UAT", short: "ESP", color: "#f59e0b", bg: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500", step: 5 },
   { value: "UAT", label: "En UAT", short: "UAT", color: "#d946ef", bg: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200", dot: "bg-fuchsia-500", step: 6 },
   { value: "PRODUCTION", label: "Produccion", short: "PRD", color: "#10b981", bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500", step: 7 },
+  { value: "ON_HOLD", label: "Detenido", short: "HOLD", color: "#64748b", bg: "bg-slate-100 text-slate-700 border-slate-200", dot: "bg-slate-500", step: 9 },
 ] as const;
+
+const ACTIVE_STATUSES = ["REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY", "EXECUTION"] as const;
 
 const statusMap = Object.fromEntries(STATUSES.map(s => [s.value, s]));
 const complexityBadge: Record<string, string> = { HIGH: "bg-red-100 text-red-700", MEDIUM: "bg-amber-100 text-amber-700", LOW: "bg-green-100 text-green-700" };
@@ -34,8 +37,8 @@ function fmtDate(d: string) { return new Date(d).toLocaleDateString("es", { day:
 function daysBetween(a: string, b: string) { return Math.ceil((new Date(b).getTime() - new Date(a).getTime()) / (1000 * 60 * 60 * 24)); }
 function daysUntil(d: string) { return daysBetween(new Date().toISOString().split("T")[0], d); }
 
-// Active = not in PRODUCTION
-function isActive(status: string) { return status !== "PRODUCTION"; }
+// Active = tester is currently working (not idle). Idle = liberated, available for other work.
+function isActive(status: string) { return (ACTIVE_STATUSES as readonly string[]).includes(status); }
 
 export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
