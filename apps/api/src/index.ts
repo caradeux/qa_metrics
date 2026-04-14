@@ -13,10 +13,12 @@ import cyclesRoutes from "./routes/cycles.routes.js";
 import testersRoutes from "./routes/testers.routes.js";
 import usersRoutes from "./routes/users.routes.js";
 import rolesRoutes from "./routes/roles.routes.js";
-import recordsRoutes from "./routes/records.routes.js";
 import assignmentsRoutes from "./routes/assignments.routes.js";
 import metricsRoutes from "./routes/metrics.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
+import holidaysRoutes from "./routes/holidays.routes.js";
+import dailyRecordsRoutes from "./routes/daily-records.routes.js";
+import cycleBreakdownsRoutes from "./routes/cycle-breakdowns.routes.js";
 
 const app = express();
 
@@ -56,10 +58,12 @@ app.use("/api/cycles", cyclesRoutes);
 app.use("/api/testers", testersRoutes);
 app.use("/api/users", usersRoutes);
 app.use("/api/roles", rolesRoutes);
-app.use("/api/records", recordsRoutes);
 app.use("/api/assignments", assignmentsRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/api/reports", reportsRoutes);
+app.use("/api/holidays", holidaysRoutes);
+app.use("/api/daily-records", dailyRecordsRoutes);
+app.use("/api", cycleBreakdownsRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
