@@ -7,18 +7,22 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Modal } from "@/components/ui/Modal";
 import { STATUSES, statusMap, ComplexityBadge } from "@/components/stories/StatusBadge";
 
-interface CycleLite { id: string; name: string; startDate?: string | null; endDate?: string | null }
 interface TesterLite { id: string; name: string }
-interface CurrentAssignment {
+interface CycleAssignment {
   id: string;
-  cycleId: string;
-  cycle: CycleLite | null;
   tester: TesterLite | null;
   status: string;
   startDate: string;
   endDate: string | null;
   notes: string | null;
   daysInStatus: number | null;
+}
+interface StoryCycle {
+  id: string;
+  name: string;
+  startDate: string | null;
+  endDate: string | null;
+  assignments: CycleAssignment[];
 }
 interface Story {
   id: string;
@@ -28,10 +32,9 @@ interface Story {
   executionComplexity: string;
   projectId: string;
   assignmentsCount: number;
-  currentAssignment: CurrentAssignment | null;
+  cycles: StoryCycle[];
 }
-interface ByCycleGroup { cycle: CycleLite | null; stories: Story[] }
-interface StoriesResponse { projectId: string; byCycle: ByCycleGroup[] }
+interface StoriesResponse { projectId: string; stories: Story[] }
 interface ProjectDetail { id: string; name: string; client: { name: string } }
 
 const COMPLEXITIES = ["LOW", "MEDIUM", "HIGH"] as const;
@@ -42,24 +45,21 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
   const { can } = usePermissions();
   const [data, setData] = useState<StoriesResponse | null>(null);
   const [project, setProject] = useState<ProjectDetail | null>(null);
-  const [cycles, setCycles] = useState<CycleLite[]>([]);
   const [testers, setTesters] = useState<TesterLite[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterCycle, setFilterCycle] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
-  const [filterTester, setFilterTester] = useState("");
 
   // Modals
   const [editStory, setEditStory] = useState<Story | null>(null);
   const [newStoryOpen, setNewStoryOpen] = useState(false);
-  const [assignStory, setAssignStory] = useState<Story | null>(null);
+  const [newCycleForStory, setNewCycleForStory] = useState<Story | null>(null);
+  const [assignToCycle, setAssignToCycle] = useState<{ story: Story; cycle: StoryCycle } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       const res = await apiClient<StoriesResponse>(`/api/projects/${projectId}/stories`);
       setData(res);
     } catch {
-      setData({ projectId, byCycle: [] });
+      setData({ projectId, stories: [] });
     }
     setLoading(false);
   }, [projectId]);
@@ -67,7 +67,6 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => {
     apiClient<ProjectDetail>(`/api/projects/${projectId}`).then(setProject).catch(() => setProject(null));
-    apiClient<CycleLite[]>(`/api/cycles?projectId=${projectId}`).then(setCycles).catch(() => setCycles([]));
     apiClient<TesterLite[]>(`/api/testers?projectId=${projectId}`).then(setTesters).catch(() => setTesters([]));
   }, [projectId]);
 
@@ -81,26 +80,12 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
   }
 
   async function deleteStory(id: string) {
-    if (!confirm("Eliminar HU? Esta accion elimina tambien sus asignaciones.")) return;
+    if (!confirm("Eliminar HU? Esta accion elimina tambien sus ciclos y asignaciones.")) return;
     try {
       await apiClient(`/api/stories/${id}`, { method: "DELETE" });
       fetchData();
     } catch (e) { console.error(e); }
   }
-
-  function filterStories(stories: Story[]): Story[] {
-    return stories.filter(s => {
-      if (filterStatus && s.currentAssignment?.status !== filterStatus) return false;
-      if (filterTester && s.currentAssignment?.tester?.id !== filterTester) return false;
-      return true;
-    });
-  }
-
-  // Filter groups by cycle
-  const displayGroups = (data?.byCycle || [])
-    .filter(g => !filterCycle || (filterCycle === "none" ? g.cycle === null : g.cycle?.id === filterCycle))
-    .map(g => ({ ...g, stories: filterStories(g.stories) }))
-    .filter(g => g.stories.length > 0 || !filterStatus && !filterTester);
 
   return (
     <div>
@@ -122,49 +107,33 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
         )}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
-        <select value={filterCycle} onChange={e => setFilterCycle(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:border-[#4A90D9] outline-none">
-          <option value="">Todos los ciclos</option>
-          {cycles.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          <option value="none">Sin ciclo</option>
-        </select>
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:border-[#4A90D9] outline-none">
-          <option value="">Todos los estados</option>
-          {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
-        <select value={filterTester} onChange={e => setFilterTester(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:border-[#4A90D9] outline-none">
-          <option value="">Todos los testers</option>
-          {testers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-      </div>
-
       {loading ? (
         <div className="space-y-3">{[1, 2].map(i => <div key={i} className="h-40 bg-gray-100 rounded-xl animate-pulse" />)}</div>
-      ) : displayGroups.length === 0 ? (
+      ) : !data || data.stories.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
           <p className="text-sm text-gray-500">No hay historias de usuario aun.</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {displayGroups.map(group => (
-            <CycleBlock
-              key={group.cycle?.id ?? "none"}
-              group={group}
+        <div className="space-y-3">
+          {data.stories.map(story => (
+            <StoryCard
+              key={story.id}
+              story={story}
               canUpdate={can("stories", "update")}
               canDelete={can("stories", "delete")}
+              canCreateCycle={can("cycles", "create")}
               canAssign={can("assignments", "create")}
               canChangeStatus={can("assignments", "update")}
-              onEdit={setEditStory}
-              onDelete={deleteStory}
-              onAssign={setAssignStory}
+              onEdit={() => setEditStory(story)}
+              onDelete={() => deleteStory(story.id)}
+              onNewCycle={() => setNewCycleForStory(story)}
+              onAssignToCycle={(cycle) => setAssignToCycle({ story, cycle })}
               onChangeStatus={changeStatus}
             />
           ))}
         </div>
       )}
 
-      {/* Modals */}
       <StoryFormModal
         open={newStoryOpen}
         onClose={() => setNewStoryOpen(false)}
@@ -178,104 +147,127 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
         projectId={projectId}
         onSaved={() => { setEditStory(null); fetchData(); }}
       />
+      <CycleFormModal
+        open={!!newCycleForStory}
+        story={newCycleForStory ?? undefined}
+        onClose={() => setNewCycleForStory(null)}
+        onSaved={() => { setNewCycleForStory(null); fetchData(); }}
+      />
       <AssignToCycleModal
-        open={!!assignStory}
-        story={assignStory ?? undefined}
-        cycles={cycles}
+        open={!!assignToCycle}
+        entry={assignToCycle ?? undefined}
         testers={testers}
-        onClose={() => setAssignStory(null)}
-        onSaved={() => { setAssignStory(null); fetchData(); }}
+        onClose={() => setAssignToCycle(null)}
+        onSaved={() => { setAssignToCycle(null); fetchData(); }}
       />
     </div>
   );
 }
 
-function CycleBlock({
-  group, canUpdate, canDelete, canAssign, canChangeStatus,
-  onEdit, onDelete, onAssign, onChangeStatus,
+function StoryCard({
+  story, canUpdate, canDelete, canCreateCycle, canAssign, canChangeStatus,
+  onEdit, onDelete, onNewCycle, onAssignToCycle, onChangeStatus,
 }: {
-  group: ByCycleGroup;
+  story: Story;
   canUpdate: boolean;
   canDelete: boolean;
+  canCreateCycle: boolean;
   canAssign: boolean;
   canChangeStatus: boolean;
-  onEdit: (s: Story) => void;
-  onDelete: (id: string) => void;
-  onAssign: (s: Story) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onNewCycle: () => void;
+  onAssignToCycle: (cycle: StoryCycle) => void;
   onChangeStatus: (assignmentId: string, status: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50/80 to-white">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50/80 to-white">
+        <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-3 flex-1 text-left">
           <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
-          <h3 className="text-sm font-bold text-gray-900">
-            {group.cycle ? group.cycle.name : "Sin asignacion / Sin ciclo"}
-          </h3>
-          <span className="text-xs text-gray-400">{group.stories.length} HU</span>
+          <span className="text-xs font-mono text-gray-500">{story.externalId || "-"}</span>
+          <span className="text-sm font-semibold text-gray-900">{story.title}</span>
+          <span className="text-[10px] text-gray-400">Dis. <ComplexityBadge value={story.designComplexity} /></span>
+          <span className="text-[10px] text-gray-400">Ejec. <ComplexityBadge value={story.executionComplexity} /></span>
+          <span className="text-xs text-gray-400 ml-auto">{story.cycles.length} ciclo(s)</span>
+        </button>
+        <div className="flex items-center gap-2 ml-3">
+          {canUpdate && <button onClick={onEdit} className="text-xs text-[#2E5FA3] hover:underline">Editar</button>}
+          {canDelete && <button onClick={onDelete} className="text-xs text-red-600 hover:underline">Eliminar</button>}
         </div>
-      </button>
+      </div>
       {expanded && (
-        <table className="w-full">
-          <thead>
-            <tr className="text-left text-[10px] text-gray-400 uppercase tracking-wider border-b border-gray-100">
-              <th className="px-4 py-2 font-medium">Ext ID</th>
-              <th className="px-4 py-2 font-medium">Titulo</th>
-              <th className="px-4 py-2 font-medium text-center">Dis.</th>
-              <th className="px-4 py-2 font-medium text-center">Ejec.</th>
-              <th className="px-4 py-2 font-medium">Tester</th>
-              <th className="px-4 py-2 font-medium">Estado</th>
-              <th className="px-4 py-2 font-medium text-center">Dias</th>
-              <th className="px-4 py-2 font-medium text-right">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {group.stories.map((s, idx) => {
-              const current = s.currentAssignment;
-              const days = current?.daysInStatus ?? null;
-              const daysRed = days !== null && days > 7;
-              return (
-                <tr key={s.id} className={`border-t border-gray-50 hover:bg-gray-50/50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}>
-                  <td className="px-4 py-2 text-xs font-mono text-gray-500">{s.externalId || "-"}</td>
-                  <td className="px-4 py-2 text-sm text-gray-800">{s.title}</td>
-                  <td className="px-4 py-2 text-center"><ComplexityBadge value={s.designComplexity} /></td>
-                  <td className="px-4 py-2 text-center"><ComplexityBadge value={s.executionComplexity} /></td>
-                  <td className="px-4 py-2 text-xs text-gray-700">{current?.tester?.name || <span className="text-gray-400">Sin asignar</span>}</td>
-                  <td className="px-4 py-2">
-                    {current ? (
-                      canChangeStatus ? (
-                        <select
-                          value={current.status}
-                          onChange={e => onChangeStatus(current.id, e.target.value)}
-                          className="px-2 py-1 text-[10px] border border-gray-200 rounded-md bg-white text-gray-700 focus:border-[#4A90D9] outline-none cursor-pointer hover:border-gray-300"
-                        >
-                          {STATUSES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
-                        </select>
-                      ) : (
-                        <span className="text-xs">{statusMap[current.status]?.label || current.status}</span>
-                      )
-                    ) : <span className="text-xs text-gray-400">-</span>}
-                  </td>
-                  <td className={`px-4 py-2 text-center text-xs font-mono ${daysRed ? "text-red-600 font-bold" : "text-gray-500"}`}>
-                    {days !== null ? `${days}d` : "-"}
-                  </td>
-                  <td className="px-4 py-2 text-right space-x-2">
-                    {canUpdate && (
-                      <button onClick={() => onEdit(s)} className="text-xs text-[#2E5FA3] hover:underline">Editar</button>
+        <div className="p-4 space-y-3">
+          {story.cycles.length === 0 ? (
+            <p className="text-xs text-gray-400 italic">Sin ciclos aun.</p>
+          ) : (
+            story.cycles.map(cycle => (
+              <div key={cycle.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-800">{cycle.name}</span>
+                    {cycle.startDate && (
+                      <span className="text-[10px] text-gray-500">
+                        {new Date(cycle.startDate).toLocaleDateString("es")}
+                        {cycle.endDate ? ` - ${new Date(cycle.endDate).toLocaleDateString("es")}` : ""}
+                      </span>
                     )}
-                    {canAssign && (
-                      <button onClick={() => onAssign(s)} className="text-xs text-[#2E5FA3] hover:underline">Asignar</button>
-                    )}
-                    {canDelete && (
-                      <button onClick={() => onDelete(s.id)} className="text-xs text-red-600 hover:underline">Eliminar</button>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    <span className="text-[10px] text-gray-400">· {cycle.assignments.length} asignacion(es)</span>
+                  </div>
+                  {canAssign && (
+                    <button onClick={() => onAssignToCycle(cycle)} className="text-[11px] text-[#2E5FA3] hover:underline font-semibold">+ Asignar tester</button>
+                  )}
+                </div>
+                {cycle.assignments.length > 0 && (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-[9px] text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                        <th className="px-3 py-1.5 text-left font-medium">Tester</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Estado</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Inicio</th>
+                        <th className="px-3 py-1.5 text-center font-medium">Dias</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cycle.assignments.map((a, idx) => {
+                        const days = a.daysInStatus ?? null;
+                        const daysRed = days !== null && days > 7;
+                        return (
+                          <tr key={a.id} className={`border-t border-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}>
+                            <td className="px-3 py-1.5">{a.tester?.name || <span className="text-gray-400">-</span>}</td>
+                            <td className="px-3 py-1.5">
+                              {canChangeStatus ? (
+                                <select
+                                  value={a.status}
+                                  onChange={e => onChangeStatus(a.id, e.target.value)}
+                                  className="px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-white text-gray-700 focus:border-[#4A90D9] outline-none cursor-pointer"
+                                >
+                                  {STATUSES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
+                                </select>
+                              ) : (
+                                <span>{statusMap[a.status]?.label || a.status}</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-1.5 text-gray-500">{new Date(a.startDate).toLocaleDateString("es")}</td>
+                            <td className={`px-3 py-1.5 text-center font-mono ${daysRed ? "text-red-600 font-bold" : "text-gray-500"}`}>
+                              {days !== null ? `${days}d` : "-"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            ))
+          )}
+          {canCreateCycle && (
+            <button onClick={onNewCycle} className="text-xs text-[#2E5FA3] hover:underline font-semibold">
+              + Nuevo ciclo (Ciclo {story.cycles.length + 1})
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -381,17 +373,88 @@ function StoryFormModal({
   );
 }
 
-function AssignToCycleModal({
-  open, onClose, story, cycles, testers, onSaved,
+function CycleFormModal({
+  open, onClose, story, onSaved,
 }: {
   open: boolean;
   onClose: () => void;
   story?: Story;
-  cycles: CycleLite[];
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open && story) {
+      setName(`Ciclo ${story.cycles.length + 1}`);
+      setStartDate("");
+      setEndDate("");
+      setError("");
+    }
+  }, [open, story]);
+
+  async function save() {
+    if (!story) return;
+    if (!name.trim()) { setError("Nombre requerido"); return; }
+    setSaving(true); setError("");
+    try {
+      await apiClient(`/api/cycles`, {
+        method: "POST",
+        body: JSON.stringify({
+          storyId: story.id,
+          name: name.trim(),
+          startDate: startDate || null,
+          endDate: endDate || null,
+        }),
+      });
+      onSaved();
+    } catch (e: any) {
+      setError(e?.message || "Error al guardar");
+    } finally { setSaving(false); }
+  }
+
+  const inp = "w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#2E5FA3]";
+  return (
+    <Modal open={open} onClose={onClose} title={`Nuevo ciclo para: ${story?.title ?? ""}`}>
+      <div className="space-y-3">
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Nombre</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} className={inp} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Inicio</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inp} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Fin</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inp} />
+          </div>
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200">Cancelar</button>
+          <button type="button" onClick={save} disabled={saving} className="px-3 py-2 text-xs font-semibold text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] disabled:opacity-50">
+            {saving ? "Guardando..." : "Crear"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function AssignToCycleModal({
+  open, onClose, entry, testers, onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  entry?: { story: Story; cycle: StoryCycle };
   testers: TesterLite[];
   onSaved: () => void;
 }) {
-  const [cycleId, setCycleId] = useState("");
   const [testerId, setTesterId] = useState("");
   const [status, setStatus] = useState("REGISTERED");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
@@ -401,21 +464,24 @@ function AssignToCycleModal({
 
   useEffect(() => {
     if (open) {
-      setCycleId(""); setTesterId(""); setStatus("REGISTERED");
+      setTesterId(""); setStatus("REGISTERED");
       setStartDate(new Date().toISOString().split("T")[0]);
       setNotes(""); setError("");
     }
   }, [open]);
 
   async function save() {
-    if (!story) return;
-    if (!cycleId || !testerId) { setError("Ciclo y tester son obligatorios"); return; }
+    if (!entry) return;
+    if (!testerId) { setError("Tester obligatorio"); return; }
     setSaving(true); setError("");
     try {
       await apiClient(`/api/assignments`, {
         method: "POST",
         body: JSON.stringify({
-          testerId, storyId: story.id, cycleId, status,
+          testerId,
+          storyId: entry.story.id,
+          cycleId: entry.cycle.id,
+          status,
           startDate: new Date(startDate).toISOString(),
           notes: notes.trim() || null,
         }),
@@ -428,15 +494,8 @@ function AssignToCycleModal({
 
   const inp = "w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#2E5FA3]";
   return (
-    <Modal open={open} onClose={onClose} title={`Asignar: ${story?.title ?? ""}`}>
+    <Modal open={open} onClose={onClose} title={`Asignar a ${entry?.cycle.name ?? ""}: ${entry?.story.title ?? ""}`}>
       <div className="space-y-3">
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Ciclo</label>
-          <select value={cycleId} onChange={e => setCycleId(e.target.value)} className={inp}>
-            <option value="">Seleccionar...</option>
-            {cycles.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Tester</label>
           <select value={testerId} onChange={e => setTesterId(e.target.value)} className={inp}>
