@@ -14,7 +14,7 @@ interface Project {
   createdAt: string;
   client: { id: string; name: string };
   testers?: Array<{ id: string; name: string; allocation: number }>;
-  _count?: { cycles: number; testers: number };
+  _count?: { cycles: number; testers: number; stories: number };
 }
 
 interface ClientGroup {
@@ -178,6 +178,7 @@ export default function ProjectsPage() {
                 <thead>
                   <tr className="text-left text-sm text-muted border-b border-border">
                     <th className="px-4 py-2 font-medium">Proyecto</th>
+                    <th className="px-4 py-2 font-medium text-center">HUs</th>
                     <th className="px-4 py-2 font-medium text-center">Ciclos</th>
                     <th className="px-4 py-2 font-medium text-center">Testers</th>
                     <th className="px-4 py-2 font-medium">Fecha</th>
@@ -193,6 +194,12 @@ export default function ProjectsPage() {
                       }`}
                     >
                       <td className="px-4 py-3 font-medium text-foreground">{project.name}</td>
+                      <td className="px-4 py-3 text-center">
+                        <Link href={`/projects/${project.id}/stories`} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${project._count?.stories ? "bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100" : "bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200"}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${project._count?.stories ? "bg-violet-500" : "bg-gray-400"}`} />
+                          {project._count?.stories || "Sin HUs"}
+                        </Link>
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <button type="button" onClick={() => openQuick(project, "cycles")} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${project._count?.cycles ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100" : "bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200"}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${project._count?.cycles ? "bg-emerald-500" : "bg-gray-400"}`} />

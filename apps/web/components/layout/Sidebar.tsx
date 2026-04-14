@@ -79,6 +79,15 @@ const navItems = [
     ),
   },
   {
+    label: "Planificacion",
+    href: "/gantt",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h10M8 12h6M8 17h8M4 7h.01M4 12h.01M4 17h.01" />
+      </svg>
+    ),
+  },
+  {
     label: "Asignaciones",
     href: "/assignments",
     icon: (
@@ -101,12 +110,13 @@ export function Sidebar() {
     .filter(item => {
       // QA_ANALYST: solo "Mi semana"
       if (isAnalyst) return item.href === "/mi-semana";
-      // CLIENT_PM: solo proyectos, dashboard y reportes por cliente
-      if (isClientPm) return ["/projects", "/dashboard", "/reports/client"].includes(item.href);
+      // CLIENT_PM: solo proyectos, dashboard, reportes por cliente y gantt
+      if (isClientPm) return ["/projects", "/dashboard", "/reports/client", "/gantt"].includes(item.href);
       // Líderes no ven "Mi semana" (no aplica a su rol)
       if (item.href === "/mi-semana") return false;
       if (item.href === "/users") return can("users", "read");
       if (item.href === "/assignments") return can("assignments", "read");
+      if (item.href === "/gantt") return can("assignments", "read");
       return true;
     })
     .map(item => isClientPm && item.href === "/projects" ? { ...item, label: "Mis Proyectos" } : item);

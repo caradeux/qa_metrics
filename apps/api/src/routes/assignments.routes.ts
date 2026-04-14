@@ -21,18 +21,37 @@ router.get(
   requirePermission("assignments", "read") as any,
   async (req: AuthRequest, res: Response) => {
     try {
-      const { projectId } = req.query;
+      const { projectId, cycleId, status, testerId, dateFrom, dateTo } = req.query as Record<string, string | undefined>;
 
       const where: Record<string, unknown> = {};
       if (projectId) where.tester = { projectId };
+      if (cycleId) where.cycleId = cycleId;
+      if (status) where.status = status;
+      if (testerId) where.testerId = testerId;
 
       if (isClientPm(req)) {
         const ids = await clientPmProjectIds(req.user!.id);
-        if (projectId && !ids.includes(projectId as string)) {
+        if (projectId && !ids.includes(projectId)) {
           res.status(403).json({ error: "Sin acceso" });
           return;
         }
         where.tester = { projectId: projectId ? projectId : { in: ids } };
+      }
+
+      // Date range overlap filter: assignment overlaps [dateFrom, dateTo] if
+      // startDate <= dateTo AND (endDate IS NULL OR endDate >= dateFrom)
+      if (dateFrom || dateTo) {
+        const and: Record<string, unknown>[] = [];
+        if (dateTo) and.push({ startDate: { lte: new Date(dateTo) } });
+        if (dateFrom) {
+          and.push({
+            OR: [
+              { endDate: null },
+              { endDate: { gte: new Date(dateFrom) } },
+            ],
+          });
+        }
+        where.AND = and;
       }
 
       const assignments = await prisma.testerAssignment.findMany({

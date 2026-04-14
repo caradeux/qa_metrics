@@ -37,7 +37,8 @@ router.get("/", requirePermission("projects", "read") as any, async (req: AuthRe
         createdAt: true,
         client: { select: { id: true, name: true } },
         projectManager: { select: { id: true, name: true, email: true } },
-        _count: { select: { cycles: true, testers: true } },
+        testers: { select: { id: true, name: true, allocation: true }, orderBy: { name: "asc" } },
+        _count: { select: { cycles: true, testers: true, stories: true } },
       },
       orderBy: { createdAt: "desc" },
     });
