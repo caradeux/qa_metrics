@@ -47,6 +47,7 @@ model User {
   refreshToken String?
   createdAt    DateTime @default(now())
   clients      Client[]
+  tester       Tester?
 }
 
 model Client {
@@ -81,7 +82,9 @@ model Tester {
   name        String
   projectId   String
   project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  records     WeeklyRecord[]
+  userId      String?            @unique
+  user        User?              @relation(fields: [userId], references: [id])
+  records     DailyRecord[]
   assignments TesterAssignment[]
 
   @@index([projectId])
@@ -113,7 +116,8 @@ model TestCycle {
   project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   startDate DateTime?
   endDate   DateTime?
-  records   WeeklyRecord[]
+  records   DailyRecord[]
+  breakdown CycleBreakdown?
   stories   UserStory[]
 
   @@index([projectId])
@@ -131,38 +135,47 @@ model UserStory {
   @@index([cycleId])
 }
 
-model WeeklyRecord {
+model DailyRecord {
+  id        String    @id @default(cuid())
+  testerId  String
+  tester    Tester    @relation(fields: [testerId], references: [id], onDelete: Cascade)
+  cycleId   String
+  cycle     TestCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  date      DateTime  @db.Date
+  designed  Int       @default(0)
+  executed  Int       @default(0)
+  defects   Int       @default(0)
+  source    String    @default("MANUAL")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([testerId, date])
+  @@index([cycleId])
+  @@index([date])
+}
+
+model CycleBreakdown {
   id                  String    @id @default(cuid())
-  testerId            String
-  tester              Tester    @relation(fields: [testerId], references: [id], onDelete: Cascade)
-  cycleId             String
+  cycleId             String    @unique
   cycle               TestCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  weekStart           DateTime
-  // Diseno
-  designedTotal       Int       @default(0)
   designedFunctional  Int       @default(0)
   designedRegression  Int       @default(0)
   designedSmoke       Int       @default(0)
   designedExploratory Int       @default(0)
-  // Ejecucion
-  executedTotal       Int       @default(0)
   executedFunctional  Int       @default(0)
   executedRegression  Int       @default(0)
   executedSmoke       Int       @default(0)
   executedExploratory Int       @default(0)
-  // Defectos
   defectsCritical     Int       @default(0)
   defectsHigh         Int       @default(0)
   defectsMedium       Int       @default(0)
   defectsLow          Int       @default(0)
-  // Auditoria
-  source              String    @default("MANUAL")
-  createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
+}
 
-  @@unique([testerId, cycleId, weekStart])
-  @@index([testerId])
-  @@index([cycleId])
+model Holiday {
+  date DateTime @id @db.Date
+  name String
 }
 
 enum Modality {
