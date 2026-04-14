@@ -20,6 +20,19 @@ router.get("/me", async (req: AuthRequest, res: Response) => {
   res.json(t);
 });
 
+// GET /:id — fetch one tester (minimal, for week views)
+router.get("/:id", async (req: AuthRequest, res: Response) => {
+  const t = await prisma.tester.findUnique({
+    where: { id: req.params.id },
+    select: { id: true, projectId: true, name: true },
+  });
+  if (!t) {
+    res.status(404).json({ error: "Tester no encontrado" });
+    return;
+  }
+  res.json(t);
+});
+
 // GET / — list testers, required ?projectId filter
 router.get("/", requirePermission("testers", "read") as any, async (req: AuthRequest, res: Response) => {
   try {
