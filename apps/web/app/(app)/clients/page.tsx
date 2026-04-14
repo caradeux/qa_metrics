@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Modal } from "@/components/ui/Modal";
+import Link from "next/link";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { apiClient } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -16,11 +16,6 @@ interface Client {
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [name, setName] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { can } = usePermissions();
@@ -37,30 +32,6 @@ export default function ClientsPage() {
   }, []);
 
   useEffect(() => { fetchClients(); }, [fetchClients]);
-
-  function openCreate() {
-    setEditingClient(null); setName(""); setError(""); setModalOpen(true);
-  }
-
-  function openEdit(client: Client) {
-    setEditingClient(client); setName(client.name); setError(""); setModalOpen(true);
-  }
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) { setError("El nombre es obligatorio"); return; }
-    setSaving(true); setError("");
-    try {
-      const url = editingClient ? `/api/clients/${editingClient.id}` : "/api/clients";
-      const method = editingClient ? "PUT" : "POST";
-      await apiClient(url, { method, body: JSON.stringify({ name: name.trim() }) });
-      setModalOpen(false); fetchClients();
-    } catch (err: any) {
-      setError(err.message || "Error al guardar");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -83,15 +54,15 @@ export default function ClientsPage() {
           <p className="text-xs text-gray-400 mt-0.5">{clients.length} registrados</p>
         </div>
         {can("clients", "create") && (
-          <button
-            onClick={openCreate}
+          <Link
+            href="/clients/new"
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] transition-all duration-200 uppercase tracking-wider shadow-sm hover:shadow-md"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
             Nuevo Cliente
-          </button>
+          </Link>
         )}
       </div>
 
@@ -111,9 +82,9 @@ export default function ClientsPage() {
           </div>
           <p className="text-sm text-gray-400">No hay clientes registrados</p>
           {can("clients", "create") && (
-            <button onClick={openCreate} className="mt-3 text-xs text-[#2E5FA3] hover:text-[#1F3864] font-medium transition">
+            <Link href="/clients/new" className="mt-3 inline-block text-xs text-[#2E5FA3] hover:text-[#1F3864] font-medium transition">
               Crear el primero
-            </button>
+            </Link>
           )}
         </div>
       ) : (
@@ -153,12 +124,12 @@ export default function ClientsPage() {
                   <td className="px-5 py-3.5 text-right">
                     <div className="inline-flex items-center gap-1">
                       {can("clients", "update") && (
-                        <button
-                          onClick={() => openEdit(client)}
+                        <Link
+                          href={`/clients/${client.id}/edit`}
                           className="px-2.5 py-1 text-xs text-gray-500 hover:text-[#2E5FA3] hover:bg-[#2E5FA3]/5 rounded transition-all duration-150 font-medium"
                         >
                           Editar
-                        </button>
+                        </Link>
                       )}
                       {can("clients", "delete") && (
                         <button
@@ -176,44 +147,6 @@ export default function ClientsPage() {
           </table>
         </div>
       )}
-
-      {/* Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingClient ? "Editar Cliente" : "Nuevo Cliente"}>
-        <form onSubmit={handleSave} className="space-y-5">
-          <div>
-            <label className="block text-[11px] font-medium text-gray-400 uppercase tracking-wider mb-2">Nombre</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-0 py-2.5 bg-transparent text-gray-900 text-sm border-0 border-b-2 border-gray-200 focus:border-[#2E5FA3] focus:ring-0 transition-colors duration-200 placeholder-gray-300 outline-none"
-              placeholder="Nombre del cliente"
-              autoFocus
-            />
-          </div>
-          {error && (
-            <div className="flex items-center gap-2 pl-3 border-l-2 border-red-400 text-sm text-red-600">
-              {error}
-            </div>
-          )}
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setModalOpen(false)}
-              className="px-4 py-2 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-all duration-150"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="px-5 py-2 text-xs font-medium text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] transition-all duration-200 disabled:opacity-50 uppercase tracking-wider"
-            >
-              {saving ? "Guardando..." : "Guardar"}
-            </button>
-          </div>
-        </form>
-      </Modal>
 
       <ConfirmDialog
         open={!!deleteTarget}
