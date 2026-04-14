@@ -1,0 +1,54 @@
+# Dependencias
+**/node_modules
+**/.pnpm-store
+
+# Next.js
+**/.next
+**/out
+
+# Builds
+**/dist
+**/build
+
+# Tests / E2E
+**/e2e-report
+**/e2e-results
+**/e2e-screenshots
+**/e2e/.auth
+**/playwright-report
+**/coverage
+
+# Variables sensibles
+.env
+.env.*
+!.env.example
+
+# Snapshots (NO viajan en la imagen)
+deploy/snapshots/*.json
+
+# Logs y temporales
+*.log
+**/*.log
+**/.turbo
+**/.cache
+**/tmp
+
+# Git / VCS
+.git
+.gitignore
+.gitattributes
+
+# Editor
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Azure / CI
+azure-pipelines.yml
+.github
+
+# Docs (opcional, NO excluir si el build necesita README)
+# docs

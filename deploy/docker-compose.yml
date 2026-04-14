@@ -1,0 +1,60 @@
+# docker-compose.yml — referencia local para levantar el stack completo.
+# Para Coolify, cada servicio se despliega por separado usando los Dockerfiles
+# en apps/api/Dockerfile y apps/web/Dockerfile.
+
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: qa_metrics
+    ports:
+      - "5432:5432"
+    volumes:
+      - qa_metrics_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d qa_metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://root:root@db:5432/qa_metrics
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change-me-refresh}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-32-chars-exactly-aaaaaa}
+      CORS_ORIGIN: http://localhost:3000
+      PORT: 8080
+      NODE_ENV: production
+    ports:
+      - "4000:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4000
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  qa_metrics_db:
