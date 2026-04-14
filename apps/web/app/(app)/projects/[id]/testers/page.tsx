@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, use } from "react";
-import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
@@ -24,11 +23,6 @@ export default function TestersPage({ params }: { params: Promise<{ id: string }
   const [project, setProject] = useState<Project | null>(null);
   const [testers, setTesters] = useState<Tester[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingTester, setEditingTester] = useState<Tester | null>(null);
-  const [name, setName] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Tester | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { can } = usePermissions();
@@ -47,49 +41,7 @@ export default function TestersPage({ params }: { params: Promise<{ id: string }
     setLoading(false);
   }, [projectId]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  function openCreate() {
-    setEditingTester(null);
-    setName("");
-    setError("");
-    setModalOpen(true);
-  }
-
-  function openEdit(tester: Tester) {
-    setEditingTester(tester);
-    setName(tester.name);
-    setError("");
-    setModalOpen(true);
-  }
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) { setError("El nombre es obligatorio"); return; }
-    setSaving(true);
-    setError("");
-
-    const url = editingTester ? `/api/testers/${editingTester.id}` : "/api/testers";
-    const method = editingTester ? "PUT" : "POST";
-    const body = editingTester
-      ? { name: name.trim() }
-      : { name: name.trim(), projectId };
-
-    try {
-      await apiClient(url, {
-        method,
-        body: JSON.stringify(body),
-      });
-      setModalOpen(false);
-      fetchData();
-    } catch (err: any) {
-      setError(err.message || "Error al guardar");
-    } finally {
-      setSaving(false);
-    }
-  }
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -104,9 +56,7 @@ export default function TestersPage({ params }: { params: Promise<{ id: string }
     fetchData();
   }
 
-  if (loading) {
-    return <div className="animate-pulse h-64 bg-gray-100 rounded-lg" />;
-  }
+  if (loading) return <div className="animate-pulse h-64 bg-gray-100 rounded-lg" />;
 
   return (
     <div>
@@ -124,12 +74,9 @@ export default function TestersPage({ params }: { params: Promise<{ id: string }
           </p>
         </div>
         {can("testers", "create") && (
-          <button
-            onClick={openCreate}
-            className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-secondary transition"
-          >
+          <Link href={`/projects/${projectId}/testers/new`} className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-secondary transition">
             + Nuevo Tester
-          </button>
+          </Link>
         )}
       </div>
 
@@ -159,9 +106,9 @@ export default function TestersPage({ params }: { params: Promise<{ id: string }
                   <td className="px-4 py-3 text-muted">{tester._count.records}</td>
                   <td className="px-4 py-3 text-right space-x-2">
                     {can("testers", "update") && (
-                      <button onClick={() => openEdit(tester)} className="text-sm text-secondary hover:underline">
+                      <Link href={`/projects/${projectId}/testers/${tester.id}/edit`} className="text-sm text-secondary hover:underline">
                         Editar
-                      </button>
+                      </Link>
                     )}
                     {can("testers", "delete") && (
                       <button onClick={() => setDeleteTarget(tester)} className="text-sm text-danger hover:underline">
@@ -175,31 +122,6 @@ export default function TestersPage({ params }: { params: Promise<{ id: string }
           </table>
         </div>
       )}
-
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingTester ? "Editar Tester" : "Nuevo Tester"}>
-        <form onSubmit={handleSave} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Nombre</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary"
-              placeholder="Nombre del tester"
-              autoFocus
-            />
-          </div>
-          {error && <p className="text-sm text-danger">{error}</p>}
-          <div className="flex justify-end gap-3">
-            <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-foreground bg-gray-100 rounded-lg hover:bg-gray-200 transition">
-              Cancelar
-            </button>
-            <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-secondary transition disabled:opacity-50">
-              {saving ? "Guardando..." : "Guardar"}
-            </button>
-          </div>
-        </form>
-      </Modal>
 
       <ConfirmDialog
         open={!!deleteTarget}
