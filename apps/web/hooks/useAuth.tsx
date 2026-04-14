@@ -8,7 +8,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { apiLogin, apiLogout } from "@/lib/api-client";
+import { apiLogin, apiLogout, apiMe } from "@/lib/api-client";
 
 interface UserInfo {
   id: string;
@@ -40,22 +40,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = localStorage.getItem("user");
-    const token = localStorage.getItem("accessToken");
-    const hasCookie = document.cookie
-      .split(";")
-      .some((c) => c.trim().startsWith("auth-token="));
-
-    if (stored && token && hasCookie) {
+    let cancelled = false;
+    (async () => {
       try {
-        setUser(JSON.parse(stored));
-      } catch {}
-    } else if (stored || token) {
-      localStorage.removeItem("user");
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-    }
-    setLoading(false);
+        const me = await apiMe();
+        if (!cancelled) setUser(me ?? null);
+      } catch {
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {

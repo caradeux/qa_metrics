@@ -15,8 +15,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for auth-token cookie (set by client after login)
-  const authToken = request.cookies.get("auth-token")?.value;
+  // Check for qa_access cookie (HttpOnly, set by API after login)
+  const authToken = request.cookies.get("qa_access")?.value;
 
   if (!authToken) {
     return NextResponse.redirect(new URL("/login", request.url));
