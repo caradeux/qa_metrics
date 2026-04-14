@@ -9,9 +9,10 @@ router.use(authMiddleware as any);
 
 const bulkSchema = z.object({
   testerId: z.string().cuid(),
-  days: z
+  entries: z
     .array(
       z.object({
+        assignmentId: z.string().cuid(),
         date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
         designed: z.number().int().min(0),
         executed: z.number().int().min(0),
@@ -31,7 +32,10 @@ async function canActOn(req: AuthRequest, testerId: string): Promise<boolean> {
 async function canReadTester(req: AuthRequest, testerId: string): Promise<boolean> {
   const roleName = req.user?.role?.name;
   if (roleName === "ADMIN" || roleName === "QA_LEAD") return true;
-  const tester = await prisma.tester.findUnique({ where: { id: testerId }, select: { userId: true, projectId: true } });
+  const tester = await prisma.tester.findUnique({
+    where: { id: testerId },
+    select: { userId: true, projectId: true },
+  });
   if (!tester) return false;
   if (roleName === "CLIENT_PM") {
     const p = await prisma.project.findFirst({
@@ -41,6 +45,22 @@ async function canReadTester(req: AuthRequest, testerId: string): Promise<boolea
     return !!p;
   }
   return tester.userId === req.user?.id;
+}
+
+function toISODate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function enumerateWeekdaysInRange(start: Date, end: Date): string[] {
+  const out: string[] = [];
+  const cur = startOfDay(new Date(start));
+  const last = startOfDay(new Date(end));
+  while (cur <= last) {
+    const dow = cur.getDay(); // 0=Sun, 6=Sat
+    if (dow >= 1 && dow <= 5) out.push(toISODate(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
 }
 
 router.get("/", async (req: AuthRequest, res: Response) => {
@@ -61,38 +81,77 @@ router.get("/", async (req: AuthRequest, res: Response) => {
 
   const monday = startOfDay(new Date(parsed.data.weekStart + "T00:00:00"));
   const friday = addDays(monday, 4);
-  const [records, holidays] = await Promise.all([
-    prisma.dailyRecord.findMany({
-      where: {
-        testerId: parsed.data.testerId,
-        date: { gte: monday, lte: friday },
-      },
-    }),
-    prisma.holiday.findMany({ where: { date: { gte: monday, lte: friday } } }),
-  ]);
-  const holidayMap = new Map(
-    holidays.map((h) => [h.date.toISOString().slice(0, 10), h.name])
-  );
   const today = startOfDay(new Date());
 
-  const days = [];
+  // Build week days
+  const holidays = await prisma.holiday.findMany({
+    where: { date: { gte: monday, lte: friday } },
+  });
+  const holidayMap = new Map(holidays.map((h) => [toISODate(h.date), h.name]));
+  const days: Array<{
+    date: string;
+    isHoliday: boolean;
+    holidayName: string | null;
+    isFuture: boolean;
+  }> = [];
   for (let i = 0; i < 5; i++) {
     const d = addDays(monday, i);
-    const key = d.toISOString().slice(0, 10);
-    const rec = records.find(
-      (r) => r.date.toISOString().slice(0, 10) === key
-    );
+    const key = toISODate(d);
     days.push({
       date: key,
-      designed: rec?.designed ?? 0,
-      executed: rec?.executed ?? 0,
-      defects: rec?.defects ?? 0,
       isHoliday: holidayMap.has(key),
       holidayName: holidayMap.get(key) ?? null,
       isFuture: d > today,
     });
   }
-  res.json({ weekStart: parsed.data.weekStart, days });
+
+  // Get assignments overlapping the week
+  const assignments = await prisma.testerAssignment.findMany({
+    where: {
+      testerId: parsed.data.testerId,
+      startDate: { lte: friday },
+      OR: [{ endDate: null }, { endDate: { gte: monday } }],
+    },
+    include: {
+      story: { select: { id: true, title: true, externalId: true } },
+      cycle: { select: { id: true, name: true } },
+      dailyRecords: {
+        where: { date: { gte: monday, lte: friday } },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const result = assignments.map((a) => {
+    const rangeEnd = a.endDate ?? today;
+    const effectiveEnd = rangeEnd < friday ? rangeEnd : friday;
+    const effectiveStart = a.startDate > monday ? a.startDate : monday;
+    const activeOnDates =
+      effectiveEnd < effectiveStart
+        ? []
+        : enumerateWeekdaysInRange(effectiveStart, effectiveEnd);
+    return {
+      id: a.id,
+      story: a.story,
+      cycle: a.cycle,
+      status: a.status,
+      startDate: toISODate(a.startDate),
+      endDate: a.endDate ? toISODate(a.endDate) : null,
+      activeOnDates,
+      records: a.dailyRecords.map((r) => ({
+        date: toISODate(r.date),
+        designed: r.designed,
+        executed: r.executed,
+        defects: r.defects,
+      })),
+    };
+  });
+
+  res.json({
+    weekStart: parsed.data.weekStart,
+    days,
+    assignments: result,
+  });
 });
 
 router.post("/bulk", async (req: AuthRequest, res: Response) => {
@@ -101,14 +160,14 @@ router.post("/bulk", async (req: AuthRequest, res: Response) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const { testerId, days } = parsed.data;
+  const { testerId, entries } = parsed.data;
   if (!(await canActOn(req, testerId))) {
     res.status(403).json({ error: "forbidden" });
     return;
   }
 
   const today = startOfDay(new Date());
-  const dates = days.map((d) => new Date(d.date + "T00:00:00"));
+  const dates = entries.map((e) => new Date(e.date + "T00:00:00"));
   if (dates.some((d) => d > today)) {
     res.status(400).json({ error: "no se permiten fechas futuras" });
     return;
@@ -122,28 +181,65 @@ router.post("/bulk", async (req: AuthRequest, res: Response) => {
     return;
   }
 
+  // Validate assignments belong to tester and dates are within range
+  const assignmentIds = [...new Set(entries.map((e) => e.assignmentId))];
+  const assignments = await prisma.testerAssignment.findMany({
+    where: { id: { in: assignmentIds } },
+    select: {
+      id: true,
+      testerId: true,
+      startDate: true,
+      endDate: true,
+    },
+  });
+  const aMap = new Map(assignments.map((a) => [a.id, a]));
+  for (const e of entries) {
+    const a = aMap.get(e.assignmentId);
+    if (!a) {
+      res.status(400).json({ error: `asignación inválida: ${e.assignmentId}` });
+      return;
+    }
+    if (a.testerId !== testerId) {
+      res.status(403).json({ error: "asignación no pertenece al tester" });
+      return;
+    }
+    const d = new Date(e.date + "T00:00:00");
+    const start = startOfDay(a.startDate);
+    const end = a.endDate ? startOfDay(a.endDate) : today;
+    if (d < start || d > end) {
+      res
+        .status(400)
+        .json({ error: `fecha ${e.date} fuera del rango de la asignación` });
+      return;
+    }
+  }
+
   await prisma.$transaction(
-    days.map((d) =>
+    entries.map((e) =>
       prisma.dailyRecord.upsert({
         where: {
-          testerId_date: { testerId, date: new Date(d.date + "T00:00:00") },
+          assignmentId_date: {
+            assignmentId: e.assignmentId,
+            date: new Date(e.date + "T00:00:00"),
+          },
         },
         create: {
           testerId,
-          date: new Date(d.date + "T00:00:00"),
-          designed: d.designed,
-          executed: d.executed,
-          defects: d.defects,
+          assignmentId: e.assignmentId,
+          date: new Date(e.date + "T00:00:00"),
+          designed: e.designed,
+          executed: e.executed,
+          defects: e.defects,
         },
         update: {
-          designed: d.designed,
-          executed: d.executed,
-          defects: d.defects,
+          designed: e.designed,
+          executed: e.executed,
+          defects: e.defects,
         },
       })
     )
   );
-  res.json({ ok: true });
+  res.json({ ok: true, updated: entries.length });
 });
 
 export default router;

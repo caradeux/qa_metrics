@@ -196,33 +196,15 @@ router.post("/import/confirm", async (req: AuthRequest, res: Response) => {
       }
     }
 
-    await prisma.$transaction(
-      records.map((r) =>
-        prisma.dailyRecord.upsert({
-          where: {
-            testerId_date: {
-              testerId: r.testerId,
-              date: new Date(r.date + "T00:00:00"),
-            },
-          },
-          create: {
-            testerId: r.testerId,
-            date: new Date(r.date + "T00:00:00"),
-            designed: r.designed,
-            executed: r.executed,
-            defects: r.defects,
-            source: "IMPORT",
-          },
-          update: {
-            designed: r.designed,
-            executed: r.executed,
-            defects: r.defects,
-            source: "IMPORT",
-          },
-        })
-      )
-    );
-    res.json({ message: `Importados ${records.length} registros`, count: records.length });
+    // TODO: el upload Excel requiere ahora una columna HU (assignmentId/externalId)
+    // para resolver la asignación. Deshabilitado temporalmente tras refactor a
+    // DailyRecord por asignación.
+    void records;
+    res.status(501).json({
+      error:
+        "Importación Excel pendiente de actualización: ahora cada registro requiere una HU asignada. Usa el formulario semanal.",
+    });
+    return;
   } catch (err: any) {
     res.status(500).json({ error: "Error al confirmar la importacion" });
   }
