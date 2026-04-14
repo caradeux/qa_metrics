@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Modal } from "@/components/ui/Modal";
+import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -12,7 +12,6 @@ interface Assignment {
   story: { id: string; title: string; complexity: string; cycle: { name: string } };
 }
 interface Project { id: string; name: string; }
-interface Tester { id: string; name: string; }
 
 // Flujo de estados QA
 const STATUSES = [
@@ -42,16 +41,6 @@ export default function AssignmentsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [filterProject, setFilterProject] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
-  const [testers, setTesters] = useState<Tester[]>([]);
-  const [formProjectId, setFormProjectId] = useState("");
-  const [formTesterId, setFormTesterId] = useState("");
-  const [formStoryId, setFormStoryId] = useState("");
-  const [formStartDate, setFormStartDate] = useState(new Date().toISOString().split("T")[0]);
-  const [formEndDate, setFormEndDate] = useState("");
-  const [formNotes, setFormNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const { can } = usePermissions();
 
   const fetchAssignments = useCallback(async () => {
@@ -67,24 +56,6 @@ export default function AssignmentsPage() {
 
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
   useEffect(() => { apiClient<Project[]>("/api/projects").then(setProjects).catch(() => setProjects([])); }, []);
-  useEffect(() => {
-    if (!formProjectId) { setTesters([]); return; }
-    apiClient<Tester[]>(`/api/testers?projectId=${formProjectId}`).then(setTesters).catch(() => setTesters([]));
-  }, [formProjectId]);
-
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!formTesterId || !formStoryId || !formStartDate) { setError("Completa los campos obligatorios"); return; }
-    setSaving(true); setError("");
-    try {
-      await apiClient("/api/assignments", { method: "POST", body: JSON.stringify({ testerId: formTesterId, storyId: formStoryId, startDate: formStartDate, endDate: formEndDate || null, notes: formNotes || null }) });
-      setModalOpen(false); fetchAssignments();
-    } catch (err: any) {
-      setError(err.message || "Error al crear");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function changeStatus(id: string, status: string) {
     const body: Record<string, unknown> = { status };
@@ -118,8 +89,6 @@ export default function AssignmentsPage() {
   const availableTesters = uniqueTesters - busyTesters;
   const completionRate = totalHU > 0 ? Math.round((prodHU / totalHU) * 100) : 0;
 
-  const sel = "w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 focus:border-[#4A90D9] focus:ring-1 focus:ring-[#4A90D9]/20 transition outline-none disabled:opacity-40";
-
   return (
     <div>
       {/* Header */}
@@ -129,10 +98,10 @@ export default function AssignmentsPage() {
           <p className="text-xs text-gray-400 mt-0.5">Resumen ejecutivo y gestion de recursos QA</p>
         </div>
         {can("assignments", "create") && (
-          <button onClick={() => { setModalOpen(true); setError(""); }} className="px-4 py-2.5 text-xs font-semibold text-white bg-[#1F3864] rounded-lg hover:bg-[#2E5FA3] transition-all shadow-sm uppercase tracking-wider inline-flex items-center gap-2">
+          <Link href="/assignments/new" className="px-4 py-2.5 text-xs font-semibold text-white bg-[#1F3864] rounded-lg hover:bg-[#2E5FA3] transition-all shadow-sm uppercase tracking-wider inline-flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
             Nueva Asignacion
-          </button>
+          </Link>
         )}
       </div>
 
@@ -315,7 +284,12 @@ export default function AssignmentsPage() {
                         </div>
 
                         {/* Next action */}
-                        <div className="shrink-0">
+                        <div className="shrink-0 flex items-center gap-1">
+                          {can("assignments", "update") && (
+                            <Link href={`/assignments/${a.id}/edit`} className="px-2 py-1 text-[10px] text-gray-500 hover:text-[#2E5FA3] hover:bg-[#2E5FA3]/5 rounded transition font-medium">
+                              Editar
+                            </Link>
+                          )}
                           {!isProd && can("assignments", "update") && (
                             <select value={a.status} onChange={e => changeStatus(a.id, e.target.value)}
                               className="px-2 py-1 text-[10px] border border-gray-200 rounded-md bg-white text-gray-600 focus:border-[#4A90D9] outline-none cursor-pointer hover:border-gray-300 transition">
@@ -338,52 +312,6 @@ export default function AssignmentsPage() {
         </div>
       )}
 
-      {/* Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Nueva Asignacion">
-        <form onSubmit={handleCreate} className="space-y-4">
-          <div>
-            <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Proyecto</label>
-            <select value={formProjectId} onChange={e => { setFormProjectId(e.target.value); setFormTesterId(""); setFormStoryId(""); }} className={sel}>
-              <option value="">Seleccionar...</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Tester</label>
-              <select value={formTesterId} onChange={e => setFormTesterId(e.target.value)} disabled={!formProjectId} className={sel}>
-                <option value="">Seleccionar...</option>
-                {testers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">ID Historia de Usuario</label>
-              <input type="text" value={formStoryId} onChange={e => setFormStoryId(e.target.value)} placeholder="ID de la HU" className={sel} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Fecha Inicio</label>
-              <input type="date" value={formStartDate} onChange={e => setFormStartDate(e.target.value)} className={sel} />
-            </div>
-            <div>
-              <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Fecha Fin Estimada</label>
-              <input type="date" value={formEndDate} onChange={e => setFormEndDate(e.target.value)} className={sel} />
-            </div>
-          </div>
-          <div>
-            <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Notas</label>
-            <textarea value={formNotes} onChange={e => setFormNotes(e.target.value)} rows={2} className={`${sel} resize-none`} placeholder="Observaciones..." />
-          </div>
-          {error && <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg border border-red-100"><svg className="w-4 h-4 text-red-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><p className="text-xs text-red-600">{error}</p></div>}
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-xs text-gray-500 hover:bg-gray-100 rounded-lg transition">Cancelar</button>
-            <button type="submit" disabled={saving} className="px-6 py-2 text-xs font-semibold text-white bg-[#1F3864] rounded-lg hover:bg-[#2E5FA3] transition disabled:opacity-50 uppercase tracking-wider">
-              {saving ? "Guardando..." : "Crear Asignacion"}
-            </button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }
