@@ -7,6 +7,19 @@ import { ZodError } from "zod";
 const router = Router();
 router.use(authMiddleware as any);
 
+// GET /me — current authenticated user's tester profile
+router.get("/me", async (req: AuthRequest, res: Response) => {
+  const t = await prisma.tester.findFirst({
+    where: { userId: req.user!.id },
+    select: { id: true, projectId: true, name: true },
+  });
+  if (!t) {
+    res.status(404).json({ error: "not a tester" });
+    return;
+  }
+  res.json(t);
+});
+
 // GET / — list testers, required ?projectId filter
 router.get("/", requirePermission("testers", "read") as any, async (req: AuthRequest, res: Response) => {
   try {
