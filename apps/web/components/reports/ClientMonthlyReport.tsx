@@ -21,7 +21,7 @@ const SERIES_COLORS = [
 const TOTAL_COLOR = "#1F3864";
 
 interface SeriesTotal {
-  months: string[];
+  labels: string[];
   values: number[];
 }
 interface SeriesByProject {
@@ -31,7 +31,7 @@ interface SeriesByProject {
 interface Props {
   data: {
     client: { id: string; name: string };
-    months: string[];
+    labels: string[];
     designedTotal: SeriesTotal;
     designedByProject: SeriesByProject[];
     designedAverage: SeriesTotal;
@@ -42,17 +42,21 @@ interface Props {
     defectsByProject: SeriesByProject[];
     analysts: { project: string; testers: string[] }[];
   };
+  mode: "monthly" | "weekly";
   months: number;
+  weeks: number;
+  onChangeMode: (m: "monthly" | "weekly") => void;
   onChangeMonths: (n: number) => void;
+  onChangeWeeks: (n: number) => void;
 }
 
 function singleSeries(data: SeriesTotal) {
-  return data.months.map((m, i) => ({ month: m, value: data.values[i] }));
+  return data.labels.map((m, i) => ({ label: m, value: data.values[i] }));
 }
 
-function multiSeries(months: string[], series: SeriesByProject[]) {
-  return months.map((m, i) => {
-    const row: Record<string, number | string> = { month: m };
+function multiSeries(labels: string[], series: SeriesByProject[]) {
+  return labels.map((m, i) => {
+    const row: Record<string, number | string> = { label: m };
     for (const s of series) row[s.project] = s.values[i] ?? 0;
     return row;
   });
@@ -73,7 +77,7 @@ function SingleBarCard({
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={singleSeries(data)}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="month" />
+          <XAxis dataKey="label" />
           <YAxis allowDecimals={false} />
           <Tooltip />
           <Bar
@@ -90,20 +94,20 @@ function SingleBarCard({
 
 function GroupedBarCard({
   title,
-  months,
+  labels,
   series,
 }: {
   title: string;
-  months: string[];
+  labels: string[];
   series: SeriesByProject[];
 }) {
   return (
     <div className="rounded-lg border bg-white p-4 shadow-sm print:shadow-none">
       <h3 className="mb-2 text-sm font-semibold text-[#1F3864]">{title}</h3>
       <ResponsiveContainer width="100%" height={260}>
-        <BarChart data={multiSeries(months, series)}>
+        <BarChart data={multiSeries(labels, series)}>
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="month" />
+          <XAxis dataKey="label" />
           <YAxis allowDecimals={false} />
           <Tooltip />
           <Legend />
@@ -120,7 +124,19 @@ function GroupedBarCard({
   );
 }
 
-export function ClientMonthlyReport({ data, months, onChangeMonths }: Props) {
+export function ClientMonthlyReport({
+  data,
+  mode,
+  months,
+  weeks,
+  onChangeMode,
+  onChangeMonths,
+  onChangeWeeks,
+}: Props) {
+  const isMonthly = mode === "monthly";
+  const unitSingular = isMonthly ? "Mes" : "Semana";
+  const unitPlural = isMonthly ? "meses" : "semanas";
+  const count = isMonthly ? months : weeks;
   return (
     <div className="p-6">
       <style jsx global>{`
@@ -141,25 +157,61 @@ export function ClientMonthlyReport({ data, months, onChangeMonths }: Props) {
       <header className="mb-6 flex items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#1F3864]">
-            Reporte mensual · {data.client.name}
+            Reporte {isMonthly ? "mensual" : "semanal"} · {data.client.name}
           </h1>
           <p className="text-sm text-gray-600">
-            Indicadores de los últimos {months} meses
+            Indicadores de {isMonthly ? "los últimos" : "las últimas"} {count}{" "}
+            {unitPlural}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2 print-hide">
-          <label className="text-sm text-gray-700">Meses:</label>
-          <select
-            value={months}
-            onChange={(e) => onChangeMonths(Number(e.target.value))}
-            className="rounded border p-1 text-sm"
-          >
-            {[3, 6, 9, 12].map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
+          <div className="inline-flex rounded-lg border bg-white p-0.5">
+            <button
+              onClick={() => onChangeMode("monthly")}
+              className={`rounded-md px-3 py-1 text-sm ${
+                isMonthly
+                  ? "bg-[#1F3864] text-white"
+                  : "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              Mensual
+            </button>
+            <button
+              onClick={() => onChangeMode("weekly")}
+              className={`rounded-md px-3 py-1 text-sm ${
+                !isMonthly
+                  ? "bg-[#1F3864] text-white"
+                  : "text-gray-700 hover:bg-gray-100"
+              }`}
+            >
+              Semanal
+            </button>
+          </div>
+          {isMonthly ? (
+            <select
+              value={months}
+              onChange={(e) => onChangeMonths(Number(e.target.value))}
+              className="rounded border p-1 text-sm"
+            >
+              {[3, 6, 9, 12].map((n) => (
+                <option key={n} value={n}>
+                  {n} meses
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              value={weeks}
+              onChange={(e) => onChangeWeeks(Number(e.target.value))}
+              className="rounded border p-1 text-sm"
+            >
+              {[4, 8, 12, 26].map((n) => (
+                <option key={n} value={n}>
+                  {n} semanas
+                </option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => window.print()}
             className="rounded bg-[#1F3864] px-3 py-1 text-sm text-white hover:opacity-90"
@@ -170,39 +222,42 @@ export function ClientMonthlyReport({ data, months, onChangeMonths }: Props) {
       </header>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <SingleBarCard title="Diseño Casos por Mes" data={data.designedTotal} />
+        <SingleBarCard
+          title={`Diseño Casos por ${unitSingular}`}
+          data={data.designedTotal}
+        />
         <GroupedBarCard
           title="Diseños por Iniciativas"
-          months={data.months}
+          labels={data.labels}
           series={data.designedByProject}
         />
         <SingleBarCard
-          title="Promedio de Diseño por Mes"
+          title={`Promedio de Diseño por ${unitSingular}`}
           data={data.designedAverage}
           color="#2E5FA3"
         />
         <SingleBarCard
-          title="Ejecución Casos por Mes"
+          title={`Ejecución Casos por ${unitSingular}`}
           data={data.executedTotal}
         />
         <GroupedBarCard
           title="Ejecución por Iniciativas"
-          months={data.months}
+          labels={data.labels}
           series={data.executedByProject}
         />
         <SingleBarCard
-          title="Promedio de Ejecución por Mes"
+          title={`Promedio de Ejecución por ${unitSingular}`}
           data={data.executedAverage}
           color="#2E5FA3"
         />
         <SingleBarCard
-          title="Defectos Reportados por Mes"
+          title={`Defectos Reportados por ${unitSingular}`}
           data={data.defectsTotal}
           color="#C00000"
         />
         <GroupedBarCard
-          title="Defectos por Proyectos - Reportados por Mes"
-          months={data.months}
+          title={`Defectos por Proyectos - Reportados por ${unitSingular}`}
+          labels={data.labels}
           series={data.defectsByProject}
         />
       </div>
