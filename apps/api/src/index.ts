@@ -19,6 +19,7 @@ import reportsRoutes from "./routes/reports.routes.js";
 import holidaysRoutes from "./routes/holidays.routes.js";
 import dailyRecordsRoutes from "./routes/daily-records.routes.js";
 import cycleBreakdownsRoutes from "./routes/cycle-breakdowns.routes.js";
+import recordsRoutes from "./routes/records.routes.js";
 
 const app = express();
 
@@ -63,6 +64,7 @@ app.use("/api/metrics", metricsRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/holidays", holidaysRoutes);
 app.use("/api/daily-records", dailyRecordsRoutes);
+app.use("/api/records", recordsRoutes);
 app.use("/api", cycleBreakdownsRoutes);
 
 // Health check
