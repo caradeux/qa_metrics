@@ -52,6 +52,15 @@ const navItems = [
     ),
   },
   {
+    label: "Reportes por cliente",
+    href: "/reports/client",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-6h13M9 17H4V5a1 1 0 011-1h3l2 2h10v5M9 17l3-3m0 0l3 3m-3-3v6" />
+      </svg>
+    ),
+  },
+  {
     label: "Importar Excel",
     href: "/records/import",
     icon: (
