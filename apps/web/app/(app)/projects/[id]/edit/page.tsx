@@ -11,7 +11,14 @@ interface Project {
   clientId: string;
   adoOrgUrl: string | null;
   adoProject: string | null;
+  projectManagerId: string | null;
   client: { name: string };
+}
+
+interface PmUser {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export default function EditProjectPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,6 +29,8 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
   const [adoOrgUrl, setAdoOrgUrl] = useState("");
   const [adoProject, setAdoProject] = useState("");
   const [adoToken, setAdoToken] = useState("");
+  const [projectManagerId, setProjectManagerId] = useState("");
+  const [pms, setPms] = useState<PmUser[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -32,8 +41,12 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
         setName(p.name);
         setAdoOrgUrl(p.adoOrgUrl || "");
         setAdoProject(p.adoProject || "");
+        setProjectManagerId(p.projectManagerId || "");
       })
       .catch((err) => console.error(err));
+    apiClient<PmUser[]>("/api/users?role=CLIENT_PM")
+      .then(setPms)
+      .catch(() => setPms([]));
   }, [projectId]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -41,7 +54,7 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
     setError("");
     setSaving(true);
 
-    const body: Record<string, string> = { name: name.trim() };
+    const body: Record<string, any> = { name: name.trim(), projectManagerId: projectManagerId || null };
     if (project?.modality === "AZURE_DEVOPS") {
       body.adoOrgUrl = adoOrgUrl;
       body.adoProject = adoProject;
@@ -78,6 +91,22 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
             required
             className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Jefe de Proyecto (Cliente)</label>
+          <select
+            value={projectManagerId}
+            onChange={(e) => setProjectManagerId(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary"
+          >
+            <option value="">— Sin asignar —</option>
+            {pms.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.email})
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>

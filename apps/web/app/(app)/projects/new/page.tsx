@@ -9,12 +9,20 @@ interface Client {
   name: string;
 }
 
+interface PmUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export default function NewProjectPage() {
   const router = useRouter();
   const [clients, setClients] = useState<Client[]>([]);
+  const [pms, setPms] = useState<PmUser[]>([]);
   const [name, setName] = useState("");
   const [clientId, setClientId] = useState("");
   const [modality, setModality] = useState<"MANUAL" | "AZURE_DEVOPS">("MANUAL");
+  const [projectManagerId, setProjectManagerId] = useState("");
   const [adoOrgUrl, setAdoOrgUrl] = useState("");
   const [adoProject, setAdoProject] = useState("");
   const [adoToken, setAdoToken] = useState("");
@@ -25,6 +33,9 @@ export default function NewProjectPage() {
     apiClient<Client[]>("/api/clients")
       .then(setClients)
       .catch(() => setClients([]));
+    apiClient<PmUser[]>("/api/users?role=CLIENT_PM")
+      .then(setPms)
+      .catch(() => setPms([]));
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -39,6 +50,7 @@ export default function NewProjectPage() {
           name: name.trim(),
           clientId,
           modality,
+          projectManagerId: projectManagerId || null,
           ...(modality === "AZURE_DEVOPS" && { adoOrgUrl, adoProject, adoToken }),
         }),
       });
@@ -82,6 +94,23 @@ export default function NewProjectPage() {
             className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary"
             placeholder="Nombre del proyecto"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Jefe de Proyecto (Cliente)</label>
+          <select
+            value={projectManagerId}
+            onChange={(e) => setProjectManagerId(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary"
+          >
+            <option value="">— Sin asignar —</option>
+            {pms.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} ({u.email})
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted mt-1">Usuario con rol CLIENT_PM que podrá ver este proyecto en modo lectura.</p>
         </div>
 
         <div>
