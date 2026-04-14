@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { createTesterSchema, updateTesterSchema } from "../validators/tester.validator.js";
-import { isClientPm } from "../lib/access.js";
+import { isClientPm, isAnalyst } from "../lib/access.js";
 import { ACTIVE_STATUSES } from "../lib/assignment-states.js";
 import { ZodError } from "zod";
 
@@ -50,6 +50,16 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
       res.status(403).json({ error: "forbidden" });
       return;
     }
+  } else if (roleName === "QA_ANALYST") {
+    // Analyst puede ver testers de proyectos donde el mismo esté vinculado
+    const inProject = await prisma.tester.findFirst({
+      where: { projectId: tester.projectId, userId: req.user!.id },
+      select: { id: true },
+    });
+    if (!inProject) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
   } else if (
     roleName !== "ADMIN" &&
     roleName !== "QA_LEAD" &&
@@ -62,31 +72,35 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
   res.json(safe);
 });
 
-// GET / — list testers, required ?projectId filter
+// GET / — list testers; ?projectId opcional (si no viene, retorna todos los testers accesibles)
 router.get("/", requirePermission("testers", "read") as any, async (req: AuthRequest, res: Response) => {
   try {
     const projectId = req.query.projectId as string | undefined;
-    if (!projectId) {
-      res.status(400).json({ error: "projectId es requerido" });
-      return;
-    }
 
-    // Verify project belongs to user
-    const projectWhere: any = { id: projectId };
-    if (isClientPm(req)) projectWhere.projectManagerId = req.user!.id;
-    else projectWhere.client = { userId: req.user!.id };
-    const project = await prisma.project.findFirst({ where: projectWhere });
-    if (!project) {
-      res.status(404).json({ error: "Proyecto no encontrado" });
-      return;
+    // Scope de proyectos accesibles según rol
+    const projectsWhere: any = {};
+    if (isClientPm(req)) projectsWhere.projectManagerId = req.user!.id;
+    else if (isAnalyst(req)) projectsWhere.testers = { some: { userId: req.user!.id } };
+    else projectsWhere.client = { userId: req.user!.id };
+
+    if (projectId) {
+      // Validar que ese proyecto sea accesible
+      const project = await prisma.project.findFirst({ where: { id: projectId, ...projectsWhere } });
+      if (!project) {
+        res.status(404).json({ error: "Proyecto no encontrado" });
+        return;
+      }
     }
 
     const testers = await prisma.tester.findMany({
-      where: { projectId },
+      where: {
+        ...(projectId ? { projectId } : { project: projectsWhere }),
+      },
       include: {
         _count: { select: { records: true } },
+        project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
       },
-      orderBy: { name: "asc" },
+      orderBy: [{ project: { name: "asc" } }, { name: "asc" }],
     });
     res.json(testers);
   } catch (err) {

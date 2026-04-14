@@ -6,7 +6,7 @@ import {
   type AuthRequest,
 } from "../middleware/auth.js";
 import { aggregateDailyToWeekly } from "../services/metrics.service.js";
-import { isClientPm } from "../lib/access.js";
+import { isClientPm, isAnalyst } from "../lib/access.js";
 import { addDays } from "date-fns";
 import { z } from "zod";
 
@@ -82,6 +82,15 @@ router.get(
           select: { id: true },
         });
         if (!owned) {
+          res.status(403).json({ error: "Sin acceso a este proyecto" });
+          return;
+        }
+      } else if (isAnalyst(req)) {
+        const linked = await prisma.project.findFirst({
+          where: { id: projectId as string, testers: { some: { userId: req.user!.id } } },
+          select: { id: true },
+        });
+        if (!linked) {
           res.status(403).json({ error: "Sin acceso a este proyecto" });
           return;
         }
@@ -210,12 +219,13 @@ router.get(
 
       const projectsWhere: any = { clientId: clientId as string };
       if (isClientPm(req)) projectsWhere.projectManagerId = req.user!.id;
+      else if (isAnalyst(req)) projectsWhere.testers = { some: { userId: req.user!.id } };
       const projects = await prisma.project.findMany({
         where: projectsWhere,
         select: { id: true, name: true, modality: true },
       });
 
-      if (isClientPm(req) && projects.length === 0) {
+      if ((isClientPm(req) || isAnalyst(req)) && projects.length === 0) {
         res.status(403).json({ error: "Sin acceso a este cliente" });
         return;
       }
@@ -273,25 +283,100 @@ router.get(
         })
       );
 
+      // Tasa de rechazo + Lead time entre ciclos (tiempo que Dev tarda en entregar correcciones)
+      const projectIds = projects.map((p) => p.id);
+      const assignments = await prisma.testerAssignment.findMany({
+        where: { story: { projectId: { in: projectIds } } },
+        select: {
+          id: true,
+          status: true,
+          storyId: true,
+          cycleId: true,
+          startDate: true,
+          endDate: true,
+          cycle: { select: { id: true, name: true, startDate: true } },
+          statusLogs: { select: { status: true, changedAt: true }, orderBy: { changedAt: "asc" } },
+        },
+      });
+      const totalAssignments = assignments.length;
+      const rejected = assignments.filter((a) => a.status === "RETURNED_TO_DEV").length;
+      const rejectionRate = totalAssignments > 0 ? Math.round((rejected / totalAssignments) * 100) : 0;
+
+      // Lead time entre ciclos: por cada HU, ordenar sus asignaciones por ciclo (startDate del ciclo).
+      // Para cada par consecutivo, calcular: (startDate del siguiente ciclo) - (fin del ciclo previo),
+      // donde fin del ciclo previo = endDate de la asignación o, si está abierta, última entrada a RETURNED_TO_DEV.
+      const byStory = new Map<string, typeof assignments>();
+      for (const a of assignments) {
+        if (!byStory.has(a.storyId)) byStory.set(a.storyId, []);
+        byStory.get(a.storyId)!.push(a);
+      }
+      const gaps: number[] = [];
+      for (const storyAssignments of byStory.values()) {
+        const sorted = [...storyAssignments].sort((a, b) => {
+          const da = a.cycle?.startDate ? new Date(a.cycle.startDate).getTime() : new Date(a.startDate).getTime();
+          const db = b.cycle?.startDate ? new Date(b.cycle.startDate).getTime() : new Date(b.startDate).getTime();
+          return da - db;
+        });
+        for (let i = 0; i < sorted.length - 1; i++) {
+          const prev = sorted[i]!;
+          const next = sorted[i + 1]!;
+          // Fin de la asignación previa
+          let prevEnd: number | null = prev.endDate ? new Date(prev.endDate).getTime() : null;
+          if (!prevEnd) {
+            // Usar última entrada a RETURNED_TO_DEV en sus logs
+            const returned = [...prev.statusLogs].reverse().find((l) => l.status === "RETURNED_TO_DEV");
+            if (returned) prevEnd = new Date(returned.changedAt).getTime();
+          }
+          const nextStart = next.cycle?.startDate
+            ? new Date(next.cycle.startDate).getTime()
+            : new Date(next.startDate).getTime();
+          if (prevEnd !== null && nextStart > prevEnd) {
+            gaps.push(nextStart - prevEnd);
+          }
+        }
+      }
+      const devDeliveryLeadTime = gaps.length > 0
+        ? Math.round((gaps.reduce((s, g) => s + g, 0) / gaps.length) / (1000 * 60 * 60 * 24) * 10) / 10
+        : 0;
+
+      // Además mantenemos el desglose de tiempo en cada estado como antes
+      const now = Date.now();
+      const statusDurations: Record<string, { totalMs: number; count: number }> = {};
+      for (const a of assignments) {
+        const logs = a.statusLogs.length > 0
+          ? a.statusLogs
+          : [{ status: a.status, changedAt: a.startDate }];
+        for (let i = 0; i < logs.length; i++) {
+          const curr = logs[i]!;
+          const next = logs[i + 1];
+          const start = new Date(curr.changedAt).getTime();
+          const end = next ? new Date(next.changedAt).getTime() : now;
+          const ms = Math.max(0, end - start);
+          const k = curr.status;
+          if (!statusDurations[k]) statusDurations[k] = { totalMs: 0, count: 0 };
+          statusDurations[k].totalMs += ms;
+          statusDurations[k].count += 1;
+        }
+      }
+      const leadTime: Record<string, number> = {};
+      for (const [status, { totalMs, count }] of Object.entries(statusDurations)) {
+        leadTime[status] = count > 0 ? Math.round(totalMs / count / (1000 * 60 * 60 * 24) * 10) / 10 : 0;
+      }
+
       const totals = {
-        totalDesigned: projectMetrics.reduce(
-          (s, p) => s + p.totalDesigned,
-          0
-        ),
-        totalExecuted: projectMetrics.reduce(
-          (s, p) => s + p.totalExecuted,
-          0
-        ),
+        totalDesigned: projectMetrics.reduce((s, p) => s + p.totalDesigned, 0),
+        totalExecuted: projectMetrics.reduce((s, p) => s + p.totalExecuted, 0),
         totalDefects: projectMetrics.reduce((s, p) => s + p.totalDefects, 0),
         ratio: 0,
+        rejectionRate,
+        totalAssignments,
+        rejectedAssignments: rejected,
+        devDeliveryLeadTime, // días promedio entre ciclo N y ciclo N+1 (tiempo que dev tarda en entregar correcciones)
+        devDeliverySamples: gaps.length,
+        leadTime, // { REGISTERED: N, ANALYSIS: N, ..., WAITING_UAT: N, ... } en días promedio
         projectCount: projectMetrics.length,
         testerCount: projectMetrics.reduce((s, p) => s + p.testerCount, 0),
-        defectsBySeverity: {
-          critical: 0,
-          high: 0,
-          medium: 0,
-          low: 0,
-        },
+        defectsBySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
       };
       totals.ratio =
         totals.totalDesigned > 0

@@ -11,11 +11,39 @@ import {
 } from "../validators/assignment.validator.js";
 import { updatePhasesSchema } from "../validators/assignment-phase.validator.js";
 import { ZodError } from "zod";
-import { isClientPm, clientPmProjectIds } from "../lib/access.js";
+import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../lib/access.js";
 import { isWorkday } from "../lib/workdays.js";
 
 const router = Router();
 router.use(authMiddleware as any);
+
+async function canAccessAssignmentProject(req: AuthRequest, projectId: string): Promise<boolean> {
+  if (isClientPm(req)) {
+    const ids = await clientPmProjectIds(req.user!.id);
+    return ids.includes(projectId);
+  }
+  if (isAnalyst(req)) {
+    const ids = await analystProjectIds(req.user!.id);
+    return ids.includes(projectId);
+  }
+  // ADMIN / QA_LEAD
+  const p = await prisma.project.findFirst({
+    where: { id: projectId, client: { userId: req.user!.id } },
+    select: { id: true },
+  });
+  return !!p;
+}
+
+async function assertCanActOnAssignment(req: AuthRequest, assignmentId: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const a = await prisma.testerAssignment.findUnique({
+    where: { id: assignmentId },
+    select: { tester: { select: { projectId: true } } },
+  });
+  if (!a) return { ok: false, status: 404, error: "Asignacion no encontrada" };
+  const allowed = await canAccessAssignmentProject(req, a.tester.projectId);
+  if (!allowed) return { ok: false, status: 403, error: "Sin acceso" };
+  return { ok: true };
+}
 
 // GET / — List assignments with filters
 router.get(
@@ -33,6 +61,13 @@ router.get(
 
       if (isClientPm(req)) {
         const ids = await clientPmProjectIds(req.user!.id);
+        if (projectId && !ids.includes(projectId)) {
+          res.status(403).json({ error: "Sin acceso" });
+          return;
+        }
+        where.tester = { projectId: projectId ? projectId : { in: ids } };
+      } else if (isAnalyst(req)) {
+        const ids = await analystProjectIds(req.user!.id);
         if (projectId && !ids.includes(projectId)) {
           res.status(403).json({ error: "Sin acceso" });
           return;
@@ -105,6 +140,20 @@ router.post(
     try {
       const data = createAssignmentSchema.parse(req.body);
       const initialStatus = data.status ?? "REGISTERED";
+
+      // Verify tester belongs to a project the user can access
+      const tester = await prisma.tester.findUnique({
+        where: { id: data.testerId },
+        select: { projectId: true },
+      });
+      if (!tester) {
+        res.status(404).json({ error: "Tester no encontrado" });
+        return;
+      }
+      if (!(await canAccessAssignmentProject(req, tester.projectId))) {
+        res.status(403).json({ error: "Sin acceso" });
+        return;
+      }
 
       let startDate = data.startDate ? new Date(data.startDate) : new Date();
       let endDate: Date | null = data.endDate ? new Date(data.endDate) : null;
@@ -219,6 +268,8 @@ router.put(
         res.status(404).json({ error: "Asignacion no encontrada" });
         return;
       }
+      const check = await assertCanActOnAssignment(req, id);
+      if (!check.ok) { res.status(check.status).json({ error: check.error }); return; }
 
       const data: Record<string, unknown> = {};
       let statusChanged = false;
@@ -276,6 +327,8 @@ router.get(
   async (req: AuthRequest, res: Response) => {
     try {
       const id = req.params.id as string;
+      const check = await assertCanActOnAssignment(req, id);
+      if (!check.ok) { res.status(check.status).json({ error: check.error }); return; }
       const logs = await prisma.assignmentStatusLog.findMany({
         where: { assignmentId: id },
         orderBy: { changedAt: "asc" },
@@ -294,6 +347,8 @@ router.delete(
   async (req: AuthRequest, res: Response) => {
     try {
       const id = req.params.id as string;
+      const check = await assertCanActOnAssignment(req, id);
+      if (!check.ok) { res.status(check.status).json({ error: check.error }); return; }
       await prisma.testerAssignment.delete({ where: { id } });
       res.json({ message: "Asignacion eliminada" });
     } catch (err) {
@@ -309,6 +364,8 @@ router.get(
   async (req: AuthRequest, res: Response) => {
     try {
       const id = req.params.id as string;
+      const check = await assertCanActOnAssignment(req, id);
+      if (!check.ok) { res.status(check.status).json({ error: check.error }); return; }
       const assignment = await prisma.testerAssignment.findUnique({
         where: { id },
         include: {
@@ -354,6 +411,8 @@ router.put(
     try {
       const id = req.params.id as string;
       const { phases } = updatePhasesSchema.parse(req.body);
+      const phasesCheck = await assertCanActOnAssignment(req, id);
+      if (!phasesCheck.ok) { res.status(phasesCheck.status).json({ error: phasesCheck.error }); return; }
 
       const existing = await prisma.testerAssignment.findUnique({ where: { id } });
       if (!existing) {

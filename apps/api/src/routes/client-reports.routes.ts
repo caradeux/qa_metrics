@@ -15,9 +15,12 @@ function isLeader(req: AuthRequest) {
 function isClientPmRole(req: AuthRequest) {
   return req.user?.role?.name === "CLIENT_PM";
 }
+function isAnalystRole(req: AuthRequest) {
+  return req.user?.role?.name === "QA_ANALYST";
+}
 
 router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
-  if (!isLeader(req) && !isClientPmRole(req)) {
+  if (!isLeader(req) && !isClientPmRole(req) && !isAnalystRole(req)) {
     res.status(403).json({ error: "forbidden" });
     return;
   }
@@ -33,6 +36,8 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
   const clientIdParam = req.params.id as string;
   const projectsFilter: any = isClientPmRole(req)
     ? { where: { projectManagerId: req.user!.id }, include: { testers: { select: { id: true, name: true, projectId: true } } } }
+    : isAnalystRole(req)
+    ? { where: { testers: { some: { userId: req.user!.id } } }, include: { testers: { select: { id: true, name: true, projectId: true } } } }
     : { include: { testers: { select: { id: true, name: true, projectId: true } } } };
   const client = await prisma.client.findUnique({
     where: { id: clientIdParam },
@@ -42,7 +47,7 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
     res.status(404).json({ error: "client not found" });
     return;
   }
-  if (isClientPmRole(req) && client.projects.length === 0) {
+  if ((isClientPmRole(req) || isAnalystRole(req)) && client.projects.length === 0) {
     res.status(403).json({ error: "forbidden" });
     return;
   }
@@ -165,7 +170,7 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
 });
 
 router.get("/client/:id/weekly", async (req: AuthRequest, res: Response) => {
-  if (!isLeader(req) && !isClientPmRole(req)) {
+  if (!isLeader(req) && !isClientPmRole(req) && !isAnalystRole(req)) {
     res.status(403).json({ error: "forbidden" });
     return;
   }
@@ -181,6 +186,8 @@ router.get("/client/:id/weekly", async (req: AuthRequest, res: Response) => {
   const clientIdParam = req.params.id as string;
   const projectsFilter: any = isClientPmRole(req)
     ? { where: { projectManagerId: req.user!.id }, include: { testers: { select: { id: true, name: true, projectId: true } } } }
+    : isAnalystRole(req)
+    ? { where: { testers: { some: { userId: req.user!.id } } }, include: { testers: { select: { id: true, name: true, projectId: true } } } }
     : { include: { testers: { select: { id: true, name: true, projectId: true } } } };
   const client = await prisma.client.findUnique({
     where: { id: clientIdParam },
@@ -190,7 +197,7 @@ router.get("/client/:id/weekly", async (req: AuthRequest, res: Response) => {
     res.status(404).json({ error: "client not found" });
     return;
   }
-  if (isClientPmRole(req) && client.projects.length === 0) {
+  if ((isClientPmRole(req) || isAnalystRole(req)) && client.projects.length === 0) {
     res.status(403).json({ error: "forbidden" });
     return;
   }
