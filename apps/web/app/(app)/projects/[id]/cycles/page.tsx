@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, use } from "react";
-import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
@@ -26,13 +25,6 @@ export default function CyclesPage({ params }: { params: Promise<{ id: string }>
   const [project, setProject] = useState<Project | null>(null);
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingCycle, setEditingCycle] = useState<Cycle | null>(null);
-  const [name, setName] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Cycle | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { can } = usePermissions();
@@ -52,49 +44,6 @@ export default function CyclesPage({ params }: { params: Promise<{ id: string }>
   }, [projectId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-
-  function openCreate() {
-    setEditingCycle(null);
-    setName(""); setStartDate(""); setEndDate("");
-    setError("");
-    setModalOpen(true);
-  }
-
-  function openEdit(cycle: Cycle) {
-    setEditingCycle(cycle);
-    setName(cycle.name);
-    setStartDate(cycle.startDate ? cycle.startDate.split("T")[0] : "");
-    setEndDate(cycle.endDate ? cycle.endDate.split("T")[0] : "");
-    setError("");
-    setModalOpen(true);
-  }
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) { setError("El nombre es obligatorio"); return; }
-    setSaving(true);
-    setError("");
-
-    const url = editingCycle ? `/api/cycles/${editingCycle.id}` : "/api/cycles";
-    const method = editingCycle ? "PUT" : "POST";
-    const body: Record<string, string> = { name: name.trim() };
-    if (!editingCycle) body.projectId = projectId;
-    if (startDate) body.startDate = startDate;
-    if (endDate) body.endDate = endDate;
-
-    try {
-      await apiClient(url, {
-        method,
-        body: JSON.stringify(body),
-      });
-      setModalOpen(false);
-      fetchData();
-    } catch (err: any) {
-      setError(err.message || "Error al guardar");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -123,9 +72,9 @@ export default function CyclesPage({ params }: { params: Promise<{ id: string }>
           <p className="text-sm text-muted">{project?.client.name} / {project?.name}</p>
         </div>
         {can("cycles", "create") && (
-          <button onClick={openCreate} className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-secondary transition">
+          <Link href={`/projects/${projectId}/cycles/new`} className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-secondary transition">
             + Nuevo Ciclo
-          </button>
+          </Link>
         )}
       </div>
 
@@ -154,7 +103,7 @@ export default function CyclesPage({ params }: { params: Promise<{ id: string }>
                   <td className="px-4 py-3 text-muted">{cycle._count.records}</td>
                   <td className="px-4 py-3 text-right space-x-2">
                     {can("cycles", "update") && (
-                      <button onClick={() => openEdit(cycle)} className="text-sm text-secondary hover:underline">Editar</button>
+                      <Link href={`/projects/${projectId}/cycles/${cycle.id}/edit`} className="text-sm text-secondary hover:underline">Editar</Link>
                     )}
                     {can("cycles", "delete") && (
                       <button onClick={() => setDeleteTarget(cycle)} className="text-sm text-danger hover:underline">Eliminar</button>
@@ -166,30 +115,6 @@ export default function CyclesPage({ params }: { params: Promise<{ id: string }>
           </table>
         </div>
       )}
-
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingCycle ? "Editar Ciclo" : "Nuevo Ciclo"}>
-        <form onSubmit={handleSave} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Nombre</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary" placeholder="Ej: Sprint 1-4" autoFocus />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Fecha Inicio</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Fecha Fin</label>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary" />
-            </div>
-          </div>
-          {error && <p className="text-sm text-danger">{error}</p>}
-          <div className="flex justify-end gap-3">
-            <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-foreground bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancelar</button>
-            <button type="submit" disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-secondary transition disabled:opacity-50">{saving ? "Guardando..." : "Guardar"}</button>
-          </div>
-        </form>
-      </Modal>
 
       <ConfirmDialog
         open={!!deleteTarget}
