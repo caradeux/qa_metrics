@@ -32,9 +32,15 @@ export default function NewAssignmentPage() {
   useEffect(() => {
     if (!projectId) { setTesters([]); setCycles([]); setStories([]); setTesterId(""); setCycleId(""); setStoryId(""); return; }
     apiClient<Tester[]>(`/api/testers?projectId=${projectId}`).then(setTesters).catch(() => setTesters([]));
-    apiClient<Cycle[]>(`/api/cycles?projectId=${projectId}`).then(setCycles).catch(() => setCycles([]));
     apiClient<Story[]>(`/api/stories?projectId=${projectId}`).then(setStories).catch(() => setStories([]));
+    setCycles([]);
+    setCycleId("");
   }, [projectId]);
+
+  useEffect(() => {
+    if (!storyId) { setCycles([]); setCycleId(""); return; }
+    apiClient<Cycle[]>(`/api/cycles?storyId=${storyId}`).then(setCycles).catch(() => setCycles([]));
+  }, [storyId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -82,8 +88,8 @@ export default function NewAssignmentPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-foreground mb-1">Ciclo</label>
-            <select value={cycleId} onChange={(e) => setCycleId(e.target.value)} disabled={!projectId} className={inp}>
+            <label className="block text-sm font-medium text-foreground mb-1">Ciclo (de la HU)</label>
+            <select value={cycleId} onChange={(e) => setCycleId(e.target.value)} disabled={!storyId} className={inp}>
               <option value="">Seleccionar...</option>
               {cycles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>

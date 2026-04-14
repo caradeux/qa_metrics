@@ -11,6 +11,7 @@ const STATUSES = [
   { value: "REGISTERED", label: "Inicio", short: "INI", color: "#6b7280" },
   { value: "ANALYSIS", label: "En Analisis", short: "ANA", color: "#8b5cf6" },
   { value: "TEST_DESIGN", label: "Diseno de Casos", short: "DIS", color: "#2E5FA3" },
+  { value: "WAITING_QA_DEPLOY", label: "Esperando Ambientación QA", short: "AMB", color: "#ea580c" },
   { value: "EXECUTION", label: "En Ejecucion", short: "EJE", color: "#0891b2" },
   { value: "RETURNED_TO_DEV", label: "Devuelto a Dev", short: "DEV", color: "#ef4444" },
   { value: "WAITING_UAT", label: "Espera UAT", short: "ESP", color: "#f59e0b" },
@@ -20,8 +21,8 @@ const STATUSES = [
 
 const statusMap = Object.fromEntries(STATUSES.map((s) => [s.value, s]));
 
-interface Project { id: string; name: string }
-interface Cycle { id: string; name: string }
+interface Client { id: string; name: string }
+interface Project { id: string; name: string; client?: { id: string; name: string } }
 interface StatusLog { id: string; status: string; changedAt: string }
 
 function isoDate(d: Date) {
@@ -35,11 +36,11 @@ function defaultRange() {
 
 export default function GanttPage() {
   const [assignments, setAssignments] = useState<GanttAssignment[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [cycles, setCycles] = useState<Cycle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterClient, setFilterClient] = useState("");
   const [filterProject, setFilterProject] = useState("");
-  const [filterCycle, setFilterCycle] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const { from: defFrom, to: defTo } = useMemo(() => defaultRange(), []);
   const [dateFrom, setDateFrom] = useState<string>(isoDate(defFrom));
@@ -59,33 +60,43 @@ export default function GanttPage() {
   const holidays2 = useHolidays(years[years.length - 1]);
   const holidays = useMemo(() => ({ ...holidays1, ...holidays2 }), [holidays1, holidays2]);
 
+  const visibleProjects = useMemo(
+    () => filterClient ? projects.filter(p => p.client?.id === filterClient) : projects,
+    [filterClient, projects]
+  );
+
   const fetchAssignments = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (filterProject) params.set("projectId", filterProject);
-    if (filterCycle) params.set("cycleId", filterCycle);
     if (filterStatus) params.set("status", filterStatus);
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
     try {
-      const data = await apiClient<GanttAssignment[]>(`/api/assignments?${params.toString()}`);
+      let data = await apiClient<GanttAssignment[]>(`/api/assignments?${params.toString()}`);
+      if (filterClient && !filterProject) {
+        const projectIds = new Set(visibleProjects.map(p => p.id));
+        data = data.filter(a => projectIds.has(a.tester.project.id));
+      }
       setAssignments(data);
     } catch {
       setAssignments([]);
     }
     setLoading(false);
-  }, [filterProject, filterCycle, filterStatus, dateFrom, dateTo]);
+  }, [filterClient, filterProject, filterStatus, dateFrom, dateTo, visibleProjects]);
 
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
 
   useEffect(() => {
+    apiClient<Client[]>("/api/clients").then(setClients).catch(() => setClients([]));
     apiClient<Project[]>("/api/projects").then(setProjects).catch(() => setProjects([]));
   }, []);
 
   useEffect(() => {
-    if (!filterProject) { setCycles([]); setFilterCycle(""); return; }
-    apiClient<Cycle[]>(`/api/cycles?projectId=${filterProject}`).then(setCycles).catch(() => setCycles([]));
-  }, [filterProject]);
+    if (filterProject && !visibleProjects.some(p => p.id === filterProject)) {
+      setFilterProject("");
+    }
+  }, [filterProject, visibleProjects]);
 
   const openDetail = async (a: GanttAssignment) => {
     setSelected(a);
@@ -116,26 +127,25 @@ export default function GanttPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
           <div>
+            <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Cliente</label>
+            <select
+              value={filterClient}
+              onChange={(e) => setFilterClient(e.target.value)}
+              className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:border-[#4A90D9] outline-none min-w-[180px]"
+            >
+              <option value="">Todos</option>
+              {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
             <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Proyecto</label>
             <select
               value={filterProject}
               onChange={(e) => setFilterProject(e.target.value)}
               className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:border-[#4A90D9] outline-none min-w-[180px]"
             >
-              <option value="">Todos</option>
-              {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Ciclo</label>
-            <select
-              value={filterCycle}
-              onChange={(e) => setFilterCycle(e.target.value)}
-              disabled={!filterProject}
-              className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:border-[#4A90D9] outline-none min-w-[160px] disabled:bg-gray-50 disabled:text-gray-400"
-            >
-              <option value="">Todos</option>
-              {cycles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              <option value="">{filterClient ? "Todos del cliente" : "Todos"}</option>
+              {visibleProjects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div>

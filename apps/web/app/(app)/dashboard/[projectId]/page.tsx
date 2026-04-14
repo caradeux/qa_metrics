@@ -17,9 +17,9 @@ interface Project {
   id: string;
   name: string;
   client: { name: string };
-  cycles: Array<{ id: string; name: string }>;
-  testers: Array<{ id: string; name: string }>;
 }
+interface Cycle { id: string; name: string }
+interface Tester { id: string; name: string }
 
 interface Filters {
   cycleId: string;
@@ -46,6 +46,8 @@ interface MetricsData {
 export default function ProjectDashboard({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
   const [project, setProject] = useState<Project | null>(null);
+  const [cycles, setCycles] = useState<Cycle[]>([]);
+  const [testers, setTesters] = useState<Tester[]>([]);
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCycleComparison, setShowCycleComparison] = useState(false);
@@ -58,6 +60,12 @@ export default function ProjectDashboard({ params }: { params: Promise<{ project
     apiClient<Project>(`/api/projects/${projectId}`)
       .then(setProject)
       .catch((err) => console.error(err));
+    apiClient<Cycle[]>(`/api/cycles?projectId=${projectId}`)
+      .then(setCycles)
+      .catch(() => setCycles([]));
+    apiClient<Tester[]>(`/api/testers?projectId=${projectId}`)
+      .then(setTesters)
+      .catch(() => setTesters([]));
   }, [projectId]);
 
   const fetchMetrics = useCallback(async () => {
@@ -189,8 +197,8 @@ export default function ProjectDashboard({ params }: { params: Promise<{ project
         >
           <div className="px-4 pb-4">
             <DashboardFilters
-              cycles={project.cycles}
-              testers={project.testers}
+              cycles={cycles}
+              testers={testers}
               filters={filters}
               onFilterChange={setFilters}
             />

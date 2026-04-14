@@ -19,6 +19,7 @@ const STATUSES = [
   { value: "REGISTERED", label: "Inicio", short: "INI", color: "#6b7280", bg: "bg-gray-100 text-gray-700 border-gray-200", dot: "bg-gray-400", step: 1 },
   { value: "ANALYSIS", label: "En Analisis", short: "ANA", color: "#8b5cf6", bg: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500", step: 2 },
   { value: "TEST_DESIGN", label: "Diseno de Casos", short: "DIS", color: "#2E5FA3", bg: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-500", step: 3 },
+  { value: "WAITING_QA_DEPLOY", label: "Esperando Ambientación QA", short: "AMB", color: "#ea580c", bg: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500", step: 4 },
   { value: "EXECUTION", label: "En Ejecucion", short: "EJE", color: "#0891b2", bg: "bg-cyan-50 text-cyan-700 border-cyan-200", dot: "bg-cyan-500", step: 4 },
   { value: "RETURNED_TO_DEV", label: "Devuelto a Dev", short: "DEV", color: "#ef4444", bg: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500", step: 4 },
   { value: "WAITING_UAT", label: "Espera UAT", short: "ESP", color: "#f59e0b", bg: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500", step: 5 },

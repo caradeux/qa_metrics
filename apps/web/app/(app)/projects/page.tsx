@@ -14,7 +14,8 @@ interface Project {
   createdAt: string;
   client: { id: string; name: string };
   testers?: Array<{ id: string; name: string; allocation: number }>;
-  _count?: { cycles: number; testers: number; stories: number };
+  stories?: Array<{ _count?: { cycles: number } }>;
+  _count?: { testers: number; stories: number };
 }
 
 interface ClientGroup {
@@ -30,33 +31,26 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [quick, setQuick] = useState<{ project: Project; kind: "testers" | "cycles"; items: QuickListItem[] | null } | null>(null);
+  const [quick, setQuick] = useState<{ project: Project; kind: "testers"; items: QuickListItem[] | null } | null>(null);
   const [analysts, setAnalysts] = useState<AnalystOpt[]>([]);
   const [draft, setDraft] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const { can } = usePermissions();
 
-  async function loadQuickItems(project: Project, kind: "testers" | "cycles") {
-    if (kind === "testers") {
-      const rows = await apiClient<any[]>(`/api/testers?projectId=${project.id}`);
-      return rows.map(t => ({ id: t.id, name: t.name, extra: `${t.allocation ?? 100}%` }));
-    } else {
-      const rows = await apiClient<any[]>(`/api/cycles?projectId=${project.id}`);
-      return rows.map(c => ({ id: c.id, name: c.name, extra: c.startDate ? new Date(c.startDate).toLocaleDateString("es") : undefined }));
-    }
+  async function loadQuickItems(project: Project) {
+    const rows = await apiClient<any[]>(`/api/testers?projectId=${project.id}`);
+    return rows.map(t => ({ id: t.id, name: t.name, extra: `${t.allocation ?? 100}%` }));
   }
 
-  async function openQuick(project: Project, kind: "testers" | "cycles") {
-    setQuick({ project, kind, items: null });
+  async function openQuick(project: Project) {
+    setQuick({ project, kind: "testers", items: null });
     setFormError(null);
-    setDraft(kind === "testers" ? { userId: "", name: "", allocation: 100 } : { name: "", startDate: "", endDate: "" });
+    setDraft({ userId: "", name: "", allocation: 100 });
     try {
-      const items = await loadQuickItems(project, kind);
-      setQuick({ project, kind, items });
-      if (kind === "testers") {
-        apiClient<AnalystOpt[]>(`/api/users?role=QA_ANALYST&minCapacity=50`).then(setAnalysts).catch(() => setAnalysts([]));
-      }
+      const items = await loadQuickItems(project);
+      setQuick({ project, kind: "testers", items });
+      apiClient<AnalystOpt[]>(`/api/users?role=QA_ANALYST&minCapacity=50`).then(setAnalysts).catch(() => setAnalysts([]));
     } catch {
       setQuick(q => q ? { ...q, items: [] } : null);
     }
@@ -66,33 +60,19 @@ export default function ProjectsPage() {
     if (!quick) return;
     setSaving(true); setFormError(null);
     try {
-      if (quick.kind === "testers") {
-        if (!draft.name?.trim()) { setFormError("Nombre requerido"); setSaving(false); return; }
-        await apiClient("/api/testers", {
-          method: "POST",
-          body: JSON.stringify({
-            projectId: quick.project.id,
-            name: draft.name.trim(),
-            userId: draft.userId || null,
-            allocation: draft.allocation,
-          }),
-        });
-      } else {
-        if (!draft.name?.trim()) { setFormError("Nombre requerido"); setSaving(false); return; }
-        await apiClient("/api/cycles", {
-          method: "POST",
-          body: JSON.stringify({
-            projectId: quick.project.id,
-            name: draft.name.trim(),
-            startDate: draft.startDate || null,
-            endDate: draft.endDate || null,
-          }),
-        });
-      }
-      // refrescar lista interna + contadores del proyecto
-      const items = await loadQuickItems(quick.project, quick.kind);
+      if (!draft.name?.trim()) { setFormError("Nombre requerido"); setSaving(false); return; }
+      await apiClient("/api/testers", {
+        method: "POST",
+        body: JSON.stringify({
+          projectId: quick.project.id,
+          name: draft.name.trim(),
+          userId: draft.userId || null,
+          allocation: draft.allocation,
+        }),
+      });
+      const items = await loadQuickItems(quick.project);
       setQuick({ ...quick, items });
-      setDraft(quick.kind === "testers" ? { userId: "", name: "", allocation: 100 } : { name: "", startDate: "", endDate: "" });
+      setDraft({ userId: "", name: "", allocation: 100 });
       fetchProjects();
     } catch (err: any) {
       setFormError(err?.message ?? "Error al guardar");
@@ -179,7 +159,7 @@ export default function ProjectsPage() {
                   <tr className="text-left text-sm text-muted border-b border-border">
                     <th className="px-4 py-2 font-medium">Proyecto</th>
                     <th className="px-4 py-2 font-medium text-center">HUs</th>
-                    <th className="px-4 py-2 font-medium text-center">Ciclos</th>
+                    <th className="px-4 py-2 font-medium text-center">Ciclos (acum.)</th>
                     <th className="px-4 py-2 font-medium text-center">Testers</th>
                     <th className="px-4 py-2 font-medium">Fecha</th>
                     <th className="px-4 py-2 font-medium text-right">Acciones</th>
@@ -201,14 +181,19 @@ export default function ProjectsPage() {
                         </Link>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button type="button" onClick={() => openQuick(project, "cycles")} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${project._count?.cycles ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100" : "bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200"}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${project._count?.cycles ? "bg-emerald-500" : "bg-gray-400"}`} />
-                          {project._count?.cycles || "Sin ciclos"}
-                        </button>
+                        {(() => {
+                          const total = (project.stories ?? []).reduce((sum, s) => sum + (s._count?.cycles ?? 0), 0);
+                          return (
+                            <Link href={`/projects/${project.id}/stories`} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${total ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100" : "bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200"}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${total ? "bg-emerald-500" : "bg-gray-400"}`} />
+                              {total || "Sin ciclos"}
+                            </Link>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         {project.testers && project.testers.length > 0 ? (
-                          <button type="button" onClick={() => openQuick(project, "testers")} className="flex flex-wrap gap-1 max-w-[320px] text-left group">
+                          <button type="button" onClick={() => openQuick(project)} className="flex flex-wrap gap-1 max-w-[320px] text-left group">
                             {project.testers.map(t => (
                               <span key={t.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-200 group-hover:bg-blue-100">
                                 {t.name}
@@ -217,7 +202,7 @@ export default function ProjectsPage() {
                             ))}
                           </button>
                         ) : (
-                          <button type="button" onClick={() => openQuick(project, "testers")} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200">
+                          <button type="button" onClick={() => openQuick(project)} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200">
                             <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
                             Sin testers
                           </button>
@@ -271,7 +256,7 @@ export default function ProjectsPage() {
       <Modal
         open={!!quick}
         onClose={() => setQuick(null)}
-        title={quick ? `${quick.kind === "testers" ? "Testers" : "Ciclos"} · ${quick.project.name}` : ""}
+        title={quick ? `Testers · ${quick.project.name}` : ""}
       >
         {quick && (
           <div className="space-y-3">
@@ -285,7 +270,7 @@ export default function ProjectsPage() {
             {quick.items === null ? (
               <p className="text-sm text-gray-500">Cargando…</p>
             ) : quick.items.length === 0 ? (
-              <p className="text-sm text-gray-500">Aún no hay {quick.kind === "testers" ? "testers" : "ciclos"}.</p>
+              <p className="text-sm text-gray-500">Aún no hay testers.</p>
             ) : (
               <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white max-h-40 overflow-auto">
                 {quick.items.map(it => (
@@ -300,9 +285,9 @@ export default function ProjectsPage() {
             {/* Form inline */}
             <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-                Agregar {quick.kind === "testers" ? "tester" : "ciclo"}
+                Agregar tester
               </p>
-              {quick.kind === "testers" ? (
+              {(
                 <>
                   <select
                     value={draft.userId ?? ""}
@@ -336,32 +321,6 @@ export default function ProjectsPage() {
                         {pct}%
                       </button>
                     ))}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <input
-                    type="text"
-                    value={draft.name ?? ""}
-                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                    placeholder="Nombre del ciclo (ej. Ciclo 1)"
-                    className="w-full rounded border border-gray-300 p-1.5 text-sm"
-                  />
-                  <div className="flex gap-2">
-                    <input
-                      type="date"
-                      value={draft.startDate ?? ""}
-                      onChange={(e) => setDraft({ ...draft, startDate: e.target.value })}
-                      className="flex-1 rounded border border-gray-300 p-1.5 text-sm"
-                      placeholder="Inicio"
-                    />
-                    <input
-                      type="date"
-                      value={draft.endDate ?? ""}
-                      onChange={(e) => setDraft({ ...draft, endDate: e.target.value })}
-                      className="flex-1 rounded border border-gray-300 p-1.5 text-sm"
-                      placeholder="Fin"
-                    />
                   </div>
                 </>
               )}

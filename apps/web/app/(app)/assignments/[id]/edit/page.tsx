@@ -15,6 +15,7 @@ const STATUSES = [
   { value: "REGISTERED", label: "Inicio" },
   { value: "ANALYSIS", label: "En Analisis" },
   { value: "TEST_DESIGN", label: "Diseno de Casos" },
+  { value: "WAITING_QA_DEPLOY", label: "Esperando Ambientación QA" },
   { value: "EXECUTION", label: "En Ejecucion" },
   { value: "RETURNED_TO_DEV", label: "Devuelto a Dev" },
   { value: "WAITING_UAT", label: "Espera UAT" },

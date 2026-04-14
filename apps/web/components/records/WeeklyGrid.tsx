@@ -17,12 +17,11 @@ interface DayRow {
 
 interface Props {
   testerId: string;
-  cycleId: string;
   weekStart: Date;
   onSaved?: () => void;
 }
 
-export function WeeklyGrid({ testerId, cycleId, weekStart, onSaved }: Props) {
+export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
   const monday = startOfWeek(weekStart, { weekStartsOn: 1 });
   const mondayStr = format(monday, "yyyy-MM-dd");
   const [days, setDays] = useState<DayRow[]>([]);
@@ -70,7 +69,7 @@ export function WeeklyGrid({ testerId, cycleId, weekStart, onSaved }: Props) {
         }));
       await apiClient("/api/daily-records/bulk", {
         method: "POST",
-        body: JSON.stringify({ testerId, cycleId, days: payload }),
+        body: JSON.stringify({ testerId, days: payload }),
       });
       setDirty(false);
       setLastSaved(new Date());

@@ -7,8 +7,6 @@ interface ValidRow {
   row: number;
   testerId: string;
   testerEmail: string;
-  cycleId: string;
-  cycleName: string;
   date: string;
   designed: number;
   executed: number;
@@ -116,7 +114,6 @@ export default function ImportPage() {
         Columnas requeridas:{" "}
         <code className="bg-gray-100 px-1 rounded">tester_email</code>,{" "}
         <code className="bg-gray-100 px-1 rounded">date (YYYY-MM-DD)</code>,{" "}
-        <code className="bg-gray-100 px-1 rounded">cycle_name</code>,{" "}
         <code className="bg-gray-100 px-1 rounded">designed</code>,{" "}
         <code className="bg-gray-100 px-1 rounded">executed</code>,{" "}
         <code className="bg-gray-100 px-1 rounded">defects</code>. No se
@@ -226,7 +223,6 @@ export default function ImportPage() {
                   <th className="px-3 py-2 text-left">Fila</th>
                   <th className="px-3 py-2 text-left">Tester</th>
                   <th className="px-3 py-2 text-left">Fecha</th>
-                  <th className="px-3 py-2 text-left">Ciclo</th>
                   <th className="px-3 py-2 text-center">Dis.</th>
                   <th className="px-3 py-2 text-center">Ejec.</th>
                   <th className="px-3 py-2 text-center">Def.</th>
@@ -238,7 +234,6 @@ export default function ImportPage() {
                     <td className="px-3 py-2 font-medium">{r.row}</td>
                     <td className="px-3 py-2">{r.testerEmail}</td>
                     <td className="px-3 py-2">{r.date}</td>
-                    <td className="px-3 py-2">{r.cycleName}</td>
                     <td className="px-3 py-2 text-center">{r.designed}</td>
                     <td className="px-3 py-2 text-center">{r.executed}</td>
                     <td className="px-3 py-2 text-center">{r.defects}</td>
