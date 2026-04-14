@@ -74,7 +74,6 @@ model Project {
   projectManagerId String?
   projectManager   User?    @relation("ProjectManagerOfProject", fields: [projectManagerId], references: [id])
   createdAt  DateTime    @default(now())
-  cycles     TestCycle[]
   testers    Tester[]
   stories    UserStory[]
 
@@ -131,15 +130,13 @@ model AssignmentStatusLog {
 model TestCycle {
   id        String         @id @default(cuid())
   name      String
-  projectId String
-  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  storyId   String
+  story     UserStory      @relation(fields: [storyId], references: [id], onDelete: Cascade)
   startDate DateTime?
   endDate   DateTime?
-  records   DailyRecord[]
-  breakdown CycleBreakdown?
   assignments TesterAssignment[]
 
-  @@index([projectId])
+  @@index([storyId])
 }
 
 model UserStory {
@@ -151,6 +148,7 @@ model UserStory {
   projectId           String
   project             Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   assignments         TesterAssignment[]
+  cycles              TestCycle[]
 
   @@index([projectId])
 }
@@ -159,8 +157,6 @@ model DailyRecord {
   id        String    @id @default(cuid())
   testerId  String
   tester    Tester    @relation(fields: [testerId], references: [id], onDelete: Cascade)
-  cycleId   String
-  cycle     TestCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   date      DateTime  @db.Date
   designed  Int       @default(0)
   executed  Int       @default(0)
@@ -170,27 +166,7 @@ model DailyRecord {
   updatedAt DateTime  @updatedAt
 
   @@unique([testerId, date])
-  @@index([cycleId])
   @@index([date])
-}
-
-model CycleBreakdown {
-  id                  String    @id @default(cuid())
-  cycleId             String    @unique
-  cycle               TestCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
-  designedFunctional  Int       @default(0)
-  designedRegression  Int       @default(0)
-  designedSmoke       Int       @default(0)
-  designedExploratory Int       @default(0)
-  executedFunctional  Int       @default(0)
-  executedRegression  Int       @default(0)
-  executedSmoke       Int       @default(0)
-  executedExploratory Int       @default(0)
-  defectsCritical     Int       @default(0)
-  defectsHigh         Int       @default(0)
-  defectsMedium       Int       @default(0)
-  defectsLow          Int       @default(0)
-  updatedAt           DateTime  @updatedAt
 }
 
 model Holiday {
@@ -213,6 +189,7 @@ enum AssignmentStatus {
   REGISTERED
   ANALYSIS
   TEST_DESIGN
+  WAITING_QA_DEPLOY
   EXECUTION
   RETURNED_TO_DEV
   WAITING_UAT
