@@ -23,15 +23,25 @@ router.get("/me", async (req: AuthRequest, res: Response) => {
 // GET /:id — fetch one tester (minimal, for week views)
 router.get("/:id", async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
-  const t = await prisma.tester.findUnique({
+  const tester = await prisma.tester.findUnique({
     where: { id },
-    select: { id: true, projectId: true, name: true },
+    select: { id: true, projectId: true, name: true, userId: true },
   });
-  if (!t) {
+  if (!tester) {
     res.status(404).json({ error: "Tester no encontrado" });
     return;
   }
-  res.json(t);
+  const roleName = req.user?.role?.name;
+  if (
+    roleName !== "ADMIN" &&
+    roleName !== "QA_LEAD" &&
+    tester.userId !== req.user!.id
+  ) {
+    res.status(403).json({ error: "forbidden" });
+    return;
+  }
+  const { userId: _userId, ...safe } = tester;
+  res.json(safe);
 });
 
 // GET / — list testers, required ?projectId filter
