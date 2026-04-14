@@ -11,6 +11,12 @@ const STATUS_VALUES = [
   "PRODUCTION",
 ] as const;
 
+const phaseSchema = z.object({
+  phase: z.enum(["ANALYSIS", "TEST_DESIGN", "EXECUTION"]),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
 export const createAssignmentSchema = z.object({
   testerId: z.string().min(1),
   storyId: z.string().min(1),
@@ -19,6 +25,7 @@ export const createAssignmentSchema = z.object({
   endDate: z.string().nullable().optional(),
   status: z.enum(STATUS_VALUES).optional(),
   notes: z.string().nullable().optional(),
+  phases: z.array(phaseSchema).max(3).optional(),
 });
 
 export const updateAssignmentSchema = z.object({

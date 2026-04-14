@@ -9,6 +9,7 @@ import {
   createAssignmentSchema,
   updateAssignmentSchema,
 } from "../validators/assignment.validator.js";
+import { updatePhasesSchema } from "../validators/assignment-phase.validator.js";
 import { ZodError } from "zod";
 import { isClientPm, clientPmProjectIds } from "../lib/access.js";
 import { isWorkday } from "../lib/workdays.js";
@@ -81,6 +82,10 @@ router.get(
               executionComplexity: true,
             },
           },
+          phases: {
+            select: { id: true, phase: true, startDate: true, endDate: true },
+            orderBy: { startDate: "asc" },
+          },
         },
         orderBy: { startDate: "desc" },
       });
@@ -101,15 +106,50 @@ router.post(
       const data = createAssignmentSchema.parse(req.body);
       const initialStatus = data.status ?? "REGISTERED";
 
-      const startDate = data.startDate ? new Date(data.startDate) : new Date();
-      const endDate = data.endDate ? new Date(data.endDate) : null;
-      if (!(await isWorkday(startDate))) {
-        res.status(400).json({ error: "La fecha de inicio debe ser un día hábil (L-V, no feriado)" });
-        return;
-      }
-      if (endDate && !(await isWorkday(endDate))) {
-        res.status(400).json({ error: "La fecha de fin debe ser un día hábil (L-V, no feriado)" });
-        return;
+      let startDate = data.startDate ? new Date(data.startDate) : new Date();
+      let endDate: Date | null = data.endDate ? new Date(data.endDate) : null;
+
+      const phases = data.phases ?? [];
+      if (phases.length > 0) {
+        // Validate each phase
+        for (const p of phases) {
+          const ps = new Date(p.startDate);
+          const pe = new Date(p.endDate);
+          if (ps > pe) {
+            res.status(400).json({ error: `Fase ${p.phase}: la fecha de inicio debe ser <= fecha de fin` });
+            return;
+          }
+          if (!(await isWorkday(ps))) {
+            res.status(400).json({ error: `Fase ${p.phase}: la fecha de inicio debe ser un día hábil (L-V, no feriado)` });
+            return;
+          }
+          if (!(await isWorkday(pe))) {
+            res.status(400).json({ error: `Fase ${p.phase}: la fecha de fin debe ser un día hábil (L-V, no feriado)` });
+            return;
+          }
+        }
+        // Overlap check
+        const sorted = [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate));
+        for (let i = 1; i < sorted.length; i++) {
+          if (sorted[i].startDate <= sorted[i - 1].endDate) {
+            res.status(400).json({ error: "Las fases no pueden solaparse" });
+            return;
+          }
+        }
+        // Derive assignment start/end from phases
+        const minStart = sorted[0].startDate;
+        const maxEnd = sorted.reduce((acc, p) => (p.endDate > acc ? p.endDate : acc), sorted[0].endDate);
+        startDate = new Date(minStart);
+        endDate = new Date(maxEnd);
+      } else {
+        if (!(await isWorkday(startDate))) {
+          res.status(400).json({ error: "La fecha de inicio debe ser un día hábil (L-V, no feriado)" });
+          return;
+        }
+        if (endDate && !(await isWorkday(endDate))) {
+          res.status(400).json({ error: "La fecha de fin debe ser un día hábil (L-V, no feriado)" });
+          return;
+        }
       }
 
       const assignment = await prisma.testerAssignment.create({
@@ -124,11 +164,24 @@ router.post(
           statusLogs: {
             create: { status: initialStatus },
           },
+          ...(phases.length > 0 && {
+            phases: {
+              create: phases.map((p) => ({
+                phase: p.phase,
+                startDate: new Date(p.startDate),
+                endDate: new Date(p.endDate),
+              })),
+            },
+          }),
         },
         include: {
           tester: { select: { name: true } },
           story: { select: { title: true } },
           cycle: { select: { id: true, name: true } },
+          phases: {
+            select: { id: true, phase: true, startDate: true, endDate: true },
+            orderBy: { startDate: "asc" },
+          },
         },
       });
 
@@ -245,6 +298,129 @@ router.delete(
       res.json({ message: "Asignacion eliminada" });
     } catch (err) {
       res.status(500).json({ error: "Error al eliminar la asignacion" });
+    }
+  }
+);
+
+// GET /:id — single assignment with phases
+router.get(
+  "/:id",
+  requirePermission("assignments", "read") as any,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const assignment = await prisma.testerAssignment.findUnique({
+        where: { id },
+        include: {
+          tester: {
+            select: {
+              id: true,
+              name: true,
+              project: { select: { id: true, name: true, client: { select: { name: true } } } },
+            },
+          },
+          cycle: { select: { id: true, name: true } },
+          story: {
+            select: {
+              id: true,
+              title: true,
+              externalId: true,
+              designComplexity: true,
+              executionComplexity: true,
+            },
+          },
+          phases: {
+            select: { id: true, phase: true, startDate: true, endDate: true },
+            orderBy: { startDate: "asc" },
+          },
+        },
+      });
+      if (!assignment) {
+        res.status(404).json({ error: "Asignacion no encontrada" });
+        return;
+      }
+      res.json(assignment);
+    } catch {
+      res.status(500).json({ error: "Error al obtener la asignacion" });
+    }
+  }
+);
+
+// PUT /:id/phases — replace phases
+router.put(
+  "/:id/phases",
+  requirePermission("assignments", "update") as any,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const { phases } = updatePhasesSchema.parse(req.body);
+
+      const existing = await prisma.testerAssignment.findUnique({ where: { id } });
+      if (!existing) {
+        res.status(404).json({ error: "Asignacion no encontrada" });
+        return;
+      }
+
+      for (const p of phases) {
+        const ps = new Date(p.startDate);
+        const pe = new Date(p.endDate);
+        if (ps > pe) {
+          res.status(400).json({ error: `Fase ${p.phase}: la fecha de inicio debe ser <= fecha de fin` });
+          return;
+        }
+        if (!(await isWorkday(ps))) {
+          res.status(400).json({ error: `Fase ${p.phase}: la fecha de inicio debe ser un día hábil (L-V, no feriado)` });
+          return;
+        }
+        if (!(await isWorkday(pe))) {
+          res.status(400).json({ error: `Fase ${p.phase}: la fecha de fin debe ser un día hábil (L-V, no feriado)` });
+          return;
+        }
+      }
+      const sorted = [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate));
+      for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i].startDate <= sorted[i - 1].endDate) {
+          res.status(400).json({ error: "Las fases no pueden solaparse" });
+          return;
+        }
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        await tx.assignmentPhase.deleteMany({ where: { assignmentId: id } });
+        if (phases.length > 0) {
+          await tx.assignmentPhase.createMany({
+            data: phases.map((p) => ({
+              assignmentId: id,
+              phase: p.phase,
+              startDate: new Date(p.startDate),
+              endDate: new Date(p.endDate),
+            })),
+          });
+          const minStart = sorted[0].startDate;
+          const maxEnd = sorted.reduce((acc, p) => (p.endDate > acc ? p.endDate : acc), sorted[0].endDate);
+          await tx.testerAssignment.update({
+            where: { id },
+            data: { startDate: new Date(minStart), endDate: new Date(maxEnd) },
+          });
+        }
+        return tx.testerAssignment.findUnique({
+          where: { id },
+          include: {
+            phases: {
+              select: { id: true, phase: true, startDate: true, endDate: true },
+              orderBy: { startDate: "asc" },
+            },
+          },
+        });
+      });
+
+      res.json(updated);
+    } catch (err) {
+      if (err instanceof ZodError) {
+        res.status(400).json({ error: "Datos invalidos", details: err.errors });
+        return;
+      }
+      res.status(500).json({ error: "Error al actualizar las fases" });
     }
   }
 );

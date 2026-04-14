@@ -60,6 +60,7 @@ async function enrichStory(story: any) {
         endDate: a.endDate,
         notes: a.notes,
         daysInStatus: d,
+        phases: a.phases || [],
       };
     }),
   }));
@@ -108,6 +109,10 @@ const storyInclude = {
         include: {
           tester: { select: { id: true, name: true } },
           statusLogs: { orderBy: { changedAt: "desc" as const }, take: 1 },
+          phases: {
+            select: { id: true, phase: true, startDate: true, endDate: true },
+            orderBy: { startDate: "asc" as const },
+          },
         },
       },
     },
