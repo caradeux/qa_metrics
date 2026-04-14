@@ -112,6 +112,7 @@ model TesterAssignment {
   updatedAt      DateTime         @updatedAt
   statusLogs     AssignmentStatusLog[]
   dailyRecords   DailyRecord[]
+  phases         AssignmentPhase[]
 
   @@unique([testerId, storyId, cycleId])
   @@index([testerId])
@@ -191,6 +192,24 @@ enum Complexity {
   LOW
 }
 
+enum AssignmentPhaseType {
+  ANALYSIS
+  TEST_DESIGN
+  EXECUTION
+}
+
+model AssignmentPhase {
+  id           String               @id @default(cuid())
+  assignmentId String
+  assignment   TesterAssignment     @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  phase        AssignmentPhaseType
+  startDate    DateTime             @db.Date
+  endDate      DateTime             @db.Date
+
+  @@unique([assignmentId, phase])
+  @@index([assignmentId])
+}
+
 enum AssignmentStatus {
   REGISTERED
   ANALYSIS
@@ -201,4 +220,5 @@ enum AssignmentStatus {
   WAITING_UAT
   UAT
   PRODUCTION
+  ON_HOLD
 }
