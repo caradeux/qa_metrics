@@ -22,8 +22,9 @@ router.get("/me", async (req: AuthRequest, res: Response) => {
 
 // GET /:id — fetch one tester (minimal, for week views)
 router.get("/:id", async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
   const t = await prisma.tester.findUnique({
-    where: { id: req.params.id },
+    where: { id },
     select: { id: true, projectId: true, name: true },
   });
   if (!t) {
