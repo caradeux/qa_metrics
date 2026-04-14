@@ -51,12 +51,14 @@ router.get(
               },
             },
           },
+          cycle: { select: { id: true, name: true } },
           story: {
             select: {
               id: true,
               title: true,
-              complexity: true,
-              cycle: { select: { name: true } },
+              externalId: true,
+              designComplexity: true,
+              executionComplexity: true,
             },
           },
         },
@@ -77,19 +79,25 @@ router.post(
   async (req: AuthRequest, res: Response) => {
     try {
       const data = createAssignmentSchema.parse(req.body);
+      const initialStatus = data.status ?? "REGISTERED";
 
       const assignment = await prisma.testerAssignment.create({
         data: {
           testerId: data.testerId,
           storyId: data.storyId,
-          startDate: new Date(data.startDate),
+          cycleId: data.cycleId,
+          startDate: data.startDate ? new Date(data.startDate) : new Date(),
           endDate: data.endDate ? new Date(data.endDate) : null,
-          executionCycle: data.executionCycle || null,
+          status: initialStatus,
           notes: data.notes || null,
+          statusLogs: {
+            create: { status: initialStatus },
+          },
         },
         include: {
           tester: { select: { name: true } },
           story: { select: { title: true } },
+          cycle: { select: { id: true, name: true } },
         },
       });
 
@@ -105,7 +113,7 @@ router.post(
         "code" in err &&
         (err as { code: string }).code === "P2002"
       ) {
-        res.status(409).json({ error: "Este tester ya esta asignado a esta HU" });
+        res.status(409).json({ error: "Este tester ya esta asignado a esta HU en este ciclo" });
         return;
       }
       res.status(500).json({ error: "Error al crear la asignacion" });
@@ -122,24 +130,37 @@ router.put(
       const id = req.params.id as string;
       const body = updateAssignmentSchema.parse(req.body);
 
+      const existing = await prisma.testerAssignment.findUnique({ where: { id } });
+      if (!existing) {
+        res.status(404).json({ error: "Asignacion no encontrada" });
+        return;
+      }
+
       const data: Record<string, unknown> = {};
-      if (body.status) {
+      let statusChanged = false;
+      if (body.status && body.status !== existing.status) {
         data.status = body.status;
-        // Auto-set endDate when status is PRODUCTION
+        statusChanged = true;
         if (body.status === "PRODUCTION" && !body.endDate) {
           data.endDate = new Date();
         }
       }
+      if (body.startDate !== undefined)
+        data.startDate = new Date(body.startDate);
       if (body.endDate !== undefined)
         data.endDate = body.endDate ? new Date(body.endDate) : null;
-      if (body.executionCycle !== undefined)
-        data.executionCycle = body.executionCycle || null;
       if (body.notes !== undefined) data.notes = body.notes;
 
       const updated = await prisma.testerAssignment.update({
         where: { id },
         data,
       });
+
+      if (statusChanged) {
+        await prisma.assignmentStatusLog.create({
+          data: { assignmentId: id, status: body.status! },
+        });
+      }
 
       res.json(updated);
     } catch (err) {
@@ -148,6 +169,24 @@ router.put(
         return;
       }
       res.status(500).json({ error: "Error al actualizar la asignacion" });
+    }
+  }
+);
+
+// GET /:id/history — status log history
+router.get(
+  "/:id/history",
+  requirePermission("assignments", "read") as any,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const logs = await prisma.assignmentStatusLog.findMany({
+        where: { assignmentId: id },
+        orderBy: { changedAt: "asc" },
+      });
+      res.json(logs);
+    } catch {
+      res.status(500).json({ error: "Error al obtener historial" });
     }
   }
 );

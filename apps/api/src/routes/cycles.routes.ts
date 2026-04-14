@@ -30,7 +30,7 @@ router.get("/", requirePermission("cycles", "read") as any, async (req: AuthRequ
     const cycles = await prisma.testCycle.findMany({
       where: { projectId },
       include: {
-        _count: { select: { records: true, stories: true } },
+        _count: { select: { records: true, assignments: true } },
       },
       orderBy: { name: "asc" },
     });

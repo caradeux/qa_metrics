@@ -212,22 +212,23 @@ router.get(
         low: summed.defectsLow,
       };
 
-      // Complexity distribution from UserStories
-      const storyWhere: Record<string, unknown> = {
-        cycle: { projectId: projectIdStr },
-      };
-      if (cycleId) storyWhere.cycleId = cycleId;
+      // Complexity distribution from UserStories (by executionComplexity, at project level)
+      const storyWhere: Record<string, unknown> = { projectId: projectIdStr };
+      if (cycleId) {
+        // Filter stories that have at least one assignment in that cycle
+        storyWhere.assignments = { some: { cycleId } };
+      }
 
       const stories = await prisma.userStory.groupBy({
-        by: ["complexity"],
+        by: ["executionComplexity"],
         where: storyWhere,
         _count: true,
       });
 
       const complexityDistribution = {
-        high: stories.find((s) => s.complexity === "HIGH")?._count ?? 0,
-        medium: stories.find((s) => s.complexity === "MEDIUM")?._count ?? 0,
-        low: stories.find((s) => s.complexity === "LOW")?._count ?? 0,
+        high: stories.find((s) => s.executionComplexity === "HIGH")?._count ?? 0,
+        medium: stories.find((s) => s.executionComplexity === "MEDIUM")?._count ?? 0,
+        low: stories.find((s) => s.executionComplexity === "LOW")?._count ?? 0,
       };
 
       // Cycle comparison — KPIs por ciclo (todos los del proyecto)
