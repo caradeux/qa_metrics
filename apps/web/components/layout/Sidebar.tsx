@@ -95,16 +95,21 @@ export function Sidebar() {
   const { user } = useAuth();
   const roleName = user?.role?.name;
   const isAnalyst = roleName === "QA_ANALYST";
+  const isClientPm = roleName === "CLIENT_PM";
 
-  const visibleItems = navItems.filter(item => {
-    // QA_ANALYST: solo "Mi semana"
-    if (isAnalyst) return item.href === "/mi-semana";
-    // Líderes no ven "Mi semana" (no aplica a su rol)
-    if (item.href === "/mi-semana") return false;
-    if (item.href === "/users") return can("users", "read");
-    if (item.href === "/assignments") return can("assignments", "read");
-    return true;
-  });
+  const visibleItems = navItems
+    .filter(item => {
+      // QA_ANALYST: solo "Mi semana"
+      if (isAnalyst) return item.href === "/mi-semana";
+      // CLIENT_PM: solo proyectos, dashboard y reportes por cliente
+      if (isClientPm) return ["/projects", "/dashboard", "/reports/client"].includes(item.href);
+      // Líderes no ven "Mi semana" (no aplica a su rol)
+      if (item.href === "/mi-semana") return false;
+      if (item.href === "/users") return can("users", "read");
+      if (item.href === "/assignments") return can("assignments", "read");
+      return true;
+    })
+    .map(item => isClientPm && item.href === "/projects" ? { ...item, label: "Mis Proyectos" } : item);
 
   return (
     <aside
@@ -178,7 +183,7 @@ export function Sidebar() {
       </nav>
 
       {/* Configuracion section */}
-      {!isAnalyst && can("roles", "read") && (
+      {!isAnalyst && !isClientPm && can("roles", "read") && (
         <div className="px-3 pb-3">
           <div
             className="mx-1 mb-2"
