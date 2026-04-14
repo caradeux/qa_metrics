@@ -1,11 +1,3 @@
-export {
-  calculateKPIs,
-  aggregateWeeklyTrend,
-  aggregateCaseTypes,
-  aggregateDefects,
-  aggregateTesterSummary,
-} from "./metrics.js";
-
 export type {
   KPIs,
   WeeklyTrendPoint,
