@@ -61,6 +61,9 @@ async function main() {
   const qaAnalystRole = await prisma.role.create({
     data: { name: "QA_ANALYST", description: "QA Analyst with read and execute access", isSystem: true },
   });
+  const clientPmRole = await prisma.role.create({
+    data: { name: "CLIENT_PM", description: "Jefe de Proyecto del Cliente (solo lectura de proyectos asignados)", isSystem: true },
+  });
 
   // Create permissions
   const resources = ["users", "roles", "clients", "projects", "cycles", "testers", "records", "assignments", "reports"];
@@ -96,6 +99,12 @@ async function main() {
   for (const action of ["create", "update"] as const) {
     await prisma.rolePermission.create({ data: { roleId: qaAnalystRole.id, permissionId: permissions[`records:${action}`].id } });
     await prisma.rolePermission.create({ data: { roleId: qaAnalystRole.id, permissionId: permissions[`assignments:${action}`].id } });
+  }
+
+  // CLIENT_PM permissions (read-only subset)
+  const clientPmResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports"];
+  for (const resource of clientPmResources) {
+    await prisma.rolePermission.create({ data: { roleId: clientPmRole.id, permissionId: permissions[`${resource}:read`].id } });
   }
 
   const hashedPassword = await bcrypt.hash("QaMetrics2024!", 10);

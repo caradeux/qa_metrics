@@ -48,6 +48,7 @@ model User {
   createdAt    DateTime @default(now())
   clients      Client[]
   tester       Tester?
+  managedProjects Project[] @relation("ProjectManagerOfProject")
 }
 
 model Client {
@@ -70,11 +71,14 @@ model Project {
   adoOrgUrl  String?
   adoProject String?
   adoToken   String?
+  projectManagerId String?
+  projectManager   User?    @relation("ProjectManagerOfProject", fields: [projectManagerId], references: [id])
   createdAt  DateTime    @default(now())
   cycles     TestCycle[]
   testers    Tester[]
 
   @@index([clientId])
+  @@index([projectManagerId])
 }
 
 model Tester {
