@@ -3,6 +3,7 @@ import { prisma } from "@qa-metrics/database";
 import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { createCycleSchema, updateCycleSchema } from "../validators/cycle.validator.js";
 import { isClientPm, clientPmProjectIds } from "../lib/access.js";
+import { isWorkday } from "../lib/workdays.js";
 import { ZodError } from "zod";
 
 const router = Router();
@@ -80,12 +81,23 @@ router.post("/", requirePermission("cycles", "create") as any, async (req: AuthR
       return;
     }
 
+    const startDate = data.startDate ? new Date(data.startDate) : null;
+    const endDate = data.endDate ? new Date(data.endDate) : null;
+    if (startDate && !(await isWorkday(startDate))) {
+      res.status(400).json({ error: "La fecha de inicio debe ser un día hábil (L-V, no feriado)" });
+      return;
+    }
+    if (endDate && !(await isWorkday(endDate))) {
+      res.status(400).json({ error: "La fecha de fin debe ser un día hábil (L-V, no feriado)" });
+      return;
+    }
+
     const cycle = await prisma.testCycle.create({
       data: {
         name: data.name,
         storyId: data.storyId,
-        startDate: data.startDate ? new Date(data.startDate) : null,
-        endDate: data.endDate ? new Date(data.endDate) : null,
+        startDate,
+        endDate,
       },
     });
     res.status(201).json(cycle);
@@ -110,6 +122,21 @@ router.put("/:id", requirePermission("cycles", "update") as any, async (req: Aut
     if (!existing) {
       res.status(404).json({ error: "Ciclo no encontrado" });
       return;
+    }
+
+    if (data.startDate) {
+      const sd = new Date(data.startDate);
+      if (!(await isWorkday(sd))) {
+        res.status(400).json({ error: "La fecha de inicio debe ser un día hábil (L-V, no feriado)" });
+        return;
+      }
+    }
+    if (data.endDate) {
+      const ed = new Date(data.endDate);
+      if (!(await isWorkday(ed))) {
+        res.status(400).json({ error: "La fecha de fin debe ser un día hábil (L-V, no feriado)" });
+        return;
+      }
     }
 
     const cycle = await prisma.testCycle.update({

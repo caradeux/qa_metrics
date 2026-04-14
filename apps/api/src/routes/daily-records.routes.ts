@@ -3,6 +3,7 @@ import { z } from "zod";
 import { addDays, startOfDay } from "date-fns";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
+import { ACTIVE_STATUSES } from "../lib/assignment-states.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -105,12 +106,15 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     });
   }
 
-  // Get assignments overlapping the week
+  const includeIdle = req.query.includeIdle === "true";
+
+  // Get assignments overlapping the week. By default only ACTIVE statuses.
   const assignments = await prisma.testerAssignment.findMany({
     where: {
       testerId: parsed.data.testerId,
       startDate: { lte: friday },
       OR: [{ endDate: null }, { endDate: { gte: monday } }],
+      ...(includeIdle ? {} : { status: { in: [...ACTIVE_STATUSES] } }),
     },
     include: {
       story: { select: { id: true, title: true, externalId: true } },

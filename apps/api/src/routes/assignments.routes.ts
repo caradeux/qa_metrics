@@ -11,6 +11,7 @@ import {
 } from "../validators/assignment.validator.js";
 import { ZodError } from "zod";
 import { isClientPm, clientPmProjectIds } from "../lib/access.js";
+import { isWorkday } from "../lib/workdays.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -100,13 +101,24 @@ router.post(
       const data = createAssignmentSchema.parse(req.body);
       const initialStatus = data.status ?? "REGISTERED";
 
+      const startDate = data.startDate ? new Date(data.startDate) : new Date();
+      const endDate = data.endDate ? new Date(data.endDate) : null;
+      if (!(await isWorkday(startDate))) {
+        res.status(400).json({ error: "La fecha de inicio debe ser un día hábil (L-V, no feriado)" });
+        return;
+      }
+      if (endDate && !(await isWorkday(endDate))) {
+        res.status(400).json({ error: "La fecha de fin debe ser un día hábil (L-V, no feriado)" });
+        return;
+      }
+
       const assignment = await prisma.testerAssignment.create({
         data: {
           testerId: data.testerId,
           storyId: data.storyId,
           cycleId: data.cycleId,
-          startDate: data.startDate ? new Date(data.startDate) : new Date(),
-          endDate: data.endDate ? new Date(data.endDate) : null,
+          startDate,
+          endDate,
           status: initialStatus,
           notes: data.notes || null,
           statusLogs: {
@@ -164,10 +176,22 @@ router.put(
           data.endDate = new Date();
         }
       }
-      if (body.startDate !== undefined)
-        data.startDate = new Date(body.startDate);
-      if (body.endDate !== undefined)
-        data.endDate = body.endDate ? new Date(body.endDate) : null;
+      if (body.startDate !== undefined) {
+        const sd = new Date(body.startDate);
+        if (!(await isWorkday(sd))) {
+          res.status(400).json({ error: "La fecha de inicio debe ser un día hábil (L-V, no feriado)" });
+          return;
+        }
+        data.startDate = sd;
+      }
+      if (body.endDate !== undefined) {
+        const ed = body.endDate ? new Date(body.endDate) : null;
+        if (ed && !(await isWorkday(ed))) {
+          res.status(400).json({ error: "La fecha de fin debe ser un día hábil (L-V, no feriado)" });
+          return;
+        }
+        data.endDate = ed;
+      }
       if (body.notes !== undefined) data.notes = body.notes;
 
       const updated = await prisma.testerAssignment.update({

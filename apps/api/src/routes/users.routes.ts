@@ -3,6 +3,7 @@ import { prisma } from "@qa-metrics/database";
 import bcrypt from "bcryptjs";
 import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { createUserSchema, updateUserSchema } from "../validators/user.validator.js";
+import { ACTIVE_STATUSES } from "../lib/assignment-states.js";
 import { ZodError } from "zod";
 
 const router = Router();
@@ -20,19 +21,34 @@ router.get("/", requirePermission("users", "read") as any, async (req: AuthReque
         email: true,
         name: true,
         active: true,
+        allowOverallocation: true,
         createdAt: true,
         role: { select: { id: true, name: true } },
-        testers: { select: { allocation: true } },
+        testers: {
+          select: {
+            allocation: true,
+            assignments: {
+              where: { status: { in: [...ACTIVE_STATUSES] } },
+              select: { id: true },
+              take: 1,
+            },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
     const withCapacity = users.map(u => {
-      const used = u.testers.reduce((sum, t) => sum + t.allocation, 0);
+      // Only count allocation for testers with at least one ACTIVE assignment
+      const used = u.testers.reduce(
+        (sum, t) => sum + (t.assignments.length > 0 ? t.allocation : 0),
+        0
+      );
+      const available = u.allowOverallocation ? 100 : Math.max(0, 100 - used);
       const { testers, ...rest } = u;
-      return { ...rest, allocationUsed: used, allocationAvailable: 100 - used };
+      return { ...rest, allocationUsed: used, allocationAvailable: available };
     });
     const filtered = minCapacity > 0
-      ? withCapacity.filter(u => u.allocationAvailable >= minCapacity)
+      ? withCapacity.filter(u => u.allowOverallocation || u.allocationAvailable >= minCapacity)
       : withCapacity;
     res.json(filtered);
   } catch (err) {
