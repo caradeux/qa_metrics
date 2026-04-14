@@ -7,6 +7,12 @@ interface ValidRow {
   row: number;
   testerId: string;
   testerEmail: string;
+  projectId: string;
+  projectName: string;
+  storyId: string;
+  storyTitle: string;
+  cycleId: string;
+  cycleName: string;
   date: string;
   designed: number;
   executed: number;
@@ -114,10 +120,14 @@ export default function ImportPage() {
         Columnas requeridas:{" "}
         <code className="bg-gray-100 px-1 rounded">tester_email</code>,{" "}
         <code className="bg-gray-100 px-1 rounded">date (YYYY-MM-DD)</code>,{" "}
+        <code className="bg-gray-100 px-1 rounded">project_name</code>,{" "}
+        <code className="bg-gray-100 px-1 rounded">story_title</code>,{" "}
+        <code className="bg-gray-100 px-1 rounded">cycle_name</code> (opcional),{" "}
         <code className="bg-gray-100 px-1 rounded">designed</code>,{" "}
         <code className="bg-gray-100 px-1 rounded">executed</code>,{" "}
         <code className="bg-gray-100 px-1 rounded">defects</code>. No se
-        permiten fechas futuras ni feriados.
+        permiten fechas futuras, fines de semana ni feriados. Si no existe
+        una asignacion para tester+HU+ciclo, se creara automaticamente.
       </p>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
@@ -222,6 +232,9 @@ export default function ImportPage() {
                 <tr className="text-white text-xs" style={{ backgroundColor: "#1F3864" }}>
                   <th className="px-3 py-2 text-left">Fila</th>
                   <th className="px-3 py-2 text-left">Tester</th>
+                  <th className="px-3 py-2 text-left">Proyecto</th>
+                  <th className="px-3 py-2 text-left">HU</th>
+                  <th className="px-3 py-2 text-left">Ciclo</th>
                   <th className="px-3 py-2 text-left">Fecha</th>
                   <th className="px-3 py-2 text-center">Dis.</th>
                   <th className="px-3 py-2 text-center">Ejec.</th>
@@ -233,6 +246,9 @@ export default function ImportPage() {
                   <tr key={r.row} className="border-t border-border bg-green-50">
                     <td className="px-3 py-2 font-medium">{r.row}</td>
                     <td className="px-3 py-2">{r.testerEmail}</td>
+                    <td className="px-3 py-2">{r.projectName}</td>
+                    <td className="px-3 py-2">{r.storyTitle}</td>
+                    <td className="px-3 py-2">{r.cycleName}</td>
                     <td className="px-3 py-2">{r.date}</td>
                     <td className="px-3 py-2 text-center">{r.designed}</td>
                     <td className="px-3 py-2 text-center">{r.executed}</td>
