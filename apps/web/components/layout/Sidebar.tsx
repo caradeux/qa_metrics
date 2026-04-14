@@ -3,8 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/hooks/useAuth";
 
 const navItems = [
+  {
+    label: "Mi semana",
+    href: "/mi-semana",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
   {
     label: "Dashboard",
     href: "/dashboard",
@@ -33,11 +43,11 @@ const navItems = [
     ),
   },
   {
-    label: "Carga Manual",
-    href: "/records/new",
+    label: "Equipo",
+    href: "/equipo",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
       </svg>
     ),
   },
@@ -73,8 +83,15 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const { can } = usePermissions();
+  const { user } = useAuth();
+  const roleName = user?.role?.name;
+  const isAnalyst = roleName === "QA_ANALYST";
 
   const visibleItems = navItems.filter(item => {
+    // QA_ANALYST: solo "Mi semana"
+    if (isAnalyst) return item.href === "/mi-semana";
+    // Líderes no ven "Mi semana" (no aplica a su rol)
+    if (item.href === "/mi-semana") return false;
     if (item.href === "/users") return can("users", "read");
     if (item.href === "/assignments") return can("assignments", "read");
     return true;
@@ -152,7 +169,7 @@ export function Sidebar() {
       </nav>
 
       {/* Configuracion section */}
-      {can("roles", "read") && (
+      {!isAnalyst && can("roles", "read") && (
         <div className="px-3 pb-3">
           <div
             className="mx-1 mb-2"
