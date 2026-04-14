@@ -109,11 +109,6 @@ export default function EditProjectPage({ params }: { params: Promise<{ id: stri
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Modalidad</label>
-          <p className="text-sm text-muted">{project.modality === "MANUAL" ? "Manual" : "Azure DevOps"} (no editable)</p>
-        </div>
-
         {project.modality === "AZURE_DEVOPS" && (
           <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <h3 className="text-sm font-semibold text-blue-800">Azure DevOps</h3>

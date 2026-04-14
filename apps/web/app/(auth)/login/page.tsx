@@ -10,8 +10,18 @@ export default function LoginPage() {
   const { login, user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Prefill remembered email on mount
+  useEffect(() => {
+    const saved = typeof window !== "undefined" ? localStorage.getItem("rememberedEmail") : null;
+    if (saved) {
+      setEmail(saved);
+      setRemember(true);
+    }
+  }, []);
 
   // If already authenticated, redirect to dashboard
   useEffect(() => {
@@ -27,6 +37,8 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
+      if (remember) localStorage.setItem("rememberedEmail", email);
+      else localStorage.removeItem("rememberedEmail");
       window.location.href = "/dashboard";
       return;
     } catch (err) {
@@ -133,6 +145,18 @@ export default function LoginPage() {
                 <input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-0 py-3 bg-transparent text-[#1a1a2e] placeholder-[#c5c8ce] border-0 border-b-2 border-[#e2e4e8] focus:border-[#1F3864] focus:outline-none transition-colors duration-300 text-[15px]" placeholder="••••••••" />
                 <div className="absolute bottom-0 left-1/2 w-0 h-[2px] bg-[#1F3864] transition-all duration-300 group-focus-within:left-0 group-focus-within:w-full" />
               </div>
+            </div>
+            <div className="flex items-center gap-2" style={{ animation: "fadeInUp 0.4s ease-out 0.25s both" }}>
+              <input
+                id="remember"
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="w-4 h-4 rounded border-[#c5c8ce] text-[#1F3864] focus:ring-[#1F3864] focus:ring-offset-0"
+              />
+              <label htmlFor="remember" className="text-xs text-[#6b7280] select-none cursor-pointer">
+                Recordar mi correo
+              </label>
             </div>
             {error && (
               <div className="flex items-center gap-3 py-3 px-4 bg-[#FEF2F2] border-l-[3px] border-[#ef4444] text-[#ef4444] text-sm" style={{ animation: "slideIn 0.3s ease-out both" }}>

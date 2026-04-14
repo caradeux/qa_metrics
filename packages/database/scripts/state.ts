@@ -1,0 +1,11 @@
+import "dotenv/config";
+import { PrismaClient } from "../generated/prisma/client.ts";
+import { PrismaPg } from "@prisma/adapter-pg";
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+const users = await prisma.user.findMany({ select: { email: true, name: true, role: { select: { name: true } } } });
+const clients = await prisma.client.findMany({ select: { id: true, name: true } });
+const projects = await prisma.project.findMany({ select: { id: true, name: true, client: { select: { name: true } }, projectManager: { select: { name: true } }, testers: { select: { name: true, user: { select: { email: true } }, allocation: true } } } });
+console.log("USERS:"); users.forEach(u => console.log(` - ${u.email} | ${u.name} | [${u.role.name}]`));
+console.log("\nCLIENTS:"); clients.forEach(c => console.log(` - ${c.name} (${c.id})`));
+console.log("\nPROJECTS:"); projects.forEach(p => { console.log(` - ${p.name} | Cliente: ${p.client.name} | PM: ${p.projectManager?.name ?? "—"}`); p.testers.forEach(t => console.log(`     Tester: ${t.name} (${t.user?.email ?? "sin cuenta"}) [${t.allocation}%]`)); });
+await prisma.$disconnect();

@@ -5,7 +5,7 @@ import { env } from "../config/env.js";
 import { logger } from "../middleware/logger.js";
 
 function generateAccessToken(userId: string): string {
-  return jwt.sign({ userId }, env.JWT_SECRET, { expiresIn: "15m" });
+  return jwt.sign({ userId }, env.JWT_SECRET, { expiresIn: "8h" });
 }
 
 function generateRefreshToken(userId: string): string {

@@ -121,6 +121,22 @@ export function GanttChart({
       if (!map.has(a.tester.id)) map.set(a.tester.id, { tester: a.tester, items: [] });
       map.get(a.tester.id)!.items.push(a);
     }
+    // Extrae número de ciclo de su nombre ("Ciclo 1" -> 1). Fallback: Infinity para ciclos sin número.
+    const cycleNum = (c?: { name: string } | null) => {
+      if (!c?.name) return Infinity;
+      const m = c.name.match(/(\d+)/);
+      return m ? Number(m[1]) : Infinity;
+    };
+    // Ordenar items: por título de HU, luego ciclo 1, ciclo 2..., luego startDate.
+    for (const row of map.values()) {
+      row.items.sort((a, b) => {
+        const titleCmp = a.story.title.localeCompare(b.story.title);
+        if (titleCmp !== 0) return titleCmp;
+        const cycleCmp = cycleNum(a.cycle) - cycleNum(b.cycle);
+        if (cycleCmp !== 0) return cycleCmp;
+        return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+      });
+    }
     return Array.from(map.values()).sort((a, b) => a.tester.name.localeCompare(b.tester.name));
   }, [assignments]);
 

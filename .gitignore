@@ -64,3 +64,6 @@ next-env.d.ts
 
 # Azure deploy
 deploy/azure/.azure-credentials
+
+# Database snapshots (contienen hashes bcrypt de passwords)
+deploy/snapshots/*.json

@@ -3,7 +3,7 @@ import { prisma } from "@qa-metrics/database";
 import { encrypt } from "@qa-metrics/utils";
 import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { createProjectSchema, updateProjectSchema } from "../validators/project.validator.js";
-import { isClientPm } from "../lib/access.js";
+import { isClientPm, isAnalyst } from "../lib/access.js";
 import { ZodError } from "zod";
 
 const router = Router();
@@ -20,6 +20,8 @@ router.get("/", requirePermission("projects", "read") as any, async (req: AuthRe
     };
     if (clientPm) {
       where.projectManagerId = req.user!.id;
+    } else if (isAnalyst(req)) {
+      where.testers = { some: { userId: req.user!.id } };
     } else {
       where.client = { userId: req.user!.id };
     }
@@ -57,6 +59,8 @@ router.get("/:id", requirePermission("projects", "read") as any, async (req: Aut
     const where: any = { id };
     if (clientPm) {
       where.projectManagerId = req.user!.id;
+    } else if (isAnalyst(req)) {
+      where.testers = { some: { userId: req.user!.id } };
     } else {
       where.client = { userId: req.user!.id };
     }

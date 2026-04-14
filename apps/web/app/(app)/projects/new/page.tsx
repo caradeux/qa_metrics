@@ -113,30 +113,6 @@ export default function NewProjectPage() {
           <p className="text-xs text-muted mt-1">Usuario con rol CLIENT_PM que podrá ver este proyecto en modo lectura.</p>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-2">Modalidad</label>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                checked={modality === "MANUAL"}
-                onChange={() => setModality("MANUAL")}
-                className="text-primary"
-              />
-              <span className="text-sm">Manual</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                checked={modality === "AZURE_DEVOPS"}
-                onChange={() => setModality("AZURE_DEVOPS")}
-                className="text-primary"
-              />
-              <span className="text-sm">Azure DevOps</span>
-            </label>
-          </div>
-        </div>
-
         {modality === "AZURE_DEVOPS" && (
           <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <h3 className="text-sm font-semibold text-blue-800">Configuracion Azure DevOps</h3>

@@ -1,0 +1,11 @@
+import "dotenv/config";
+import { PrismaClient } from "../generated/prisma/client.ts";
+import { PrismaPg } from "@prisma/adapter-pg";
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
+const stories = await prisma.userStory.findMany({ select: { id: true, title: true, project: { select: { name: true } } } });
+const cycles = await prisma.testCycle.count();
+const assignments = await prisma.testerAssignment.count();
+console.log(`Stories: ${stories.length}`);
+stories.forEach(s => console.log(` - ${s.title} (${s.project.name})`));
+console.log(`Cycles: ${cycles}, Assignments: ${assignments}`);
+await prisma.$disconnect();

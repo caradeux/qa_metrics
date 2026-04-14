@@ -4,11 +4,13 @@ const STATUS_VALUES = [
   "REGISTERED",
   "ANALYSIS",
   "TEST_DESIGN",
+  "WAITING_QA_DEPLOY",
   "EXECUTION",
   "RETURNED_TO_DEV",
   "WAITING_UAT",
   "UAT",
   "PRODUCTION",
+  "ON_HOLD",
 ] as const;
 
 const phaseSchema = z.object({

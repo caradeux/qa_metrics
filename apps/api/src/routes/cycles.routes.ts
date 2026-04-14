@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { createCycleSchema, updateCycleSchema } from "../validators/cycle.validator.js";
-import { isClientPm, clientPmProjectIds } from "../lib/access.js";
+import { isClientPm, isAnalyst, clientPmProjectIds } from "../lib/access.js";
 import { isWorkday } from "../lib/workdays.js";
 import { ZodError } from "zod";
 
@@ -20,7 +20,7 @@ async function userCanAccessStory(req: AuthRequest, storyId: string): Promise<bo
     return ids.includes(story.projectId);
   }
   const project = await prisma.project.findFirst({
-    where: { id: story.projectId, client: { userId: req.user!.id } },
+    where: { id: story.projectId, OR: [{ client: { userId: req.user!.id } }, { testers: { some: { userId: req.user!.id } } }] as any },
     select: { id: true },
   });
   return !!project;
@@ -117,7 +117,7 @@ router.put("/:id", requirePermission("cycles", "update") as any, async (req: Aut
     const data = updateCycleSchema.parse(req.body);
 
     const existing = await prisma.testCycle.findFirst({
-      where: { id, story: { project: { client: { userId: req.user!.id } } } },
+      where: { id, story: { project: { OR: [{ client: { userId: req.user!.id } }, { testers: { some: { userId: req.user!.id } } }] as any } } },
     });
     if (!existing) {
       res.status(404).json({ error: "Ciclo no encontrado" });
@@ -157,26 +157,31 @@ router.put("/:id", requirePermission("cycles", "update") as any, async (req: Aut
   }
 });
 
-// DELETE /:id — delete (409 if has assignments)
+// DELETE /:id — delete cycle and cascade assignments (and their logs/phases/daily records)
 router.delete("/:id", requirePermission("cycles", "delete") as any, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
 
     const existing = await prisma.testCycle.findFirst({
-      where: { id, story: { project: { client: { userId: req.user!.id } } } },
+      where: { id, story: { project: { OR: [{ client: { userId: req.user!.id } }, { testers: { some: { userId: req.user!.id } } }] as any } } },
       include: { _count: { select: { assignments: true } } },
     });
     if (!existing) {
       res.status(404).json({ error: "Ciclo no encontrado" });
       return;
     }
-    if (existing._count.assignments > 0) {
-      res.status(409).json({ error: "No se puede eliminar: el ciclo tiene asignaciones" });
-      return;
-    }
 
-    await prisma.testCycle.delete({ where: { id } });
-    res.json({ message: "Ciclo eliminado" });
+    // Cascada manual: los assignments tienen onDelete: Cascade a statusLogs/phases/dailyRecords,
+    // así que basta con borrar los assignments y luego el ciclo.
+    await prisma.$transaction([
+      prisma.testerAssignment.deleteMany({ where: { cycleId: id } }),
+      prisma.testCycle.delete({ where: { id } }),
+    ]);
+
+    res.json({
+      message: "Ciclo eliminado",
+      deletedAssignments: existing._count.assignments,
+    });
   } catch (err) {
     res.status(500).json({ error: "Error al eliminar ciclo" });
   }

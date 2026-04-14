@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addDays, format, startOfDay } from "date-fns";
+import { addDays, format, startOfDay, startOfWeek, addWeeks } from "date-fns";
 import { apiClient } from "@/lib/api-client";
 import { useHolidays } from "@/lib/holidays";
 import { Modal } from "@/components/ui/Modal";
@@ -24,6 +24,18 @@ const statusMap = Object.fromEntries(STATUSES.map((s) => [s.value, s]));
 
 interface Client { id: string; name: string }
 interface Project { id: string; name: string; client?: { id: string; name: string } }
+interface TesterOpt {
+  id: string;
+  name: string;
+  userId?: string | null;
+  project: { id: string; name: string; client: { id: string; name: string } };
+}
+interface TesterGroup {
+  key: string;            // userId o "name:X" si no tiene user
+  name: string;
+  testerIds: string[];    // todos los Tester.id que corresponden a esa persona
+  projects: string[];
+}
 interface StatusLog { id: string; status: string; changedAt: string }
 
 function isoDate(d: Date) {
@@ -31,8 +43,8 @@ function isoDate(d: Date) {
 }
 
 function defaultRange() {
-  const today = startOfDay(new Date());
-  return { from: addDays(today, -30), to: addDays(today, 60) };
+  const monday = startOfWeek(new Date(), { weekStartsOn: 1 });
+  return { from: monday, to: addDays(addWeeks(monday, 3), -1) };
 }
 
 export default function GanttPage() {
@@ -42,7 +54,9 @@ export default function GanttPage() {
   const [loading, setLoading] = useState(true);
   const [filterClient, setFilterClient] = useState("");
   const [filterProject, setFilterProject] = useState("");
+  const [filterTester, setFilterTester] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [testers, setTesters] = useState<TesterOpt[]>([]);
   const { from: defFrom, to: defTo } = useMemo(() => defaultRange(), []);
   const [dateFrom, setDateFrom] = useState<string>(isoDate(defFrom));
   const [dateTo, setDateTo] = useState<string>(isoDate(defTo));
@@ -65,12 +79,34 @@ export default function GanttPage() {
     () => filterClient ? projects.filter(p => p.client?.id === filterClient) : projects,
     [filterClient, projects]
   );
+  // Agrupa testers por persona (userId si existe, sino por nombre). Útil para saber cuándo
+  // queda libre una persona que trabaja en múltiples proyectos.
+  const testerGroups = useMemo<TesterGroup[]>(() => {
+    const map = new Map<string, TesterGroup>();
+    for (const t of testers) {
+      if (filterClient && t.project.client.id !== filterClient) continue;
+      if (filterProject && t.project.id !== filterProject) continue;
+      const key = t.userId ? `u:${t.userId}` : `n:${t.name.toLowerCase()}`;
+      if (!map.has(key)) map.set(key, { key, name: t.name, testerIds: [], projects: [] });
+      const g = map.get(key)!;
+      g.testerIds.push(t.id);
+      if (!g.projects.includes(t.project.name)) g.projects.push(t.project.name);
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [testers, filterClient, filterProject]);
+
+  const selectedTesterIds = useMemo<Set<string> | null>(() => {
+    if (!filterTester) return null;
+    const g = testerGroups.find((tg) => tg.key === filterTester);
+    return g ? new Set(g.testerIds) : new Set();
+  }, [filterTester, testerGroups]);
 
   const fetchAssignments = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (filterProject) params.set("projectId", filterProject);
-    if (filterStatus) params.set("status", filterStatus);
+    // Tester filter: se aplica client-side para soportar agrupado por persona (varios testerIds)
+    if (filterStatus && filterStatus !== "__ACTIVE__") params.set("status", filterStatus);
     if (dateFrom) params.set("dateFrom", dateFrom);
     if (dateTo) params.set("dateTo", dateTo);
     try {
@@ -79,18 +115,26 @@ export default function GanttPage() {
         const projectIds = new Set(visibleProjects.map(p => p.id));
         data = data.filter(a => projectIds.has(a.tester.project.id));
       }
+      if (selectedTesterIds) {
+        data = data.filter(a => selectedTesterIds.has(a.tester.id));
+      }
+      if (filterStatus === "__ACTIVE__") {
+        const ACTIVE = new Set(["REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY", "EXECUTION"]);
+        data = data.filter(a => ACTIVE.has(a.status));
+      }
       setAssignments(data);
     } catch {
       setAssignments([]);
     }
     setLoading(false);
-  }, [filterClient, filterProject, filterStatus, dateFrom, dateTo, visibleProjects]);
+  }, [filterClient, filterProject, filterStatus, dateFrom, dateTo, visibleProjects, selectedTesterIds]);
 
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
 
   useEffect(() => {
     apiClient<Client[]>("/api/clients").then(setClients).catch(() => setClients([]));
     apiClient<Project[]>("/api/projects").then(setProjects).catch(() => setProjects([]));
+    apiClient<TesterOpt[]>("/api/testers").then(setTesters).catch(() => setTesters([]));
   }, []);
 
   useEffect(() => {
@@ -98,6 +142,12 @@ export default function GanttPage() {
       setFilterProject("");
     }
   }, [filterProject, visibleProjects]);
+
+  useEffect(() => {
+    if (filterTester && !testerGroups.some(g => g.key === filterTester)) {
+      setFilterTester("");
+    }
+  }, [filterTester, testerGroups]);
 
   const openDetail = async (a: GanttAssignment) => {
     setSelected(a);
@@ -150,6 +200,22 @@ export default function GanttPage() {
             </select>
           </div>
           <div>
+            <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Tester</label>
+            <select
+              value={filterTester}
+              onChange={(e) => setFilterTester(e.target.value)}
+              className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:border-[#4A90D9] outline-none min-w-[180px]"
+            >
+              <option value="">Todos</option>
+              {testerGroups.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {g.name}
+                  {g.projects.length > 1 ? ` (${g.projects.length} proyectos)` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
             <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Estado</label>
             <select
               value={filterStatus}
@@ -157,6 +223,8 @@ export default function GanttPage() {
               className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:border-[#4A90D9] outline-none min-w-[160px]"
             >
               <option value="">Todos</option>
+              <option value="__ACTIVE__">⚡ Solo activos (en trabajo)</option>
+              <option disabled value="__SEP__">──────────</option>
               {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
           </div>

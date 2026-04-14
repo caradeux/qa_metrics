@@ -6,13 +6,18 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { apiClient } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/usePermissions";
 
-interface User { id: string; email: string; name: string; role: string; active: boolean; createdAt: string; }
+interface User { id: string; email: string; name: string; role: { id: string; name: string } | string; active: boolean; createdAt: string; }
 
 const roleLabels: Record<string, { label: string; color: string; bg: string }> = {
   ADMIN: { label: "Administrador", color: "text-purple-700", bg: "bg-purple-50 border-purple-200" },
   QA_LEAD: { label: "Jefe QA", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
   QA_ANALYST: { label: "Analista QA", color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-200" },
+  CLIENT_PM: { label: "Jefe Cliente", color: "text-amber-700", bg: "bg-amber-50 border-amber-200" },
 };
+
+function roleName(role: User["role"]): string {
+  return typeof role === "string" ? role : role?.name ?? "";
+}
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -87,7 +92,8 @@ export default function UsersPage() {
             </thead>
             <tbody>
               {users.map(user => {
-                const r = roleLabels[user.role] || roleLabels.QA_ANALYST;
+                const rn = roleName(user.role);
+                const r = roleLabels[rn] || { label: rn || "—", color: "text-gray-700", bg: "bg-gray-100 border-gray-200" };
                 return (
                   <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50/50 transition">
                     <td className="px-5 py-3">

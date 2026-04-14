@@ -53,6 +53,42 @@ interface Props {
 
 const EMPTY_CELL: CellValue = { designed: 0, executed: 0, defects: 0 };
 
+const FIELD_META = {
+  designed: {
+    short: "D",
+    label: "Diseñados",
+    description: "Casos de prueba diseñados",
+    color: "#2E5FA3",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+      </svg>
+    ),
+  },
+  executed: {
+    short: "E",
+    label: "Ejecutados",
+    description: "Casos de prueba ejecutados",
+    color: "#0891b2",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+      </svg>
+    ),
+  },
+  defects: {
+    short: "B",
+    label: "Bugs",
+    description: "Defectos detectados",
+    color: "#dc2626",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+    ),
+  },
+} as const;
+
 function buildDraft(assignments: AssignmentRow[]): DraftMap {
   const out: DraftMap = {};
   for (const a of assignments) {
@@ -216,6 +252,23 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
 
   return (
     <div className="rounded-lg border bg-white p-4 shadow-sm">
+      {/* Leyenda */}
+      <div className="mb-3 flex flex-wrap items-center gap-4 rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+        <span className="font-semibold uppercase tracking-wider text-[10px] text-gray-500">Leyenda</span>
+        {(["designed", "executed", "defects"] as const).map((f) => {
+          const m = FIELD_META[f];
+          return (
+            <span key={f} className="inline-flex items-center gap-1.5">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded" style={{ color: m.color, backgroundColor: `${m.color}15` }}>
+                {m.icon}
+              </span>
+              <span className="font-semibold" style={{ color: m.color }}>{m.short}</span>
+              <span>= {m.label}</span>
+              <span className="text-gray-400">({m.description})</span>
+            </span>
+          );
+        })}
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -291,91 +344,118 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
                       }`}
                     >
                       <div className="flex flex-col gap-1">
-                        {(
-                          [
-                            ["designed", "D"],
-                            ["executed", "E"],
-                            ["defects", "B"],
-                          ] as const
-                        ).map(([field, label]) => (
-                          <label
-                            key={field}
-                            className="flex items-center gap-1 text-xs text-gray-600"
-                          >
-                            <span className="w-4 text-right font-semibold">
-                              {label}:
-                            </span>
-                            <input
-                              type="number"
-                              min={0}
-                              disabled={disabled}
-                              value={cell[field]}
-                              onChange={(e) =>
-                                setCell(
-                                  a.id,
-                                  day.date,
-                                  field,
-                                  Number(e.target.value)
-                                )
-                              }
-                              className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-xs disabled:bg-gray-200 disabled:text-gray-400"
-                            />
-                          </label>
-                        ))}
+                        {(["designed", "executed", "defects"] as const).map((field) => {
+                          const m = FIELD_META[field];
+                          return (
+                            <label
+                              key={field}
+                              className="flex items-center gap-1 text-xs text-gray-600"
+                              title={`${m.label} (${m.description})`}
+                            >
+                              <span className="inline-flex items-center gap-0.5" style={{ color: m.color }}>
+                                {m.icon}
+                                <span className="font-semibold">{m.short}</span>
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                disabled={disabled}
+                                value={cell[field]}
+                                onChange={(e) =>
+                                  setCell(a.id, day.date, field, Number(e.target.value))
+                                }
+                                className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-xs disabled:bg-gray-200 disabled:text-gray-400"
+                              />
+                            </label>
+                          );
+                        })}
                       </div>
                     </td>
                   );
                 })}
                 <td
-                  className="sticky right-0 z-10 bg-slate-50 p-2 text-center align-top"
-                  style={{ minWidth: 100 }}
+                  className="sticky right-0 z-10 bg-gradient-to-l from-slate-100 to-slate-50 p-2 align-top border-l-2 border-slate-200"
+                  style={{ minWidth: 110 }}
                 >
-                  <div className="text-xs text-gray-700">
-                    <div>D: {rowTotals[a.id]!.designed}</div>
-                    <div>E: {rowTotals[a.id]!.executed}</div>
-                    <div>B: {rowTotals[a.id]!.defects}</div>
+                  <div className="flex flex-col gap-1">
+                    {(["designed", "executed", "defects"] as const).map((f) => {
+                      const m = FIELD_META[f];
+                      const val = rowTotals[a.id]![f as keyof CellValue];
+                      const isZero = val === 0;
+                      return (
+                        <div
+                          key={f}
+                          className={`flex items-center justify-between gap-1.5 rounded-md px-2 py-0.5 text-xs ${isZero ? "bg-white/60 text-gray-400" : "bg-white shadow-sm"}`}
+                          style={isZero ? {} : { color: m.color, border: `1px solid ${m.color}33` }}
+                          title={m.label}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {m.icon}
+                            <span className="text-[10px] font-semibold">{m.short}</span>
+                          </span>
+                          <span className="font-mono text-sm font-bold tabular-nums">{val}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </td>
               </tr>
             ))}
-            <tr className="bg-[#2E5FA3] font-semibold text-white">
+            <tr className="bg-gradient-to-r from-[#1F3864] to-[#2E5FA3] text-white">
               <td
-                className="sticky left-0 z-10 bg-[#2E5FA3] p-2"
+                className="sticky left-0 z-10 bg-[#1F3864] p-3 font-bold uppercase tracking-wider text-[11px]"
                 style={{ minWidth: 260, width: 260 }}
               >
-                Total día
+                Total del día
               </td>
               {data.days.map((day) => (
-                <td key={day.date} className="p-2 text-center text-xs">
-                  <div>D: {dayTotals[day.date]!.designed}</div>
-                  <div>E: {dayTotals[day.date]!.executed}</div>
-                  <div>B: {dayTotals[day.date]!.defects}</div>
+                <td key={day.date} className="p-2 text-center">
+                  <div className="flex flex-col items-stretch gap-1">
+                    {(["designed", "executed", "defects"] as const).map((f) => {
+                      const m = FIELD_META[f];
+                      const val = dayTotals[day.date]![f as keyof CellValue];
+                      return (
+                        <div
+                          key={f}
+                          className="flex items-center justify-between gap-1.5 rounded-md bg-white/10 px-2 py-0.5 text-xs backdrop-blur-sm"
+                          title={m.label}
+                        >
+                          <span className="inline-flex items-center gap-1 opacity-80">
+                            {m.icon}
+                            <span className="text-[10px] font-semibold">{m.short}</span>
+                          </span>
+                          <span className="font-mono text-sm font-bold tabular-nums">{val}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </td>
               ))}
               <td
-                className="sticky right-0 z-10 bg-[#2E5FA3] p-2 text-center text-xs"
-                style={{ minWidth: 100 }}
+                className="sticky right-0 z-10 bg-[#1F3864] p-2 border-l-2 border-[#4A90D9]"
+                style={{ minWidth: 110 }}
               >
-                <div>
-                  D:{" "}
-                  {Object.values(rowTotals).reduce(
-                    (s, r) => s + r.designed,
-                    0
-                  )}
-                </div>
-                <div>
-                  E:{" "}
-                  {Object.values(rowTotals).reduce(
-                    (s, r) => s + r.executed,
-                    0
-                  )}
-                </div>
-                <div>
-                  B:{" "}
-                  {Object.values(rowTotals).reduce(
-                    (s, r) => s + r.defects,
-                    0
-                  )}
+                <div className="flex flex-col gap-1">
+                  <div className="text-center text-[9px] uppercase tracking-wider text-white/70 font-bold pb-0.5 border-b border-white/20">
+                    Semana
+                  </div>
+                  {(["designed", "executed", "defects"] as const).map((f) => {
+                    const m = FIELD_META[f];
+                    const val = Object.values(rowTotals).reduce((s, r) => s + r[f as keyof CellValue], 0);
+                    return (
+                      <div
+                        key={f}
+                        className="flex items-center justify-between gap-1.5 rounded-md bg-white/15 px-2 py-0.5 text-xs"
+                        title={m.label}
+                      >
+                        <span className="inline-flex items-center gap-1 opacity-80">
+                          {m.icon}
+                          <span className="text-[10px] font-semibold">{m.short}</span>
+                        </span>
+                        <span className="font-mono text-sm font-bold tabular-nums">{val}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </td>
             </tr>

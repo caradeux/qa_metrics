@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Modal } from "@/components/ui/Modal";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { STATUSES, statusMap, ComplexityBadge } from "@/components/stories/StatusBadge";
 
 interface TesterLite { id: string; name: string }
@@ -61,6 +62,9 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
   const [newCycleForStory, setNewCycleForStory] = useState<Story | null>(null);
   const [assignToCycle, setAssignToCycle] = useState<{ story: Story; cycle: StoryCycle; isFirstCycle: boolean } | null>(null);
   const [editPhases, setEditPhases] = useState<{ assignmentId: string; phases: AssignmentPhase[] } | null>(null);
+  const [deleteStoryTarget, setDeleteStoryTarget] = useState<Story | null>(null);
+  const [deleteCycleTarget, setDeleteCycleTarget] = useState<{ id: string; name: string; assignmentCount: number } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -87,12 +91,28 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
     } catch (e) { console.error(e); }
   }
 
-  async function deleteStory(id: string) {
-    if (!confirm("Eliminar HU? Esta accion elimina tambien sus ciclos y asignaciones.")) return;
+  async function confirmDeleteStory() {
+    if (!deleteStoryTarget) return;
+    setDeleting(true);
     try {
-      await apiClient(`/api/stories/${id}`, { method: "DELETE" });
+      await apiClient(`/api/stories/${deleteStoryTarget.id}`, { method: "DELETE" });
+      setDeleteStoryTarget(null);
       fetchData();
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      alert(e?.message || "No se pudo eliminar la HU");
+    } finally { setDeleting(false); }
+  }
+
+  async function confirmDeleteCycle() {
+    if (!deleteCycleTarget) return;
+    setDeleting(true);
+    try {
+      await apiClient(`/api/cycles/${deleteCycleTarget.id}`, { method: "DELETE" });
+      setDeleteCycleTarget(null);
+      fetchData();
+    } catch (e: any) {
+      alert(e?.message || "No se pudo eliminar el ciclo");
+    } finally { setDeleting(false); }
   }
 
   return (
@@ -133,8 +153,10 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
               canAssign={can("assignments", "create")}
               canChangeStatus={can("assignments", "update")}
               onEdit={() => setEditStory(story)}
-              onDelete={() => deleteStory(story.id)}
+              onDelete={() => setDeleteStoryTarget(story)}
+              canDeleteCycle={can("cycles", "delete")}
               onNewCycle={() => setNewCycleForStory(story)}
+              onDeleteCycle={(cycleId, cycleName, count) => setDeleteCycleTarget({ id: cycleId, name: cycleName, assignmentCount: count })}
               onAssignToCycle={(cycle, isFirstCycle) => setAssignToCycle({ story, cycle, isFirstCycle })}
               onChangeStatus={changeStatus}
               onEditPhases={(assignmentId, phases) => setEditPhases({ assignmentId, phases })}
@@ -176,23 +198,59 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
         onClose={() => setEditPhases(null)}
         onSaved={() => { setEditPhases(null); fetchData(); }}
       />
+
+      <ConfirmDialog
+        open={!!deleteStoryTarget}
+        onClose={() => setDeleteStoryTarget(null)}
+        onConfirm={confirmDeleteStory}
+        title="Eliminar Historia de Usuario"
+        message={`Vas a eliminar "${deleteStoryTarget?.title ?? ""}". Se borrarán todos sus ciclos, asignaciones, estados y registros diarios. Esta acción es permanente.`}
+        details={deleteStoryTarget ? [
+          { label: "Ciclos", value: deleteStoryTarget.cycles.length, tone: "warning" },
+          { label: "Asignaciones", value: deleteStoryTarget.cycles.reduce((s, c) => s + c.assignments.length, 0), tone: "danger" },
+        ] : undefined}
+        confirmLabel="Eliminar HU"
+        loading={deleting}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={!!deleteCycleTarget}
+        onClose={() => setDeleteCycleTarget(null)}
+        onConfirm={confirmDeleteCycle}
+        title={`Eliminar ${deleteCycleTarget?.name ?? "ciclo"}`}
+        message={
+          deleteCycleTarget?.assignmentCount
+            ? `Vas a eliminar "${deleteCycleTarget.name}" junto con sus asignaciones, historial de estados, fases y registros diarios asociados.`
+            : `Vas a eliminar "${deleteCycleTarget?.name ?? ""}". No hay asignaciones, la eliminación es limpia.`
+        }
+        details={deleteCycleTarget?.assignmentCount ? [
+          { label: "Asignaciones", value: deleteCycleTarget.assignmentCount, tone: "danger" },
+        ] : undefined}
+        confirmType={deleteCycleTarget?.assignmentCount ? deleteCycleTarget.name : undefined}
+        confirmLabel="Eliminar ciclo"
+        loading={deleting}
+        variant="destructive"
+      />
     </div>
   );
 }
 
 function StoryCard({
-  story, canUpdate, canDelete, canCreateCycle, canAssign, canChangeStatus,
-  onEdit, onDelete, onNewCycle, onAssignToCycle, onChangeStatus, onEditPhases,
+  story, canUpdate, canDelete, canCreateCycle, canDeleteCycle, canAssign, canChangeStatus,
+  onEdit, onDelete, onNewCycle, onDeleteCycle, onAssignToCycle, onChangeStatus, onEditPhases,
 }: {
   story: Story;
   canUpdate: boolean;
   canDelete: boolean;
   canCreateCycle: boolean;
+  canDeleteCycle: boolean;
   canAssign: boolean;
   canChangeStatus: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onNewCycle: () => void;
+  onDeleteCycle: (cycleId: string, cycleName: string, assignmentCount: number) => void;
   onAssignToCycle: (cycle: StoryCycle, isFirstCycle: boolean) => void;
   onChangeStatus: (assignmentId: string, status: string) => void;
   onEditPhases: (assignmentId: string, phases: AssignmentPhase[]) => void;
@@ -242,9 +300,20 @@ function StoryCard({
                     )}
                     <span className="text-[10px] text-gray-400">· {cycle.assignments.length} asignacion(es)</span>
                   </div>
-                  {canAssign && (
-                    <button onClick={() => onAssignToCycle(cycle, cycle.id === firstCycleId)} className="text-[11px] text-[#2E5FA3] hover:underline font-semibold">+ Asignar tester</button>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {canAssign && (
+                      <button onClick={() => onAssignToCycle(cycle, cycle.id === firstCycleId)} className="text-[11px] text-[#2E5FA3] hover:underline font-semibold">+ Asignar tester</button>
+                    )}
+                    {canDeleteCycle && (
+                      <button
+                        onClick={() => onDeleteCycle(cycle.id, cycle.name, cycle.assignments.length)}
+                        className="text-[11px] text-red-600 hover:underline font-medium"
+                        title="Eliminar ciclo (y sus asignaciones)"
+                      >
+                        Eliminar
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {cycle.assignments.length > 0 && (
                   <table className="w-full text-xs">
@@ -252,15 +321,24 @@ function StoryCard({
                       <tr className="text-[9px] text-gray-400 uppercase tracking-wider border-b border-gray-100">
                         <th className="px-3 py-1.5 text-left font-medium">Tester</th>
                         <th className="px-3 py-1.5 text-left font-medium">Estado</th>
-                        <th className="px-3 py-1.5 text-left font-medium">Inicio</th>
-                        <th className="px-3 py-1.5 text-center font-medium">Dias</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Rango</th>
+                        <th className="px-3 py-1.5 text-center font-medium" title="Duración planificada (desde→hasta) o días transcurridos si sigue abierta">Duración</th>
+                        <th className="px-3 py-1.5 text-center font-medium" title="Días en el estado actual (desde último cambio)">Días en estado</th>
                         {cycle.id === firstCycleId && <th className="px-3 py-1.5 text-right font-medium">Fases</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {cycle.assignments.map((a, idx) => {
-                        const days = a.daysInStatus ?? null;
-                        const daysRed = days !== null && days > 7;
+                        const daysInState = a.daysInStatus ?? null;
+                        const inStateRed = daysInState !== null && daysInState > 7;
+                        const startD = new Date(a.startDate);
+                        const endD = a.endDate ? new Date(a.endDate) : null;
+                        const endForCalc = endD ?? new Date();
+                        const duration = Math.max(
+                          0,
+                          Math.floor((endForCalc.getTime() - startD.getTime()) / 86400000) + 1
+                        );
+                        const open = !endD;
                         return (
                           <tr key={a.id} className={`border-t border-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}>
                             <td className="px-3 py-1.5">{a.tester?.name || <span className="text-gray-400">-</span>}</td>
@@ -277,9 +355,17 @@ function StoryCard({
                                 <span>{statusMap[a.status]?.label || a.status}</span>
                               )}
                             </td>
-                            <td className="px-3 py-1.5 text-gray-500">{new Date(a.startDate).toLocaleDateString("es")}</td>
-                            <td className={`px-3 py-1.5 text-center font-mono ${daysRed ? "text-red-600 font-bold" : "text-gray-500"}`}>
-                              {days !== null ? `${days}d` : "-"}
+                            <td className="px-3 py-1.5 text-gray-500">
+                              {startD.toLocaleDateString("es", { day: "2-digit", month: "short" })}
+                              {endD
+                                ? ` → ${endD.toLocaleDateString("es", { day: "2-digit", month: "short" })}`
+                                : " → en curso"}
+                            </td>
+                            <td className="px-3 py-1.5 text-center font-mono text-gray-700">
+                              {duration}d{open ? <span className="ml-0.5 text-[9px] text-gray-400">(en curso)</span> : ""}
+                            </td>
+                            <td className={`px-3 py-1.5 text-center font-mono ${inStateRed ? "text-red-600 font-bold" : "text-gray-500"}`}>
+                              {daysInState !== null ? `${daysInState}d` : "-"}
                             </td>
                             {cycle.id === firstCycleId && (
                               <td className="px-3 py-1.5 text-right">
@@ -517,17 +603,98 @@ function AssignToCycleModal({
 
   useEffect(() => {
     if (open) {
-      setTesterId(""); setStatus("REGISTERED");
-      setStartDate(new Date().toISOString().split("T")[0]);
-      setEndDate("");
+      // Para Ciclo 2+, pre-seleccionar el tester del ciclo anterior (mismo tester habitual para regresiones)
+      let suggestedTesterId = "";
+      if (!isFirstCycle && entry?.story?.cycles?.length) {
+        const currentCycleStart = entry.cycle.startDate
+          ? new Date(entry.cycle.startDate).getTime()
+          : Infinity;
+        // Buscar el ciclo previo con asignaciones: el más reciente cuyo startDate < currentCycleStart
+        const priorCycles = entry.story.cycles
+          .filter((c) => {
+            if (c.id === entry.cycle.id) return false;
+            const cs = c.startDate ? new Date(c.startDate).getTime() : 0;
+            return cs < currentCycleStart && c.assignments.length > 0;
+          })
+          .sort((a, b) => {
+            const da = a.startDate ? new Date(a.startDate).getTime() : 0;
+            const db = b.startDate ? new Date(b.startDate).getTime() : 0;
+            return db - da;
+          });
+        const lastAssign = priorCycles[0]?.assignments[0];
+        if (lastAssign?.tester?.id && testers.some((t) => t.id === lastAssign.tester!.id)) {
+          suggestedTesterId = lastAssign.tester.id;
+        }
+      }
+      setTesterId(suggestedTesterId);
+      setStatus(isFirstCycle ? "REGISTERED" : "WAITING_QA_DEPLOY");
+
+      // Prellenar con fechas del ciclo si existen
+      const cycleStart = entry?.cycle.startDate ? String(entry.cycle.startDate).slice(0, 10) : "";
+      const cycleEnd = entry?.cycle.endDate ? String(entry.cycle.endDate).slice(0, 10) : "";
+      setStartDate(cycleStart || new Date().toISOString().split("T")[0]);
+      setEndDate(cycleEnd);
       setNotes(""); setError("");
-      setPhases({
-        ANALYSIS: { start: "", end: "" },
-        TEST_DESIGN: { start: "", end: "" },
-        EXECUTION: { start: "", end: "" },
-      });
+
+      // Para Ciclo 1, si hay rango del ciclo, distribuir sugerencia entre las 3 fases (solo días hábiles L-V)
+      if (isFirstCycle && cycleStart && cycleEnd) {
+        const toIso = (d: Date) =>
+          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const isWeekday = (d: Date) => d.getDay() !== 0 && d.getDay() !== 6;
+        const nextWeekday = (d: Date, dir: 1 | -1 = 1) => {
+          const x = new Date(d);
+          while (!isWeekday(x)) x.setDate(x.getDate() + dir);
+          return x;
+        };
+        // Construir lista de días hábiles entre cycleStart y cycleEnd (inclusive)
+        const days: Date[] = [];
+        const cursor = new Date(cycleStart + "T00:00:00");
+        const end = new Date(cycleEnd + "T00:00:00");
+        while (cursor <= end) {
+          if (isWeekday(cursor)) days.push(new Date(cursor));
+          cursor.setDate(cursor.getDate() + 1);
+        }
+        if (days.length >= 3) {
+          const aCount = Math.max(1, Math.floor(days.length * 0.25));
+          const dCount = Math.max(1, Math.floor(days.length * 0.35));
+          const eCount = days.length - aCount - dCount;
+          const aStart = days[0]!;
+          const aEnd = days[aCount - 1]!;
+          const dStart = days[aCount]!;
+          const dEnd = days[aCount + dCount - 1]!;
+          const eStart = days[aCount + dCount]!;
+          const eEnd = days[aCount + dCount + eCount - 1]!;
+          setPhases({
+            ANALYSIS: { start: toIso(aStart), end: toIso(aEnd) },
+            TEST_DESIGN: { start: toIso(dStart), end: toIso(dEnd) },
+            EXECUTION: { start: toIso(eStart), end: toIso(eEnd) },
+          });
+        } else {
+          // Rango muy corto: deja la distribución vacía para que el líder la ajuste
+          setPhases({
+            ANALYSIS: { start: "", end: "" },
+            TEST_DESIGN: { start: "", end: "" },
+            EXECUTION: { start: "", end: "" },
+          });
+        }
+        // También asegurar que startDate/endDate globales no caigan en finde
+        if (cycleStart) {
+          const s = new Date(cycleStart + "T00:00:00");
+          if (!isWeekday(s)) setStartDate(toIso(nextWeekday(s, 1)));
+        }
+        if (cycleEnd) {
+          const e = new Date(cycleEnd + "T00:00:00");
+          if (!isWeekday(e)) setEndDate(toIso(nextWeekday(e, -1)));
+        }
+      } else {
+        setPhases({
+          ANALYSIS: { start: "", end: "" },
+          TEST_DESIGN: { start: "", end: "" },
+          EXECUTION: { start: "", end: "" },
+        });
+      }
     }
-  }, [open]);
+  }, [open, isFirstCycle, entry]);
 
   async function save() {
     if (!entry) return;
@@ -577,17 +744,43 @@ function AssignToCycleModal({
     <Modal open={open} onClose={onClose} title={`Asignar a ${entry?.cycle.name ?? ""}: ${entry?.story.title ?? ""}`}>
       <div className="space-y-3">
         <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Tester</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Tester</label>
+            {!isFirstCycle && testerId && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Sugerido del ciclo anterior
+              </span>
+            )}
+          </div>
           <select value={testerId} onChange={e => setTesterId(e.target.value)} className={inp}>
             <option value="">Seleccionar...</option>
             {testers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
+          {!isFirstCycle && (
+            <p className="text-[10px] text-gray-500 mt-1">
+              En ciclos de regresión suele ser el mismo tester. Cambialo si quien hace la re-ejecución es otra persona.
+            </p>
+          )}
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Estado inicial</label>
           <select value={status} onChange={e => setStatus(e.target.value)} className={inp}>
-            {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            {STATUSES
+              .filter(s => {
+                if (isFirstCycle) return true;
+                // Ciclo 2+: ocultar estados previos (Inicio, Análisis, Diseño)
+                return !["REGISTERED", "ANALYSIS", "TEST_DESIGN"].includes(s.value);
+              })
+              .map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
+          {!isFirstCycle && (
+            <p className="text-[10px] text-gray-500 mt-1">
+              Ciclo 2+: re-ejecución post-correcciones, arranca desde "Esperando Ambientación QA".
+            </p>
+          )}
         </div>
 
         {isFirstCycle ? (

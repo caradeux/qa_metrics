@@ -43,7 +43,7 @@ const navItems = [
     ),
   },
   {
-    label: "Equipo",
+    label: "Registro Diario",
     href: "/equipo",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,8 +108,10 @@ export function Sidebar() {
 
   const visibleItems = navItems
     .filter(item => {
-      // QA_ANALYST: solo "Mi semana"
-      if (isAnalyst) return item.href === "/mi-semana";
+      // QA_ANALYST: Mi semana + Proyectos (puede crear HUs, ciclos y asignarse)
+      if (isAnalyst) {
+        return ["/mi-semana", "/projects", "/assignments", "/gantt"].includes(item.href);
+      }
       // CLIENT_PM: solo proyectos, dashboard, reportes por cliente y gantt
       if (isClientPm) return ["/projects", "/dashboard", "/reports/client", "/gantt"].includes(item.href);
       // Líderes no ven "Mi semana" (no aplica a su rol)
@@ -117,14 +119,19 @@ export function Sidebar() {
       if (item.href === "/users") return can("users", "read");
       if (item.href === "/assignments") return can("assignments", "read");
       if (item.href === "/gantt") return can("assignments", "read");
+      // Ocultar importar Excel (sin uso hasta tener integración)
+      if (item.href === "/records/import") return false;
       return true;
     })
     .map(item => isClientPm && item.href === "/projects" ? { ...item, label: "Mis Proyectos" } : item);
 
   return (
     <aside
-      className="w-64 min-h-screen flex flex-col relative"
+      className="w-64 shrink-0 min-h-screen flex flex-col relative"
       style={{
+        width: 256,
+        minWidth: 256,
+        maxWidth: 256,
         background: "linear-gradient(180deg, #0D1B2A 0%, #1B2D4A 100%)",
         boxShadow: "inset 0 8px 16px -4px rgba(0,0,0,0.3)",
       }}
@@ -185,8 +192,8 @@ export function Sidebar() {
                     : "opacity-0 group-hover:opacity-100"
                 }`}
               />
-              <span className="ml-2">{item.icon}</span>
-              {item.label}
+              <span className="ml-2 shrink-0">{item.icon}</span>
+              <span className="truncate">{item.label}</span>
             </Link>
           );
         })}

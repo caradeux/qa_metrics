@@ -9,6 +9,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 interface Tester {
   id: string;
   name: string;
+  allocation?: number;
   _count: { records: number };
 }
 
@@ -90,6 +91,7 @@ export default function TestersPage({ params }: { params: Promise<{ id: string }
             <thead>
               <tr className="bg-primary text-white text-left text-sm">
                 <th className="px-4 py-3 font-medium">Nombre</th>
+                <th className="px-4 py-3 font-medium text-center">Dedicación</th>
                 <th className="px-4 py-3 font-medium">Registros</th>
                 <th className="px-4 py-3 font-medium text-right">Acciones</th>
               </tr>
@@ -103,6 +105,13 @@ export default function TestersPage({ params }: { params: Promise<{ id: string }
                   }`}
                 >
                   <td className="px-4 py-3 font-medium text-foreground">{tester.name}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      (tester.allocation ?? 100) === 100
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-amber-50 text-amber-700 border border-amber-200"
+                    }`}>{tester.allocation ?? 100}%</span>
+                  </td>
                   <td className="px-4 py-3 text-muted">{tester._count.records}</td>
                   <td className="px-4 py-3 text-right space-x-2">
                     {can("testers", "update") && (

@@ -1,18 +1,26 @@
 import { prisma } from "@qa-metrics/database";
 
-function toDateOnly(date: Date): Date {
-  const iso = date.toISOString().slice(0, 10);
-  return new Date(iso + "T00:00:00.000Z");
+/**
+ * Normaliza un Date o string `YYYY-MM-DD` a un Date en UTC con hora 00:00:00.
+ * Así todas las comparaciones (día de semana, lookup de feriados) usan la misma zona.
+ */
+function toUtcDateOnly(value: Date | string): Date {
+  if (value instanceof Date) {
+    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  }
+  // string YYYY-MM-DD
+  const [y, m, d] = value.slice(0, 10).split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!));
 }
 
 /**
  * Returns true when `date` is a weekday (Mon-Fri) and NOT a registered holiday.
+ * Evaluado en UTC para evitar desplazamientos por zona horaria local.
  */
-export async function isWorkday(date: Date): Promise<boolean> {
-  const dow = date.getUTCDay(); // 0=Sun, 6=Sat — stored in UTC date-only
-  const localDow = date.getDay();
-  // consider both interpretations for safety: reject if either is weekend
-  if (dow === 0 || dow === 6 || localDow === 0 || localDow === 6) return false;
-  const h = await prisma.holiday.findUnique({ where: { date: toDateOnly(date) } });
+export async function isWorkday(date: Date | string): Promise<boolean> {
+  const utc = toUtcDateOnly(date);
+  const dow = utc.getUTCDay(); // 0=Dom, 6=Sáb
+  if (dow === 0 || dow === 6) return false;
+  const h = await prisma.holiday.findUnique({ where: { date: utc } });
   return !h;
 }

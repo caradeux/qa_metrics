@@ -24,8 +24,15 @@ async function canAccessProject(req: AuthRequest, projectId: string): Promise<bo
     const ids = await clientPmProjectIds(req.user!.id);
     return ids.includes(projectId);
   }
+  // ADMIN / QA_LEAD: dueños del cliente. QA_ANALYST: tester vinculado al proyecto.
   const project = await prisma.project.findFirst({
-    where: { id: projectId, client: { userId: req.user!.id } },
+    where: {
+      id: projectId,
+      OR: [
+        { client: { userId: req.user!.id } },
+        { testers: { some: { userId: req.user!.id } } },
+      ],
+    },
     select: { id: true },
   });
   return !!project;

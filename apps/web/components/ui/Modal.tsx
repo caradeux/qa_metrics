@@ -27,7 +27,8 @@ export function Modal({ open, onClose, title, children, maxWidth }: ModalProps) 
     <dialog
       ref={dialogRef}
       onClose={onClose}
-      className={`backdrop:bg-[#0D1B2A]/60 backdrop:backdrop-blur-sm rounded-lg p-0 w-full shadow-2xl border border-gray-200/50 animate-[fadeInUp_0.25s_ease-out] ${maxWidth || "max-w-lg"}`}
+      style={{ margin: "auto" }}
+      className={`fixed inset-0 m-auto backdrop:bg-[#0D1B2A]/60 backdrop:backdrop-blur-sm rounded-lg p-0 w-[calc(100%-2rem)] h-fit max-h-[90vh] overflow-auto shadow-2xl border border-gray-200/50 animate-[fadeInUp_0.25s_ease-out] ${maxWidth || "max-w-lg"}`}
     >
       <div className="p-0">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">

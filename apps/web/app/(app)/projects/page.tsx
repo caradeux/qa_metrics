@@ -287,9 +287,8 @@ export default function ProjectsPage() {
               <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
                 Agregar tester
               </p>
-              {(
-                <>
-                  <select
+              <>
+                <select
                     value={draft.userId ?? ""}
                     onChange={(e) => {
                       const uid = e.target.value;
@@ -322,8 +321,7 @@ export default function ProjectsPage() {
                       </button>
                     ))}
                   </div>
-                </>
-              )}
+              </>
               {formError && <p className="text-xs text-red-600">{formError}</p>}
               <div className="flex justify-end gap-2">
                 <button
