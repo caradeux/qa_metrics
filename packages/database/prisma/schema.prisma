@@ -44,6 +44,7 @@ model User {
   roleId       String
   role         Role     @relation(fields: [roleId], references: [id])
   active       Boolean  @default(true)
+  allowOverallocation Boolean @default(false)
   refreshToken String?
   createdAt    DateTime @default(now())
   clients      Client[]
@@ -110,6 +111,7 @@ model TesterAssignment {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   statusLogs     AssignmentStatusLog[]
+  dailyRecords   DailyRecord[]
 
   @@unique([testerId, storyId, cycleId])
   @@index([testerId])
@@ -154,18 +156,22 @@ model UserStory {
 }
 
 model DailyRecord {
-  id        String    @id @default(cuid())
-  testerId  String
-  tester    Tester    @relation(fields: [testerId], references: [id], onDelete: Cascade)
-  date      DateTime  @db.Date
-  designed  Int       @default(0)
-  executed  Int       @default(0)
-  defects   Int       @default(0)
-  source    String    @default("MANUAL")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id           String            @id @default(cuid())
+  testerId     String
+  tester       Tester            @relation(fields: [testerId], references: [id], onDelete: Cascade)
+  assignmentId String
+  assignment   TesterAssignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  date         DateTime          @db.Date
+  designed     Int               @default(0)
+  executed     Int               @default(0)
+  defects      Int               @default(0)
+  source       String            @default("MANUAL")
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
-  @@unique([testerId, date])
+  @@unique([assignmentId, date])
+  @@index([assignmentId])
+  @@index([testerId])
   @@index([date])
 }
 
