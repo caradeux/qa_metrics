@@ -1,21 +1,189 @@
 import { Router, Response } from "express";
 import { prisma } from "@qa-metrics/database";
 import {
-  calculateKPIs,
-  aggregateWeeklyTrend,
-  aggregateDefects,
-  aggregateTesterSummary,
-} from "@qa-metrics/utils";
-import {
   authMiddleware,
   requirePermission,
   type AuthRequest,
 } from "../middleware/auth.js";
-import { generateExcelReport } from "../services/report-excel.js";
+import {
+  generateExcelReport,
+  type DailyDetailRow,
+} from "../services/report-excel.js";
+import { aggregateDailyToWeekly } from "../services/metrics.service.js";
 import { jsPDF } from "jspdf";
 
 const router = Router();
 router.use(authMiddleware as any);
+
+interface DailyRowWithRelations {
+  testerId: string;
+  cycleId: string;
+  date: Date;
+  designed: number;
+  executed: number;
+  defects: number;
+  tester: { name: string };
+  cycle: { name: string };
+}
+
+interface BreakdownRow {
+  designedFunctional: number;
+  designedRegression: number;
+  designedSmoke: number;
+  designedExploratory: number;
+  executedFunctional: number;
+  executedRegression: number;
+  executedSmoke: number;
+  executedExploratory: number;
+  defectsCritical: number;
+  defectsHigh: number;
+  defectsMedium: number;
+  defectsLow: number;
+}
+
+function kpisFromDaily(
+  records: Array<{ designed: number; executed: number; defects: number }>
+) {
+  const totalDesigned = records.reduce((s, r) => s + r.designed, 0);
+  const totalExecuted = records.reduce((s, r) => s + r.executed, 0);
+  const totalDefects = records.reduce((s, r) => s + r.defects, 0);
+  const executionRatio =
+    totalDesigned > 0
+      ? Math.round((totalExecuted / totalDesigned) * 100)
+      : 0;
+  return { totalDesigned, totalExecuted, totalDefects, executionRatio };
+}
+
+function testerSummaryFromDaily(records: DailyRowWithRelations[]) {
+  const grouped = new Map<
+    string,
+    {
+      testerId: string;
+      testerName: string;
+      designed: number;
+      executed: number;
+      defects: number;
+    }
+  >();
+  for (const r of records) {
+    const cur = grouped.get(r.testerId) ?? {
+      testerId: r.testerId,
+      testerName: r.tester?.name ?? "Unknown",
+      designed: 0,
+      executed: 0,
+      defects: 0,
+    };
+    cur.designed += r.designed;
+    cur.executed += r.executed;
+    cur.defects += r.defects;
+    grouped.set(r.testerId, cur);
+  }
+  return [...grouped.values()].map((t) => ({
+    ...t,
+    ratio: t.designed > 0 ? Math.round((t.executed / t.designed) * 100) : 0,
+  }));
+}
+
+function defectsFromBreakdowns(list: BreakdownRow[]) {
+  return list.reduce(
+    (acc, b) => ({
+      critical: acc.critical + b.defectsCritical,
+      high: acc.high + b.defectsHigh,
+      medium: acc.medium + b.defectsMedium,
+      low: acc.low + b.defectsLow,
+    }),
+    { critical: 0, high: 0, medium: 0, low: 0 }
+  );
+}
+
+async function loadReportData(
+  projectId: string,
+  cycleId?: string,
+  testerId?: string
+) {
+  const where: Record<string, unknown> = { tester: { projectId } };
+  if (cycleId) where.cycleId = cycleId;
+  if (testerId) where.testerId = testerId;
+
+  const records = (await prisma.dailyRecord.findMany({
+    where,
+    include: {
+      tester: { select: { name: true } },
+      cycle: { select: { name: true } },
+    },
+    orderBy: { date: "asc" },
+  })) as unknown as DailyRowWithRelations[];
+
+  const kpis = kpisFromDaily(records);
+  const weekBuckets = aggregateDailyToWeekly(
+    records.map((r) => ({
+      date: r.date,
+      designed: r.designed,
+      executed: r.executed,
+      defects: r.defects,
+    }))
+  );
+  const weeklyTrend = weekBuckets.map((b) => ({
+    weekStart: b.weekStart.toISOString().split("T")[0],
+    designed: b.designed,
+    executed: b.executed,
+    defects: b.defects,
+  }));
+  const testerSummary = testerSummaryFromDaily(records);
+
+  const breakdownWhere: Record<string, unknown> = cycleId
+    ? { cycleId }
+    : { cycle: { projectId } };
+  const breakdowns = (await prisma.cycleBreakdown.findMany({
+    where: breakdownWhere,
+  })) as unknown as BreakdownRow[];
+  const defectsBySeverity = defectsFromBreakdowns(breakdowns);
+
+  const allCycles = await prisma.testCycle.findMany({
+    where: { projectId },
+    select: { id: true, name: true },
+  });
+  const allProjectRecords = await prisma.dailyRecord.findMany({
+    where: { tester: { projectId } },
+    select: {
+      cycleId: true,
+      designed: true,
+      executed: true,
+      defects: true,
+    },
+  });
+  const byCycle = new Map<
+    string,
+    Array<{ designed: number; executed: number; defects: number }>
+  >();
+  for (const r of allProjectRecords) {
+    const arr = byCycle.get(r.cycleId) ?? [];
+    arr.push(r);
+    byCycle.set(r.cycleId, arr);
+  }
+  const cycleComparison = allCycles.map((c) => ({
+    cycleName: c.name,
+    ...kpisFromDaily(byCycle.get(c.id) ?? []),
+  }));
+
+  const dailyDetail: DailyDetailRow[] = records.map((r) => ({
+    date: r.date.toISOString().split("T")[0],
+    testerName: r.tester?.name ?? "Unknown",
+    cycleName: r.cycle?.name ?? "Unknown",
+    designed: r.designed,
+    executed: r.executed,
+    defects: r.defects,
+  }));
+
+  return {
+    kpis,
+    weeklyTrend,
+    testerSummary,
+    defectsBySeverity,
+    cycleComparison,
+    dailyDetail,
+  };
+}
 
 // GET /excel — Generate Excel report
 router.get(
@@ -40,44 +208,21 @@ router.get(
         return;
       }
 
-      const where: Record<string, unknown> = {
-        tester: { projectId },
-      };
-      if (cycleId) where.cycleId = cycleId;
-      if (testerId) where.testerId = testerId;
-
-      const records = await prisma.weeklyRecord.findMany({
-        where,
-        include: { tester: { select: { name: true } } },
-        orderBy: { weekStart: "asc" },
-      });
-
-      const kpis = calculateKPIs(records);
-      const weeklyTrend = aggregateWeeklyTrend(records);
-      const defectsBySeverity = aggregateDefects(records);
-      const testerSummary = aggregateTesterSummary(records);
-
-      const allCycles = await prisma.testCycle.findMany({
-        where: { projectId: projectId as string },
-      });
-      const cycleComparison = await Promise.all(
-        allCycles.map(async (cycle) => {
-          const cycleRecords = await prisma.weeklyRecord.findMany({
-            where: { cycleId: cycle.id },
-          });
-          const stats = calculateKPIs(cycleRecords);
-          return { cycleName: cycle.name, ...stats };
-        })
+      const data = await loadReportData(
+        projectId as string,
+        cycleId as string | undefined,
+        testerId as string | undefined
       );
 
       const buffer = await generateExcelReport({
         projectName: project.name,
         clientName: project.client.name,
-        kpis,
-        weeklyTrend,
-        testerSummary,
-        cycleComparison,
-        defectsBySeverity,
+        kpis: data.kpis,
+        weeklyTrend: data.weeklyTrend,
+        testerSummary: data.testerSummary,
+        cycleComparison: data.cycleComparison,
+        defectsBySeverity: data.defectsBySeverity,
+        dailyDetail: data.dailyDetail,
       });
 
       res.setHeader(
@@ -118,26 +263,11 @@ router.post(
         return;
       }
 
-      const where: Record<string, unknown> = {
-        tester: { projectId },
-      };
-      if (cycleId) where.cycleId = cycleId;
-      if (testerId) where.testerId = testerId;
-
-      const records = await prisma.weeklyRecord.findMany({
-        where,
-        include: { tester: { select: { name: true } } },
-        orderBy: { weekStart: "asc" },
-      });
-
-      const kpis = calculateKPIs(records);
-      const weeklyTrend = aggregateWeeklyTrend(records);
-      const defects = aggregateDefects(records);
-      const testerSummary = aggregateTesterSummary(records);
+      const data = await loadReportData(projectId, cycleId, testerId);
+      const { kpis, weeklyTrend, testerSummary, defectsBySeverity } = data;
 
       const doc = new jsPDF();
 
-      // Title
       doc.setFontSize(18);
       doc.setTextColor(31, 56, 100);
       doc.text("Reporte de Metricas QA", 14, 20);
@@ -148,7 +278,6 @@ router.post(
       doc.text(`Cliente: ${project.client.name}`, 14, 37);
       doc.text(`Fecha: ${new Date().toLocaleDateString("es")}`, 14, 44);
 
-      // KPIs
       doc.setFontSize(14);
       doc.setTextColor(31, 56, 100);
       doc.text("Indicadores Clave (KPIs)", 14, 58);
@@ -169,7 +298,6 @@ router.post(
         y += 7;
       });
 
-      // Weekly Trend
       y += 5;
       doc.setFontSize(14);
       doc.setTextColor(31, 56, 100);
@@ -197,7 +325,6 @@ router.post(
         y += 6;
       });
 
-      // Tester Summary
       y += 10;
       if (y > 230) {
         doc.addPage();
@@ -231,7 +358,6 @@ router.post(
         y += 6;
       });
 
-      // Defects by Severity
       y += 10;
       if (y > 240) {
         doc.addPage();
@@ -244,13 +370,13 @@ router.post(
 
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
-      doc.text(`Criticos: ${defects.critical}`, 14, y);
+      doc.text(`Criticos: ${defectsBySeverity.critical}`, 14, y);
       y += 7;
-      doc.text(`Altos: ${defects.high}`, 14, y);
+      doc.text(`Altos: ${defectsBySeverity.high}`, 14, y);
       y += 7;
-      doc.text(`Medios: ${defects.medium}`, 14, y);
+      doc.text(`Medios: ${defectsBySeverity.medium}`, 14, y);
       y += 7;
-      doc.text(`Bajos: ${defects.low}`, 14, y);
+      doc.text(`Bajos: ${defectsBySeverity.low}`, 14, y);
 
       const pdfBuffer = Buffer.from(doc.output("arraybuffer"));
 

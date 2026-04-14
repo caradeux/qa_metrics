@@ -6,6 +6,15 @@ import type {
   DefectDistribution,
 } from "@qa-metrics/utils";
 
+export interface DailyDetailRow {
+  date: string; // YYYY-MM-DD
+  testerName: string;
+  cycleName: string;
+  designed: number;
+  executed: number;
+  defects: number;
+}
+
 const HEADER_FILL: ExcelJS.Fill = {
   type: "pattern",
   pattern: "solid",
@@ -58,6 +67,7 @@ interface ReportData {
     executionRatio: number;
   }>;
   defectsBySeverity: DefectDistribution;
+  dailyDetail?: DailyDetailRow[];
 }
 
 export async function generateExcelReport(data: ReportData): Promise<Buffer> {
@@ -158,6 +168,35 @@ export async function generateExcelReport(data: ReportData): Promise<Buffer> {
   const defTotalRow = sheet5.addRow(["TOTAL", totalDef]);
   defTotalRow.font = { bold: true };
   autoWidth(sheet5);
+
+  // Hoja 6: Detalle Diario
+  if (data.dailyDetail && data.dailyDetail.length > 0) {
+    const sheet6 = workbook.addWorksheet("Detalle Diario");
+    sheet6.addRow([
+      "Fecha",
+      "Tester",
+      "Ciclo",
+      "Disenados",
+      "Ejecutados",
+      "Defectos",
+    ]);
+    styleHeader(sheet6.getRow(1));
+    data.dailyDetail.forEach((d, i) => {
+      const row = sheet6.addRow([
+        d.date,
+        d.testerName,
+        d.cycleName,
+        d.designed,
+        d.executed,
+        d.defects,
+      ]);
+      if (i % 2 === 1)
+        row.eachCell((c) => {
+          c.fill = ALT_ROW_FILL;
+        });
+    });
+    autoWidth(sheet6);
+  }
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
