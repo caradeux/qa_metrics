@@ -13,6 +13,7 @@ export default function MiSemanaPage() {
     name: string;
   } | null>(null);
   const [cycleId, setCycleId] = useState<string | null>(null);
+  const [cycles, setCycles] = useState<Array<{ id: string; name: string }>>([]);
   const [week, setWeek] = useState(() =>
     startOfWeek(new Date(), { weekStartsOn: 1 })
   );
@@ -24,9 +25,17 @@ export default function MiSemanaPage() {
     )
       .then((t) => {
         setTester(t);
-        apiClient<Array<{ id: string }>>(`/api/cycles?projectId=${t.projectId}`)
-          .then((cs) => setCycleId(cs?.[0]?.id ?? null))
-          .catch(() => setCycleId(null));
+        apiClient<Array<{ id: string; name: string }>>(
+          `/api/cycles?projectId=${t.projectId}`
+        )
+          .then((cs) => {
+            setCycles(cs ?? []);
+            setCycleId(cs?.[0]?.id ?? null);
+          })
+          .catch(() => {
+            setCycles([]);
+            setCycleId(null);
+          });
       })
       .catch((e: any) => setError(e?.message ?? "Error"));
   }, []);
@@ -43,6 +52,19 @@ export default function MiSemanaPage() {
       <header className="mb-4 flex items-center gap-4">
         <h1 className="text-2xl font-bold text-[#1F3864]">Mi semana</h1>
         <span className="text-sm text-gray-600">· {tester.name}</span>
+        {cycles.length > 1 && (
+          <select
+            value={cycleId ?? ""}
+            onChange={(e) => setCycleId(e.target.value)}
+            className="rounded border p-1 text-sm"
+          >
+            {cycles.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={() => setWeek((w) => subWeeks(w, 1))}
