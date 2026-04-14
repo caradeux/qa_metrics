@@ -11,6 +11,8 @@ import { PrismaClient } from "../generated/prisma/client.ts";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { addDays, startOfWeek, subWeeks } from "date-fns";
+import { HOLIDAYS_CL_2026 } from "../src/holidays-cl-2026.ts";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
@@ -27,55 +29,10 @@ function encrypt(text: string): string {
   return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
 }
 
-function getMonday(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function generateWeeklyData(weekNum: number, testerIndex: number) {
-  const baseDesigned = 12 + weekNum + testerIndex * 2;
-  const functional = Math.round(baseDesigned * 0.6);
-  const regression = Math.round(baseDesigned * 0.2);
-  const smoke = Math.round(baseDesigned * 0.1);
-  const exploratory = baseDesigned - functional - regression - smoke;
-
-  const executionRate = 0.7 + weekNum * 0.03;
-  const execFunctional = Math.round(functional * Math.min(executionRate, 1));
-  const execRegression = Math.round(regression * Math.min(executionRate + 0.05, 1));
-  const execSmoke = Math.round(smoke * Math.min(executionRate + 0.1, 1));
-  const execExploratory = Math.round(exploratory * Math.min(executionRate, 1));
-
-  const defectBase = Math.max(1, 8 - weekNum);
-  const critical = weekNum <= 2 ? Math.max(0, 2 - weekNum) : 0;
-  const high = Math.max(0, Math.round(defectBase * 0.3));
-  const medium = Math.max(1, Math.round(defectBase * 0.4));
-  const low = Math.max(1, Math.round(defectBase * 0.3));
-
-  return {
-    designedTotal: functional + regression + smoke + exploratory,
-    designedFunctional: functional,
-    designedRegression: regression,
-    designedSmoke: smoke,
-    designedExploratory: exploratory,
-    executedTotal: execFunctional + execRegression + execSmoke + execExploratory,
-    executedFunctional: execFunctional,
-    executedRegression: execRegression,
-    executedSmoke: execSmoke,
-    executedExploratory: execExploratory,
-    defectsCritical: critical,
-    defectsHigh: high,
-    defectsMedium: medium,
-    defectsLow: low,
-  };
-}
-
 async function main() {
   await prisma.testerAssignment.deleteMany();
-  await prisma.weeklyRecord.deleteMany();
+  await prisma.dailyRecord.deleteMany();
+  await prisma.cycleBreakdown.deleteMany();
   await prisma.userStory.deleteMany();
   await prisma.tester.deleteMany();
   await prisma.testCycle.deleteMany();
@@ -85,6 +42,14 @@ async function main() {
   await prisma.rolePermission.deleteMany();
   await prisma.permission.deleteMany();
   await prisma.role.deleteMany();
+  await prisma.holiday.deleteMany();
+
+  // Feriados CL 2026
+  await prisma.holiday.createMany({
+    data: HOLIDAYS_CL_2026.map((h) => ({ date: new Date(h.date), name: h.name })),
+    skipDuplicates: true,
+  });
+  console.log("✓ Feriados CL 2026 creados");
 
   // Create roles
   const adminRole = await prisma.role.create({
@@ -120,11 +85,10 @@ async function main() {
       await prisma.rolePermission.create({ data: { roleId: qaLeadRole.id, permissionId: permissions[`${resource}:${action}`].id } });
     }
   }
-  // Lead can read users and roles
   await prisma.rolePermission.create({ data: { roleId: qaLeadRole.id, permissionId: permissions["users:read"].id } });
   await prisma.rolePermission.create({ data: { roleId: qaLeadRole.id, permissionId: permissions["roles:read"].id } });
 
-  // QA Analyst gets read access to most things, plus create/update on records and assignments
+  // QA Analyst
   const analystReadResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports"];
   for (const resource of analystReadResources) {
     await prisma.rolePermission.create({ data: { roleId: qaAnalystRole.id, permissionId: permissions[`${resource}:read`].id } });
@@ -139,7 +103,6 @@ async function main() {
     data: { email: "admin@qametrics.com", password: hashedPassword, name: "Carlos Mendez", roleId: adminRole.id },
   });
 
-  // Usuarios adicionales con distintos roles
   const passLead = await bcrypt.hash("Lead2024!", 10);
   const passAnalyst = await bcrypt.hash("Analyst2024!", 10);
   await prisma.user.create({ data: { email: "laura.gomez@qametrics.com", password: passLead, name: "Laura Gomez", roleId: qaLeadRole.id } });
@@ -185,22 +148,6 @@ async function main() {
     stories2.push(s);
   }
 
-  for (let week = 0; week < 8; week++) {
-    const weekStart = getMonday(new Date(cycle1Start.getTime() + week * 7 * 24 * 60 * 60 * 1000));
-    for (let t = 0; t < testers1.length; t++) {
-      const data = generateWeeklyData(week, t);
-      await prisma.weeklyRecord.create({ data: { testerId: testers1[t].id, cycleId: cycle1.id, weekStart, ...data, source: "MANUAL" } });
-    }
-  }
-
-  for (let week = 0; week < 8; week++) {
-    const weekStart = getMonday(new Date(cycle2Start.getTime() + week * 7 * 24 * 60 * 60 * 1000));
-    for (let t = 0; t < testers1.length; t++) {
-      const data = generateWeeklyData(week, t);
-      await prisma.weeklyRecord.create({ data: { testerId: testers1[t].id, cycleId: cycle2.id, weekStart, ...data, source: "MANUAL" } });
-    }
-  }
-
   const client2 = await prisma.client.create({ data: { name: "Seguros Continental", userId: user.id } });
 
   const project2 = await prisma.project.create({
@@ -225,18 +172,6 @@ async function main() {
     });
   }
 
-  for (let week = 0; week < 6; week++) {
-    const weekStart = getMonday(new Date(cycle3Start.getTime() + week * 7 * 24 * 60 * 60 * 1000));
-    for (let t = 0; t < testers2.length; t++) {
-      const data = generateWeeklyData(week, t);
-      data.designedExploratory += 3;
-      data.designedTotal = data.designedFunctional + data.designedRegression + data.designedSmoke + data.designedExploratory;
-      data.executedExploratory += 2;
-      data.executedTotal = data.executedFunctional + data.executedRegression + data.executedSmoke + data.executedExploratory;
-      await prisma.weeklyRecord.create({ data: { testerId: testers2[t].id, cycleId: cycle3.id, weekStart, ...data, source: "MANUAL" } });
-    }
-  }
-
   await prisma.project.create({
     data: {
       name: "App Movil Siniestros",
@@ -248,35 +183,76 @@ async function main() {
     },
   });
 
+  // Vincular primeros 2 testers a users con rol QA_ANALYST
+  const tester1User = await prisma.user.create({
+    data: { email: "tester1@qametrics.com", name: "Tester Uno", password: hashedPassword, roleId: qaAnalystRole.id },
+  });
+  await prisma.tester.update({ where: { id: testers1[0].id }, data: { userId: tester1User.id } });
+  const tester2User = await prisma.user.create({
+    data: { email: "tester2@qametrics.com", name: "Tester Dos", password: hashedPassword, roleId: qaAnalystRole.id },
+  });
+  await prisma.tester.update({ where: { id: testers1[1].id }, data: { userId: tester2User.id } });
+
+  // DailyRecords: L-V últimas 5 semanas para los primeros 2 testers (25 x 2 = 50)
+  const today = new Date();
+  for (const tester of [testers1[0], testers1[1]]) {
+    const cycle = await prisma.testCycle.findFirstOrThrow({ where: { projectId: tester.projectId } });
+    for (let w = 4; w >= 0; w--) {
+      const monday = startOfWeek(subWeeks(today, w), { weekStartsOn: 1 });
+      for (let d = 0; d < 5; d++) {
+        const date = addDays(monday, d);
+        await prisma.dailyRecord.create({
+          data: {
+            testerId: tester.id,
+            cycleId: cycle.id,
+            date,
+            designed: 2 + (d % 3),
+            executed: 1 + (d % 4),
+            defects: d === 2 ? 1 : 0,
+          },
+        });
+      }
+    }
+  }
+  console.log("✓ DailyRecords creados");
+
+  // CycleBreakdown por cada ciclo
+  const allCycles = await prisma.testCycle.findMany();
+  for (const cycle of allCycles) {
+    await prisma.cycleBreakdown.create({
+      data: {
+        cycleId: cycle.id,
+        designedFunctional: 40, designedRegression: 15, designedSmoke: 10, designedExploratory: 5,
+        executedFunctional: 30, executedRegression: 10, executedSmoke: 8, executedExploratory: 4,
+        defectsCritical: 1, defectsHigh: 3, defectsMedium: 6, defectsLow: 4,
+      },
+    });
+  }
+  console.log("✓ CycleBreakdowns creados");
+
   // Asignaciones con flujo realista de QA
   const stories3 = await prisma.userStory.findMany({ where: { cycleId: cycle3.id }, take: 4 });
 
-  // Ana Garcia: variedad de estados
   await prisma.testerAssignment.create({ data: { testerId: testers1[0].id, storyId: stories1[0].id, startDate: new Date("2026-01-05"), endDate: new Date("2026-01-23"), status: "PRODUCTION", notes: "Desplegado en produccion sin incidentes" } });
   await prisma.testerAssignment.create({ data: { testerId: testers1[0].id, storyId: stories1[1].id, startDate: new Date("2026-01-10"), endDate: new Date("2026-02-05"), status: "PRODUCTION" } });
   await prisma.testerAssignment.create({ data: { testerId: testers1[0].id, storyId: stories2[0].id, startDate: new Date("2026-03-02"), endDate: new Date("2026-04-10"), status: "EXECUTION", executionCycle: "Sprint 5-8 Ciclo 2" } });
   await prisma.testerAssignment.create({ data: { testerId: testers1[0].id, storyId: stories2[1].id, startDate: new Date("2026-03-16"), endDate: new Date("2026-04-17"), status: "TEST_DESIGN" } });
 
-  // Luis Torres: una devuelta a dev, otra en ejecucion
   await prisma.testerAssignment.create({ data: { testerId: testers1[1].id, storyId: stories1[3].id, startDate: new Date("2026-01-15"), endDate: new Date("2026-02-10"), status: "PRODUCTION" } });
   await prisma.testerAssignment.create({ data: { testerId: testers1[1].id, storyId: stories2[2].id, startDate: new Date("2026-03-02"), endDate: new Date("2026-04-08"), status: "EXECUTION", executionCycle: "Sprint 5-8 Ciclo 1" } });
   await prisma.testerAssignment.create({ data: { testerId: testers1[1].id, storyId: stories2[3].id, startDate: new Date("2026-03-10"), endDate: new Date("2026-04-20"), status: "RETURNED_TO_DEV", notes: "3 defectos criticos encontrados en regresion. Devuelto a desarrollo." } });
   await prisma.testerAssignment.create({ data: { testerId: testers1[1].id, storyId: stories2[4].id, startDate: new Date("2026-04-01"), endDate: new Date("2026-04-25"), status: "ANALYSIS" } });
 
-  // Maria Rodriguez: en UAT y esperando UAT
   await prisma.testerAssignment.create({ data: { testerId: testers1[2].id, storyId: stories1[2].id, startDate: new Date("2026-01-12"), endDate: new Date("2026-02-14"), status: "PRODUCTION" } });
   await prisma.testerAssignment.create({ data: { testerId: testers1[2].id, storyId: stories2[5].id, startDate: new Date("2026-03-05"), endDate: new Date("2026-04-12"), status: "UAT", notes: "En revision por el cliente" } });
   await prisma.testerAssignment.create({ data: { testerId: testers1[2].id, storyId: stories2[6].id, startDate: new Date("2026-03-20"), endDate: new Date("2026-04-18"), status: "WAITING_UAT" } });
 
-  // Pedro Sanchez: registrada y en analisis
   if (stories3.length > 0) {
     await prisma.testerAssignment.create({ data: { testerId: testers2[0].id, storyId: stories3[0].id, startDate: new Date("2026-02-02"), endDate: new Date("2026-04-15"), status: "EXECUTION", executionCycle: "Fase Inicial Ciclo 1" } });
   }
   if (stories3.length > 1) {
     await prisma.testerAssignment.create({ data: { testerId: testers2[0].id, storyId: stories3[1].id, startDate: new Date("2026-04-01"), endDate: new Date("2026-04-30"), status: "REGISTERED" } });
   }
-
-  // Carolina Diaz: una en produccion, una nueva registrada
   if (stories3.length > 2) {
     await prisma.testerAssignment.create({ data: { testerId: testers2[1].id, storyId: stories3[2].id, startDate: new Date("2026-02-02"), endDate: new Date("2026-03-10"), status: "PRODUCTION" } });
   }
@@ -285,10 +261,11 @@ async function main() {
   }
 
   console.log("Seed completado:");
+  console.log("- 16 feriados CL 2026");
   console.log("- 3 roles (ADMIN, QA_LEAD, QA_ANALYST) con permisos RBAC");
-  console.log("- 5 usuarios (admin@qametrics.com / QaMetrics2024!)");
-  console.log("- 2 clientes, 3 proyectos, 5 testers");
-  console.log("- 3 ciclos, 20 user stories, 60 weekly records");
+  console.log("- 7 usuarios (admin@qametrics.com / QaMetrics2024!, tester1@qametrics.com, tester2@qametrics.com)");
+  console.log("- 2 clientes, 3 proyectos, 5 testers (2 vinculados a users)");
+  console.log("- 3 ciclos, 20 user stories, 50 daily records, 3 cycle breakdowns");
   console.log("- 15 asignaciones con flujo realista de QA");
 }
 
