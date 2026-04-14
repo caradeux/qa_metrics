@@ -8,6 +8,12 @@ import { Modal } from "@/components/ui/Modal";
 import { STATUSES, statusMap, ComplexityBadge } from "@/components/stories/StatusBadge";
 
 interface TesterLite { id: string; name: string }
+interface AssignmentPhase {
+  id: string;
+  phase: "ANALYSIS" | "TEST_DESIGN" | "EXECUTION";
+  startDate: string;
+  endDate: string;
+}
 interface CycleAssignment {
   id: string;
   tester: TesterLite | null;
@@ -16,6 +22,7 @@ interface CycleAssignment {
   endDate: string | null;
   notes: string | null;
   daysInStatus: number | null;
+  phases?: AssignmentPhase[];
 }
 interface StoryCycle {
   id: string;
@@ -52,7 +59,8 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
   const [editStory, setEditStory] = useState<Story | null>(null);
   const [newStoryOpen, setNewStoryOpen] = useState(false);
   const [newCycleForStory, setNewCycleForStory] = useState<Story | null>(null);
-  const [assignToCycle, setAssignToCycle] = useState<{ story: Story; cycle: StoryCycle } | null>(null);
+  const [assignToCycle, setAssignToCycle] = useState<{ story: Story; cycle: StoryCycle; isFirstCycle: boolean } | null>(null);
+  const [editPhases, setEditPhases] = useState<{ assignmentId: string; phases: AssignmentPhase[] } | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -127,8 +135,9 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
               onEdit={() => setEditStory(story)}
               onDelete={() => deleteStory(story.id)}
               onNewCycle={() => setNewCycleForStory(story)}
-              onAssignToCycle={(cycle) => setAssignToCycle({ story, cycle })}
+              onAssignToCycle={(cycle, isFirstCycle) => setAssignToCycle({ story, cycle, isFirstCycle })}
               onChangeStatus={changeStatus}
+              onEditPhases={(assignmentId, phases) => setEditPhases({ assignmentId, phases })}
             />
           ))}
         </div>
@@ -160,13 +169,20 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
         onClose={() => setAssignToCycle(null)}
         onSaved={() => { setAssignToCycle(null); fetchData(); }}
       />
+      <EditPhasesModal
+        open={!!editPhases}
+        assignmentId={editPhases?.assignmentId}
+        initialPhases={editPhases?.phases ?? []}
+        onClose={() => setEditPhases(null)}
+        onSaved={() => { setEditPhases(null); fetchData(); }}
+      />
     </div>
   );
 }
 
 function StoryCard({
   story, canUpdate, canDelete, canCreateCycle, canAssign, canChangeStatus,
-  onEdit, onDelete, onNewCycle, onAssignToCycle, onChangeStatus,
+  onEdit, onDelete, onNewCycle, onAssignToCycle, onChangeStatus, onEditPhases,
 }: {
   story: Story;
   canUpdate: boolean;
@@ -177,9 +193,20 @@ function StoryCard({
   onEdit: () => void;
   onDelete: () => void;
   onNewCycle: () => void;
-  onAssignToCycle: (cycle: StoryCycle) => void;
+  onAssignToCycle: (cycle: StoryCycle, isFirstCycle: boolean) => void;
   onChangeStatus: (assignmentId: string, status: string) => void;
+  onEditPhases: (assignmentId: string, phases: AssignmentPhase[]) => void;
 }) {
+  // Determine first cycle chronologically (by startDate; fallback to order in array)
+  const firstCycleId = (() => {
+    if (story.cycles.length === 0) return null;
+    const withDates = story.cycles.filter(c => c.startDate);
+    if (withDates.length > 0) {
+      const sorted = [...withDates].sort((a, b) => (a.startDate! < b.startDate! ? -1 : 1));
+      return sorted[0].id;
+    }
+    return story.cycles[0].id;
+  })();
   const [expanded, setExpanded] = useState(true);
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
@@ -216,7 +243,7 @@ function StoryCard({
                     <span className="text-[10px] text-gray-400">· {cycle.assignments.length} asignacion(es)</span>
                   </div>
                   {canAssign && (
-                    <button onClick={() => onAssignToCycle(cycle)} className="text-[11px] text-[#2E5FA3] hover:underline font-semibold">+ Asignar tester</button>
+                    <button onClick={() => onAssignToCycle(cycle, cycle.id === firstCycleId)} className="text-[11px] text-[#2E5FA3] hover:underline font-semibold">+ Asignar tester</button>
                   )}
                 </div>
                 {cycle.assignments.length > 0 && (
@@ -227,6 +254,7 @@ function StoryCard({
                         <th className="px-3 py-1.5 text-left font-medium">Estado</th>
                         <th className="px-3 py-1.5 text-left font-medium">Inicio</th>
                         <th className="px-3 py-1.5 text-center font-medium">Dias</th>
+                        {cycle.id === firstCycleId && <th className="px-3 py-1.5 text-right font-medium">Fases</th>}
                       </tr>
                     </thead>
                     <tbody>
@@ -253,6 +281,16 @@ function StoryCard({
                             <td className={`px-3 py-1.5 text-center font-mono ${daysRed ? "text-red-600 font-bold" : "text-gray-500"}`}>
                               {days !== null ? `${days}d` : "-"}
                             </td>
+                            {cycle.id === firstCycleId && (
+                              <td className="px-3 py-1.5 text-right">
+                                <button
+                                  onClick={() => onEditPhases(a.id, a.phases ?? [])}
+                                  className="text-[10px] text-[#2E5FA3] hover:underline"
+                                >
+                                  {a.phases && a.phases.length > 0 ? "Editar fases" : "Agregar fases"}
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
@@ -446,27 +484,48 @@ function CycleFormModal({
   );
 }
 
+const PHASE_META: Record<"ANALYSIS" | "TEST_DESIGN" | "EXECUTION", { label: string; color: string }> = {
+  ANALYSIS: { label: "Análisis", color: "#8b5cf6" },
+  TEST_DESIGN: { label: "Diseño de casos", color: "#2E5FA3" },
+  EXECUTION: { label: "Ejecución", color: "#0891b2" },
+};
+const PHASE_ORDER: ("ANALYSIS" | "TEST_DESIGN" | "EXECUTION")[] = ["ANALYSIS", "TEST_DESIGN", "EXECUTION"];
+
 function AssignToCycleModal({
   open, onClose, entry, testers, onSaved,
 }: {
   open: boolean;
   onClose: () => void;
-  entry?: { story: Story; cycle: StoryCycle };
+  entry?: { story: Story; cycle: StoryCycle; isFirstCycle: boolean };
   testers: TesterLite[];
   onSaved: () => void;
 }) {
   const [testerId, setTesterId] = useState("");
   const [status, setStatus] = useState("REGISTERED");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
+  const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [phases, setPhases] = useState<Record<string, { start: string; end: string }>>({
+    ANALYSIS: { start: "", end: "" },
+    TEST_DESIGN: { start: "", end: "" },
+    EXECUTION: { start: "", end: "" },
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const isFirstCycle = entry?.isFirstCycle ?? false;
 
   useEffect(() => {
     if (open) {
       setTesterId(""); setStatus("REGISTERED");
       setStartDate(new Date().toISOString().split("T")[0]);
+      setEndDate("");
       setNotes(""); setError("");
+      setPhases({
+        ANALYSIS: { start: "", end: "" },
+        TEST_DESIGN: { start: "", end: "" },
+        EXECUTION: { start: "", end: "" },
+      });
     }
   }, [open]);
 
@@ -474,17 +533,38 @@ function AssignToCycleModal({
     if (!entry) return;
     if (!testerId) { setError("Tester obligatorio"); return; }
     setSaving(true); setError("");
+
+    const phasesPayload: { phase: string; startDate: string; endDate: string }[] = [];
+    if (isFirstCycle) {
+      for (const p of PHASE_ORDER) {
+        const v = phases[p];
+        if (v.start && v.end) {
+          phasesPayload.push({ phase: p, startDate: v.start, endDate: v.end });
+        } else if (v.start || v.end) {
+          setError(`Fase ${PHASE_META[p].label}: completa inicio y fin o déjala vacía`);
+          setSaving(false);
+          return;
+        }
+      }
+    }
+
     try {
+      const body: Record<string, unknown> = {
+        testerId,
+        storyId: entry.story.id,
+        cycleId: entry.cycle.id,
+        status,
+        notes: notes.trim() || null,
+      };
+      if (phasesPayload.length > 0) {
+        body.phases = phasesPayload;
+      } else {
+        body.startDate = new Date(startDate + "T00:00:00.000Z").toISOString();
+        body.endDate = endDate ? new Date(endDate + "T00:00:00.000Z").toISOString() : null;
+      }
       await apiClient(`/api/assignments`, {
         method: "POST",
-        body: JSON.stringify({
-          testerId,
-          storyId: entry.story.id,
-          cycleId: entry.cycle.id,
-          status,
-          startDate: new Date(startDate).toISOString(),
-          notes: notes.trim() || null,
-        }),
+        body: JSON.stringify(body),
       });
       onSaved();
     } catch (e: any) {
@@ -503,18 +583,55 @@ function AssignToCycleModal({
             {testers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Estado inicial</label>
-            <select value={status} onChange={e => setStatus(e.target.value)} className={inp}>
-              {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Fecha de inicio</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inp} />
-          </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Estado inicial</label>
+          <select value={status} onChange={e => setStatus(e.target.value)} className={inp}>
+            {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
         </div>
+
+        {isFirstCycle ? (
+          <div className="space-y-2 pt-1">
+            <p className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Planificación por fases (Ciclo 1)</p>
+            {PHASE_ORDER.map(p => (
+              <div key={p} className="border border-gray-200 rounded-lg p-2.5">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: PHASE_META[p].color }} />
+                  <span className="text-xs font-semibold text-gray-700">{PHASE_META[p].label}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="date"
+                    value={phases[p].start}
+                    onChange={e => setPhases(prev => ({ ...prev, [p]: { ...prev[p], start: e.target.value } }))}
+                    className={inp}
+                    placeholder="Inicio"
+                  />
+                  <input
+                    type="date"
+                    value={phases[p].end}
+                    onChange={e => setPhases(prev => ({ ...prev, [p]: { ...prev[p], end: e.target.value } }))}
+                    className={inp}
+                    placeholder="Fin"
+                  />
+                </div>
+              </div>
+            ))}
+            <p className="text-[10px] text-gray-400">Las fases deben ser días hábiles y no solaparse.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Fecha de inicio</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inp} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Fecha de término estimada</label>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inp} />
+            </div>
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Notas</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} className={`${inp} resize-none`} />
@@ -524,6 +641,104 @@ function AssignToCycleModal({
           <button type="button" onClick={onClose} className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200">Cancelar</button>
           <button type="button" onClick={save} disabled={saving} className="px-3 py-2 text-xs font-semibold text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] disabled:opacity-50">
             {saving ? "Guardando..." : "Asignar"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function EditPhasesModal({
+  open, onClose, assignmentId, initialPhases, onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  assignmentId?: string;
+  initialPhases: AssignmentPhase[];
+  onSaved: () => void;
+}) {
+  const [phases, setPhases] = useState<Record<string, { start: string; end: string }>>({
+    ANALYSIS: { start: "", end: "" },
+    TEST_DESIGN: { start: "", end: "" },
+    EXECUTION: { start: "", end: "" },
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      const base: Record<string, { start: string; end: string }> = {
+        ANALYSIS: { start: "", end: "" },
+        TEST_DESIGN: { start: "", end: "" },
+        EXECUTION: { start: "", end: "" },
+      };
+      for (const p of initialPhases) {
+        base[p.phase] = {
+          start: p.startDate.slice(0, 10),
+          end: p.endDate.slice(0, 10),
+        };
+      }
+      setPhases(base);
+      setError("");
+    }
+  }, [open, initialPhases]);
+
+  async function save() {
+    if (!assignmentId) return;
+    setSaving(true); setError("");
+    const payload: { phase: string; startDate: string; endDate: string }[] = [];
+    for (const p of PHASE_ORDER) {
+      const v = phases[p];
+      if (v.start && v.end) {
+        payload.push({ phase: p, startDate: v.start, endDate: v.end });
+      } else if (v.start || v.end) {
+        setError(`Fase ${PHASE_META[p].label}: completa inicio y fin o déjala vacía`);
+        setSaving(false);
+        return;
+      }
+    }
+    try {
+      await apiClient(`/api/assignments/${assignmentId}/phases`, {
+        method: "PUT",
+        body: JSON.stringify({ phases: payload }),
+      });
+      onSaved();
+    } catch (e: any) {
+      setError(e?.message || "Error al guardar");
+    } finally { setSaving(false); }
+  }
+
+  const inp = "w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#2E5FA3]";
+  return (
+    <Modal open={open} onClose={onClose} title="Editar fases (Ciclo 1)">
+      <div className="space-y-2">
+        {PHASE_ORDER.map(p => (
+          <div key={p} className="border border-gray-200 rounded-lg p-2.5">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: PHASE_META[p].color }} />
+              <span className="text-xs font-semibold text-gray-700">{PHASE_META[p].label}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="date"
+                value={phases[p].start}
+                onChange={e => setPhases(prev => ({ ...prev, [p]: { ...prev[p], start: e.target.value } }))}
+                className={inp}
+              />
+              <input
+                type="date"
+                value={phases[p].end}
+                onChange={e => setPhases(prev => ({ ...prev, [p]: { ...prev[p], end: e.target.value } }))}
+                className={inp}
+              />
+            </div>
+          </div>
+        ))}
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200">Cancelar</button>
+          <button type="button" onClick={save} disabled={saving} className="px-3 py-2 text-xs font-semibold text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] disabled:opacity-50">
+            {saving ? "Guardando..." : "Guardar"}
           </button>
         </div>
       </div>
