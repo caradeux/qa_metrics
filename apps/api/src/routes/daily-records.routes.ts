@@ -9,7 +9,6 @@ router.use(authMiddleware as any);
 
 const bulkSchema = z.object({
   testerId: z.string().cuid(),
-  cycleId: z.string().cuid(),
   days: z
     .array(
       z.object({
@@ -102,7 +101,7 @@ router.post("/bulk", async (req: AuthRequest, res: Response) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const { testerId, cycleId, days } = parsed.data;
+  const { testerId, days } = parsed.data;
   if (!(await canActOn(req, testerId))) {
     res.status(403).json({ error: "forbidden" });
     return;
@@ -131,14 +130,12 @@ router.post("/bulk", async (req: AuthRequest, res: Response) => {
         },
         create: {
           testerId,
-          cycleId,
           date: new Date(d.date + "T00:00:00"),
           designed: d.designed,
           executed: d.executed,
           defects: d.defects,
         },
         update: {
-          cycleId,
           designed: d.designed,
           executed: d.executed,
           defects: d.defects,

@@ -15,62 +15,11 @@ router.use(authMiddleware as any);
 
 interface DailyRow {
   testerId: string;
-  cycleId: string;
   date: Date;
   designed: number;
   executed: number;
   defects: number;
   tester?: { name: string };
-}
-
-interface BreakdownRow {
-  designedFunctional: number;
-  designedRegression: number;
-  designedSmoke: number;
-  designedExploratory: number;
-  executedFunctional: number;
-  executedRegression: number;
-  executedSmoke: number;
-  executedExploratory: number;
-  defectsCritical: number;
-  defectsHigh: number;
-  defectsMedium: number;
-  defectsLow: number;
-}
-
-function emptyBreakdown(): BreakdownRow {
-  return {
-    designedFunctional: 0,
-    designedRegression: 0,
-    designedSmoke: 0,
-    designedExploratory: 0,
-    executedFunctional: 0,
-    executedRegression: 0,
-    executedSmoke: 0,
-    executedExploratory: 0,
-    defectsCritical: 0,
-    defectsHigh: 0,
-    defectsMedium: 0,
-    defectsLow: 0,
-  };
-}
-
-function sumBreakdowns(list: BreakdownRow[]): BreakdownRow {
-  return list.reduce<BreakdownRow>((acc, b) => {
-    acc.designedFunctional += b.designedFunctional;
-    acc.designedRegression += b.designedRegression;
-    acc.designedSmoke += b.designedSmoke;
-    acc.designedExploratory += b.designedExploratory;
-    acc.executedFunctional += b.executedFunctional;
-    acc.executedRegression += b.executedRegression;
-    acc.executedSmoke += b.executedSmoke;
-    acc.executedExploratory += b.executedExploratory;
-    acc.defectsCritical += b.defectsCritical;
-    acc.defectsHigh += b.defectsHigh;
-    acc.defectsMedium += b.defectsMedium;
-    acc.defectsLow += b.defectsLow;
-    return acc;
-  }, emptyBreakdown());
 }
 
 function kpisFromDaily(records: DailyRow[]) {
@@ -141,7 +90,6 @@ router.get(
       const where: Record<string, unknown> = {
         tester: { projectId },
       };
-      if (cycleId) where.cycleId = cycleId;
       if (testerId) where.testerId = testerId;
       if (weekFrom || weekTo) {
         const dateRange: Record<string, Date> = {};
@@ -177,42 +125,17 @@ router.get(
 
       const testerSummary = testerSummaryFromDaily(records);
 
-      // Breakdowns — por ciclo filtrado
-      const projectIdStr = projectId as string;
-      const breakdownWhere: Record<string, unknown> = cycleId
-        ? { cycleId }
-        : { cycle: { projectId: projectIdStr } };
-      const breakdowns = (await prisma.cycleBreakdown.findMany({
-        where: breakdownWhere,
-      })) as unknown as BreakdownRow[];
-      const summed = sumBreakdowns(breakdowns);
-
+      // TODO: Case types y severity ahora requieren tracking por HU/ciclo — pendiente rediseno.
       const caseTypeDistribution = {
-        functional: {
-          designed: summed.designedFunctional,
-          executed: summed.executedFunctional,
-        },
-        regression: {
-          designed: summed.designedRegression,
-          executed: summed.executedRegression,
-        },
-        smoke: {
-          designed: summed.designedSmoke,
-          executed: summed.executedSmoke,
-        },
-        exploratory: {
-          designed: summed.designedExploratory,
-          executed: summed.executedExploratory,
-        },
+        functional: { designed: 0, executed: 0 },
+        regression: { designed: 0, executed: 0 },
+        smoke: { designed: 0, executed: 0 },
+        exploratory: { designed: 0, executed: 0 },
       };
-      const defectsBySeverity = {
-        critical: summed.defectsCritical,
-        high: summed.defectsHigh,
-        medium: summed.defectsMedium,
-        low: summed.defectsLow,
-      };
+      const defectsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
 
-      // Complexity distribution from UserStories (by executionComplexity, at project level)
+      // Complexity distribution from UserStories
+      const projectIdStr = projectId as string;
       const storyWhere: Record<string, unknown> = { projectId: projectIdStr };
       if (cycleId) {
         // Filter stories that have at least one assignment in that cycle
@@ -231,35 +154,22 @@ router.get(
         low: stories.find((s) => s.executionComplexity === "LOW")?._count ?? 0,
       };
 
-      // Cycle comparison — KPIs por ciclo (todos los del proyecto)
+      // Cycle comparison — KPIs por ciclo (de todas las stories del proyecto)
+      // Los cycles ya no estan ligados al proyecto directamente; se obtienen via stories.
       const allCycles = await prisma.testCycle.findMany({
-        where: { projectId: projectIdStr },
+        where: { story: { projectId: projectIdStr } },
         select: { id: true, name: true },
       });
-      const allProjectRecords = (await prisma.dailyRecord.findMany({
-        where: { tester: { projectId: projectIdStr } },
-        select: {
-          cycleId: true,
-          designed: true,
-          executed: true,
-          defects: true,
-          testerId: true,
-          date: true,
-        },
-      })) as unknown as DailyRow[];
-
-      const recordsByCycle = new Map<string, DailyRow[]>();
-      for (const r of allProjectRecords) {
-        const arr = recordsByCycle.get(r.cycleId) ?? [];
-        arr.push(r);
-        recordsByCycle.set(r.cycleId, arr);
-      }
-
-      const cycleComparison = allCycles.map((cycle) => {
-        const cycleRecords = recordsByCycle.get(cycle.id) ?? [];
-        const stats = kpisFromDaily(cycleRecords);
-        return { cycleName: cycle.name, ...stats };
-      });
+      // DailyRecord ya no tiene cycleId, por lo que la comparacion por ciclo con
+      // datos de ejecucion diaria no es calculable sin una pasada por assignments.
+      // TODO: redisenar cycleComparison basandonos en assignments. Por ahora vacio.
+      const cycleComparison = allCycles.map((c) => ({
+        cycleName: c.name,
+        totalDesigned: 0,
+        totalExecuted: 0,
+        totalDefects: 0,
+        executionRatio: 0,
+      }));
 
       res.json({
         kpis,
@@ -339,19 +249,11 @@ router.get(
             where: { projectId: project.id },
           });
           const cycleCount = await prisma.testCycle.count({
-            where: { projectId: project.id },
+            where: { story: { projectId: project.id } },
           });
 
-          const breakdowns = (await prisma.cycleBreakdown.findMany({
-            where: { cycle: { projectId: project.id } },
-          })) as unknown as BreakdownRow[];
-          const summed = sumBreakdowns(breakdowns);
-          const defectsBySeverity = {
-            critical: summed.defectsCritical,
-            high: summed.defectsHigh,
-            medium: summed.defectsMedium,
-            low: summed.defectsLow,
-          };
+          // TODO: severity breakdown pendiente de redisenarlo sin CycleBreakdown
+          const defectsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
 
           const weekBuckets = aggregateDailyToWeekly(records);
 
@@ -385,22 +287,10 @@ router.get(
         projectCount: projectMetrics.length,
         testerCount: projectMetrics.reduce((s, p) => s + p.testerCount, 0),
         defectsBySeverity: {
-          critical: projectMetrics.reduce(
-            (s, p) => s + p.defectsBySeverity.critical,
-            0
-          ),
-          high: projectMetrics.reduce(
-            (s, p) => s + p.defectsBySeverity.high,
-            0
-          ),
-          medium: projectMetrics.reduce(
-            (s, p) => s + p.defectsBySeverity.medium,
-            0
-          ),
-          low: projectMetrics.reduce(
-            (s, p) => s + p.defectsBySeverity.low,
-            0
-          ),
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
         },
       };
       totals.ratio =

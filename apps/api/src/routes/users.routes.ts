@@ -12,8 +12,9 @@ router.use(authMiddleware as any);
 router.get("/", requirePermission("users", "read") as any, async (req: AuthRequest, res: Response) => {
   try {
     const roleFilter = req.query.role as string | undefined;
+    const minCapacity = req.query.minCapacity ? Number(req.query.minCapacity) : 0;
     const users = await prisma.user.findMany({
-      where: roleFilter ? { role: { name: roleFilter } } : undefined,
+      where: roleFilter ? { role: { name: roleFilter } } : {},
       select: {
         id: true,
         email: true,
@@ -21,10 +22,19 @@ router.get("/", requirePermission("users", "read") as any, async (req: AuthReque
         active: true,
         createdAt: true,
         role: { select: { id: true, name: true } },
+        testers: { select: { allocation: true } },
       },
       orderBy: { createdAt: "desc" },
     });
-    res.json(users);
+    const withCapacity = users.map(u => {
+      const used = u.testers.reduce((sum, t) => sum + t.allocation, 0);
+      const { testers, ...rest } = u;
+      return { ...rest, allocationUsed: used, allocationAvailable: 100 - used };
+    });
+    const filtered = minCapacity > 0
+      ? withCapacity.filter(u => u.allocationAvailable >= minCapacity)
+      : withCapacity;
+    res.json(filtered);
   } catch (err) {
     res.status(500).json({ error: "Error al obtener usuarios" });
   }

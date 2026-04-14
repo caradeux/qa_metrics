@@ -24,8 +24,6 @@ interface ValidRow {
   row: number;
   testerId: string;
   testerEmail: string;
-  cycleId: string;
-  cycleName: string;
   date: string;
   designed: number;
   executed: number;
@@ -70,16 +68,6 @@ async function validateAndResolve(
   const testerByEmail = new Map<string, (typeof testers)[number]>();
   for (const t of testers) {
     if (t.user?.email) testerByEmail.set(t.user.email.toLowerCase(), t);
-  }
-
-  const projectIds = [...new Set(testers.map((t) => t.projectId))];
-  const cycles = await prisma.testCycle.findMany({
-    where: { projectId: { in: projectIds } },
-    select: { id: true, name: true, projectId: true },
-  });
-  const cycleByProjectName = new Map<string, string>(); // key: projectId||name -> cycleId
-  for (const c of cycles) {
-    cycleByProjectName.set(`${c.projectId}||${c.name.toLowerCase()}`, c.id);
   }
 
   const allDates = rows
@@ -129,18 +117,6 @@ async function validateAndResolve(
       errors.push({ row: rowNum, error: "fecha corresponde a feriado" });
       return;
     }
-    if (!r.cycle_name) {
-      errors.push({ row: rowNum, error: "cycle_name vacio" });
-      return;
-    }
-    const cycleId = cycleByProjectName.get(`${tester.projectId}||${r.cycle_name.toLowerCase()}`);
-    if (!cycleId) {
-      errors.push({
-        row: rowNum,
-        error: `ciclo "${r.cycle_name}" no existe en el proyecto del tester`,
-      });
-      return;
-    }
     if (r.designed < 0 || r.executed < 0 || r.defects < 0) {
       errors.push({ row: rowNum, error: "valores negativos no permitidos" });
       return;
@@ -149,8 +125,6 @@ async function validateAndResolve(
       row: rowNum,
       testerId: tester.id,
       testerEmail: r.tester_email,
-      cycleId,
-      cycleName: r.cycle_name,
       date: r.date,
       designed: r.designed,
       executed: r.executed,
@@ -233,7 +207,6 @@ router.post("/import/confirm", async (req: AuthRequest, res: Response) => {
           },
           create: {
             testerId: r.testerId,
-            cycleId: r.cycleId,
             date: new Date(r.date + "T00:00:00"),
             designed: r.designed,
             executed: r.executed,
@@ -241,7 +214,6 @@ router.post("/import/confirm", async (req: AuthRequest, res: Response) => {
             source: "IMPORT",
           },
           update: {
-            cycleId: r.cycleId,
             designed: r.designed,
             executed: r.executed,
             defects: r.defects,

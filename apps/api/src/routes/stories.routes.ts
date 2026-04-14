@@ -44,6 +44,26 @@ async function enrichStory(story: any) {
     const lastLog = current.statusLogs?.[0];
     daysInStatus = daysSince(lastLog ? lastLog.changedAt : current.updatedAt);
   }
+  const cycles = (story.cycles || []).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    startDate: c.startDate,
+    endDate: c.endDate,
+    assignments: (c.assignments || []).map((a: any) => {
+      const lastLog = a.statusLogs?.[0];
+      const d = daysSince(lastLog ? lastLog.changedAt : a.updatedAt);
+      return {
+        id: a.id,
+        tester: a.tester,
+        status: a.status,
+        startDate: a.startDate,
+        endDate: a.endDate,
+        notes: a.notes,
+        daysInStatus: d,
+      };
+    }),
+  }));
+
   return {
     id: story.id,
     externalId: story.externalId,
@@ -52,6 +72,7 @@ async function enrichStory(story: any) {
     executionComplexity: story.executionComplexity,
     projectId: story.projectId,
     assignmentsCount: assignments.length,
+    cycles,
     currentAssignment: current
       ? {
           id: current.id,
@@ -79,6 +100,17 @@ const storyInclude = {
       },
     },
     orderBy: { createdAt: "desc" as const },
+  },
+  cycles: {
+    orderBy: { name: "asc" as const },
+    include: {
+      assignments: {
+        include: {
+          tester: { select: { id: true, name: true } },
+          statusLogs: { orderBy: { changedAt: "desc" as const }, take: 1 },
+        },
+      },
+    },
   },
 };
 
@@ -274,28 +306,7 @@ router.get(
       });
 
       const enriched = await Promise.all(stories.map(enrichStory));
-
-      const cycles = await prisma.testCycle.findMany({
-        where: { projectId },
-        orderBy: { startDate: "asc" },
-        select: { id: true, name: true, startDate: true, endDate: true },
-      });
-
-      const byCycleMap = new Map<string | null, { cycle: any; stories: any[] }>();
-      for (const c of cycles) byCycleMap.set(c.id, { cycle: c, stories: [] });
-      byCycleMap.set(null, { cycle: null, stories: [] });
-
-      for (const s of enriched) {
-        const cid = s.currentAssignment?.cycleId ?? null;
-        if (!byCycleMap.has(cid)) byCycleMap.set(cid, { cycle: s.currentAssignment?.cycle ?? null, stories: [] });
-        byCycleMap.get(cid)!.stories.push(s);
-      }
-
-      const byCycle = Array.from(byCycleMap.values()).filter(
-        (g) => g.cycle !== null || g.stories.length > 0
-      );
-
-      res.json({ projectId, byCycle });
+      res.json({ projectId, stories: enriched });
     } catch (err) {
       res.status(500).json({ error: "Error al obtener historias del proyecto" });
     }

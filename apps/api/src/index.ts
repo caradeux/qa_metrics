@@ -18,7 +18,6 @@ import metricsRoutes from "./routes/metrics.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
 import holidaysRoutes from "./routes/holidays.routes.js";
 import dailyRecordsRoutes from "./routes/daily-records.routes.js";
-import cycleBreakdownsRoutes from "./routes/cycle-breakdowns.routes.js";
 import recordsRoutes from "./routes/records.routes.js";
 import clientReportsRoutes from "./routes/client-reports.routes.js";
 import storiesRoutes from "./routes/stories.routes.js";
@@ -68,7 +67,6 @@ app.use("/api/reports", clientReportsRoutes);
 app.use("/api/holidays", holidaysRoutes);
 app.use("/api/daily-records", dailyRecordsRoutes);
 app.use("/api/records", recordsRoutes);
-app.use("/api", cycleBreakdownsRoutes);
 app.use("/api", storiesRoutes);
 
 // Health check
@@ -84,6 +82,8 @@ app.listen(env.PORT, () => {
 });
 
 export default app;
+
+
 
 
 

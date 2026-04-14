@@ -38,7 +38,8 @@ router.get("/", requirePermission("projects", "read") as any, async (req: AuthRe
         client: { select: { id: true, name: true } },
         projectManager: { select: { id: true, name: true, email: true } },
         testers: { select: { id: true, name: true, allocation: true }, orderBy: { name: "asc" } },
-        _count: { select: { cycles: true, testers: true, stories: true } },
+        _count: { select: { testers: true, stories: true } },
+        stories: { select: { _count: { select: { cycles: true } } } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -150,21 +151,24 @@ router.put("/:id", requirePermission("projects", "update") as any, async (req: A
 
     const existing = await prisma.project.findFirst({
       where: { id, client: { userId: req.user!.id } },
-      include: {
-        cycles: { include: { _count: { select: { records: true } } } },
-      },
+      include: { testers: { select: { id: true } } },
     });
     if (!existing) {
       res.status(404).json({ error: "Proyecto no encontrado" });
       return;
     }
 
-    // Block modality change if project has records
+    // Block modality change if project has daily records via any tester
     if (data.modality && data.modality !== existing.modality) {
-      const hasRecords = existing.cycles.some((c: any) => c._count.records > 0);
-      if (hasRecords) {
-        res.status(409).json({ error: "No se puede cambiar la modalidad: el proyecto tiene registros" });
-        return;
+      const testerIds = existing.testers.map((t) => t.id);
+      if (testerIds.length > 0) {
+        const hasRecords = await prisma.dailyRecord.count({
+          where: { testerId: { in: testerIds } },
+        });
+        if (hasRecords > 0) {
+          res.status(409).json({ error: "No se puede cambiar la modalidad: el proyecto tiene registros" });
+          return;
+        }
       }
     }
 

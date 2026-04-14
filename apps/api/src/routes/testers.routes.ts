@@ -8,17 +8,24 @@ import { ZodError } from "zod";
 const router = Router();
 router.use(authMiddleware as any);
 
-// GET /me — current authenticated user's tester profile
+// GET /me — current authenticated user's tester profiles (may be multiple across projects)
 router.get("/me", async (req: AuthRequest, res: Response) => {
-  const t = await prisma.tester.findFirst({
+  const testers = await prisma.tester.findMany({
     where: { userId: req.user!.id },
-    select: { id: true, projectId: true, name: true },
+    select: {
+      id: true,
+      projectId: true,
+      name: true,
+      allocation: true,
+      project: { select: { id: true, name: true, client: { select: { name: true } } } },
+    },
+    orderBy: { project: { name: "asc" } },
   });
-  if (!t) {
+  if (testers.length === 0) {
     res.status(404).json({ error: "not a tester" });
     return;
   }
-  res.json(t);
+  res.json(testers);
 });
 
 // GET /:id — fetch one tester (minimal, for week views)
@@ -100,10 +107,31 @@ router.post("/", requirePermission("testers", "create") as any, async (req: Auth
       return;
     }
 
+    const requestedAllocation = data.allocation ?? 100;
+    if (data.userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: data.userId },
+        include: { role: true, testers: { select: { allocation: true, projectId: true } } },
+      });
+      if (!user) { res.status(400).json({ error: "Usuario no encontrado" }); return; }
+      if (user.role.name !== "QA_ANALYST") { res.status(400).json({ error: "El usuario debe tener rol QA_ANALYST" }); return; }
+      const currentSum = user.testers.reduce((sum, t) => sum + t.allocation, 0);
+      if (user.testers.some(t => t.projectId === data.projectId)) {
+        res.status(409).json({ error: "Ese usuario ya está asignado a este proyecto" });
+        return;
+      }
+      if (currentSum + requestedAllocation > 100) {
+        res.status(409).json({ error: `Capacidad excedida: el usuario tiene ${currentSum}% asignado; quedan ${100 - currentSum}% disponibles` });
+        return;
+      }
+    }
+
     const tester = await prisma.tester.create({
       data: {
         name: data.name,
         projectId: data.projectId,
+        userId: data.userId ?? null,
+        allocation: requestedAllocation,
       },
     });
     res.status(201).json(tester);
@@ -132,7 +160,11 @@ router.put("/:id", requirePermission("testers", "update") as any, async (req: Au
 
     const tester = await prisma.tester.update({
       where: { id },
-      data: { name: data.name },
+      data: {
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.userId !== undefined ? { userId: data.userId } : {}),
+        ...(data.allocation !== undefined ? { allocation: data.allocation } : {}),
+      },
     });
     res.json(tester);
   } catch (err) {

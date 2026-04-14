@@ -2,22 +2,54 @@ import { Router, Response } from "express";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { createCycleSchema, updateCycleSchema } from "../validators/cycle.validator.js";
-import { isClientPm } from "../lib/access.js";
+import { isClientPm, clientPmProjectIds } from "../lib/access.js";
 import { ZodError } from "zod";
 
 const router = Router();
 router.use(authMiddleware as any);
 
-// GET / — list cycles, required ?projectId filter
+async function userCanAccessStory(req: AuthRequest, storyId: string): Promise<boolean> {
+  const story = await prisma.userStory.findUnique({
+    where: { id: storyId },
+    select: { projectId: true },
+  });
+  if (!story) return false;
+  if (isClientPm(req)) {
+    const ids = await clientPmProjectIds(req.user!.id);
+    return ids.includes(story.projectId);
+  }
+  const project = await prisma.project.findFirst({
+    where: { id: story.projectId, client: { userId: req.user!.id } },
+    select: { id: true },
+  });
+  return !!project;
+}
+
+// GET / — list cycles for a story (?storyId=X) or a project (?projectId=X — returns all cycles of project's stories)
 router.get("/", requirePermission("cycles", "read") as any, async (req: AuthRequest, res: Response) => {
   try {
+    const storyId = req.query.storyId as string | undefined;
     const projectId = req.query.projectId as string | undefined;
-    if (!projectId) {
-      res.status(400).json({ error: "projectId es requerido" });
+    if (!storyId && !projectId) {
+      res.status(400).json({ error: "storyId o projectId es requerido" });
       return;
     }
 
-    // Verify project belongs to user
+    if (storyId) {
+      if (!(await userCanAccessStory(req, storyId))) {
+        res.status(404).json({ error: "Historia no encontrada" });
+        return;
+      }
+      const cycles = await prisma.testCycle.findMany({
+        where: { storyId },
+        include: { _count: { select: { assignments: true } } },
+        orderBy: { name: "asc" },
+      });
+      res.json(cycles);
+      return;
+    }
+
+    // projectId path: check access
     const projectWhere: any = { id: projectId };
     if (isClientPm(req)) projectWhere.projectManagerId = req.user!.id;
     else projectWhere.client = { userId: req.user!.id };
@@ -26,12 +58,9 @@ router.get("/", requirePermission("cycles", "read") as any, async (req: AuthRequ
       res.status(404).json({ error: "Proyecto no encontrado" });
       return;
     }
-
     const cycles = await prisma.testCycle.findMany({
-      where: { projectId },
-      include: {
-        _count: { select: { records: true, assignments: true } },
-      },
+      where: { story: { projectId } },
+      include: { _count: { select: { assignments: true } } },
       orderBy: { name: "asc" },
     });
     res.json(cycles);
@@ -40,25 +69,21 @@ router.get("/", requirePermission("cycles", "read") as any, async (req: AuthRequ
   }
 });
 
-// POST / — create cycle
+// POST / — create cycle for a story
 router.post("/", requirePermission("cycles", "create") as any, async (req: AuthRequest, res: Response) => {
   try {
     if (isClientPm(req)) { res.status(403).json({ error: "Sin permiso" }); return; }
     const data = createCycleSchema.parse(req.body);
 
-    // Verify project belongs to user
-    const project = await prisma.project.findFirst({
-      where: { id: data.projectId, client: { userId: req.user!.id } },
-    });
-    if (!project) {
-      res.status(404).json({ error: "Proyecto no encontrado" });
+    if (!(await userCanAccessStory(req, data.storyId))) {
+      res.status(404).json({ error: "Historia no encontrada" });
       return;
     }
 
     const cycle = await prisma.testCycle.create({
       data: {
         name: data.name,
-        projectId: data.projectId,
+        storyId: data.storyId,
         startDate: data.startDate ? new Date(data.startDate) : null,
         endDate: data.endDate ? new Date(data.endDate) : null,
       },
@@ -80,7 +105,7 @@ router.put("/:id", requirePermission("cycles", "update") as any, async (req: Aut
     const data = updateCycleSchema.parse(req.body);
 
     const existing = await prisma.testCycle.findFirst({
-      where: { id, project: { client: { userId: req.user!.id } } },
+      where: { id, story: { project: { client: { userId: req.user!.id } } } },
     });
     if (!existing) {
       res.status(404).json({ error: "Ciclo no encontrado" });
@@ -105,21 +130,21 @@ router.put("/:id", requirePermission("cycles", "update") as any, async (req: Aut
   }
 });
 
-// DELETE /:id — delete (409 if has records)
+// DELETE /:id — delete (409 if has assignments)
 router.delete("/:id", requirePermission("cycles", "delete") as any, async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
 
     const existing = await prisma.testCycle.findFirst({
-      where: { id, project: { client: { userId: req.user!.id } } },
-      include: { _count: { select: { records: true } } },
+      where: { id, story: { project: { client: { userId: req.user!.id } } } },
+      include: { _count: { select: { assignments: true } } },
     });
     if (!existing) {
       res.status(404).json({ error: "Ciclo no encontrado" });
       return;
     }
-    if (existing._count.records > 0) {
-      res.status(409).json({ error: "No se puede eliminar: el ciclo tiene registros asociados" });
+    if (existing._count.assignments > 0) {
+      res.status(409).json({ error: "No se puede eliminar: el ciclo tiene asignaciones" });
       return;
     }
 

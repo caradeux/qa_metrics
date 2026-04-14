@@ -17,28 +17,11 @@ router.use(authMiddleware as any);
 
 interface DailyRowWithRelations {
   testerId: string;
-  cycleId: string;
   date: Date;
   designed: number;
   executed: number;
   defects: number;
   tester: { name: string };
-  cycle: { name: string };
-}
-
-interface BreakdownRow {
-  designedFunctional: number;
-  designedRegression: number;
-  designedSmoke: number;
-  designedExploratory: number;
-  executedFunctional: number;
-  executedRegression: number;
-  executedSmoke: number;
-  executedExploratory: number;
-  defectsCritical: number;
-  defectsHigh: number;
-  defectsMedium: number;
-  defectsLow: number;
 }
 
 function kpisFromDaily(
@@ -84,32 +67,18 @@ function testerSummaryFromDaily(records: DailyRowWithRelations[]) {
   }));
 }
 
-function defectsFromBreakdowns(list: BreakdownRow[]) {
-  return list.reduce(
-    (acc, b) => ({
-      critical: acc.critical + b.defectsCritical,
-      high: acc.high + b.defectsHigh,
-      medium: acc.medium + b.defectsMedium,
-      low: acc.low + b.defectsLow,
-    }),
-    { critical: 0, high: 0, medium: 0, low: 0 }
-  );
-}
-
 async function loadReportData(
   projectId: string,
-  cycleId?: string,
+  _cycleId?: string,
   testerId?: string
 ) {
   const where: Record<string, unknown> = { tester: { projectId } };
-  if (cycleId) where.cycleId = cycleId;
   if (testerId) where.testerId = testerId;
 
   const records = (await prisma.dailyRecord.findMany({
     where,
     include: {
       tester: { select: { name: true } },
-      cycle: { select: { name: true } },
     },
     orderBy: { date: "asc" },
   })) as unknown as DailyRowWithRelations[];
@@ -131,45 +100,26 @@ async function loadReportData(
   }));
   const testerSummary = testerSummaryFromDaily(records);
 
-  const breakdownWhere: Record<string, unknown> = cycleId
-    ? { cycleId }
-    : { cycle: { projectId } };
-  const breakdowns = (await prisma.cycleBreakdown.findMany({
-    where: breakdownWhere,
-  })) as unknown as BreakdownRow[];
-  const defectsBySeverity = defectsFromBreakdowns(breakdowns);
+  // TODO: defectsBySeverity pendiente de redisenarlo sin CycleBreakdown
+  const defectsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
 
   const allCycles = await prisma.testCycle.findMany({
-    where: { projectId },
+    where: { story: { projectId } },
     select: { id: true, name: true },
   });
-  const allProjectRecords = await prisma.dailyRecord.findMany({
-    where: { tester: { projectId } },
-    select: {
-      cycleId: true,
-      designed: true,
-      executed: true,
-      defects: true,
-    },
-  });
-  const byCycle = new Map<
-    string,
-    Array<{ designed: number; executed: number; defects: number }>
-  >();
-  for (const r of allProjectRecords) {
-    const arr = byCycle.get(r.cycleId) ?? [];
-    arr.push(r);
-    byCycle.set(r.cycleId, arr);
-  }
+  // DailyRecord ya no tiene cycleId — comparacion por ciclo no calculable sin join por assignments.
   const cycleComparison = allCycles.map((c) => ({
     cycleName: c.name,
-    ...kpisFromDaily(byCycle.get(c.id) ?? []),
+    totalDesigned: 0,
+    totalExecuted: 0,
+    totalDefects: 0,
+    executionRatio: 0,
   }));
 
   const dailyDetail: DailyDetailRow[] = records.map((r) => ({
     date: r.date.toISOString().split("T")[0],
     testerName: r.tester?.name ?? "Unknown",
-    cycleName: r.cycle?.name ?? "Unknown",
+    cycleName: "-",
     designed: r.designed,
     executed: r.executed,
     defects: r.defects,

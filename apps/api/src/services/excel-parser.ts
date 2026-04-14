@@ -3,7 +3,6 @@ import ExcelJS from "exceljs";
 export interface RawDailyRow {
   tester_email: string;
   date: string; // YYYY-MM-DD
-  cycle_name: string;
   designed: number;
   executed: number;
   defects: number;
@@ -12,7 +11,6 @@ export interface RawDailyRow {
 export const DAILY_HEADERS = [
   "tester_email",
   "date",
-  "cycle_name",
   "designed",
   "executed",
   "defects",
@@ -77,7 +75,6 @@ export async function parseDailyExcelFile(buffer: Buffer): Promise<RawDailyRow[]
     rows.push({
       tester_email: toString(obj.tester_email),
       date: toString(obj.date),
-      cycle_name: toString(obj.cycle_name),
       designed: toNumber(obj.designed),
       executed: toNumber(obj.executed),
       defects: toNumber(obj.defects),
@@ -110,7 +107,6 @@ export function parseDailyCsvFile(text: string): RawDailyRow[] {
     rows.push({
       tester_email: email,
       date,
-      cycle_name: get("cycle_name"),
       designed: toNumber(get("designed")),
       executed: toNumber(get("executed")),
       defects: toNumber(get("defects")),
@@ -125,7 +121,6 @@ export async function generateDailyTemplate(): Promise<Buffer> {
   ws.columns = [
     { header: "tester_email", key: "tester_email", width: 28 },
     { header: "date", key: "date", width: 14 },
-    { header: "cycle_name", key: "cycle_name", width: 20 },
     { header: "designed", key: "designed", width: 12 },
     { header: "executed", key: "executed", width: 12 },
     { header: "defects", key: "defects", width: 12 },
@@ -142,7 +137,6 @@ export async function generateDailyTemplate(): Promise<Buffer> {
   ws.addRow({
     tester_email: "tester@example.com",
     date: "2026-04-13",
-    cycle_name: "Ciclo 1",
     designed: 5,
     executed: 3,
     defects: 1,
