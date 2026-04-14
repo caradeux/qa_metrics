@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { createClientSchema, updateClientSchema } from "../validators/client.validator.js";
+import { isClientPm } from "../lib/access.js";
 import { ZodError } from "zod";
 
 const router = Router();
@@ -10,8 +11,11 @@ router.use(authMiddleware as any);
 // GET / — list clients for authenticated user
 router.get("/", requirePermission("clients", "read") as any, async (req: AuthRequest, res: Response) => {
   try {
+    const where = isClientPm(req)
+      ? { projects: { some: { projectManagerId: req.user!.id } } }
+      : { userId: req.user!.id };
     const clients = await prisma.client.findMany({
-      where: { userId: req.user!.id },
+      where,
       include: { _count: { select: { projects: true } } },
       orderBy: { createdAt: "desc" },
     });
@@ -24,6 +28,7 @@ router.get("/", requirePermission("clients", "read") as any, async (req: AuthReq
 // POST / — create client
 router.post("/", requirePermission("clients", "create") as any, async (req: AuthRequest, res: Response) => {
   try {
+    if (isClientPm(req)) { res.status(403).json({ error: "Sin permiso" }); return; }
     const data = createClientSchema.parse(req.body);
     const client = await prisma.client.create({
       data: {
@@ -44,6 +49,7 @@ router.post("/", requirePermission("clients", "create") as any, async (req: Auth
 // PUT /:id — update client
 router.put("/:id", requirePermission("clients", "update") as any, async (req: AuthRequest, res: Response) => {
   try {
+    if (isClientPm(req)) { res.status(403).json({ error: "Sin permiso" }); return; }
     const id = req.params.id as string;
     const data = updateClientSchema.parse(req.body);
 
@@ -72,6 +78,7 @@ router.put("/:id", requirePermission("clients", "update") as any, async (req: Au
 // DELETE /:id — delete client (409 if has projects)
 router.delete("/:id", requirePermission("clients", "delete") as any, async (req: AuthRequest, res: Response) => {
   try {
+    if (isClientPm(req)) { res.status(403).json({ error: "Sin permiso" }); return; }
     const id = req.params.id as string;
 
     const existing = await prisma.client.findFirst({

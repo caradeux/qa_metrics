@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { createTesterSchema, updateTesterSchema } from "../validators/tester.validator.js";
+import { isClientPm } from "../lib/access.js";
 import { ZodError } from "zod";
 
 const router = Router();
@@ -32,7 +33,16 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
     return;
   }
   const roleName = req.user?.role?.name;
-  if (
+  if (roleName === "CLIENT_PM") {
+    const own = await prisma.project.findFirst({
+      where: { id: tester.projectId, projectManagerId: req.user!.id },
+      select: { id: true },
+    });
+    if (!own) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+  } else if (
     roleName !== "ADMIN" &&
     roleName !== "QA_LEAD" &&
     tester.userId !== req.user!.id
@@ -54,9 +64,10 @@ router.get("/", requirePermission("testers", "read") as any, async (req: AuthReq
     }
 
     // Verify project belongs to user
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, client: { userId: req.user!.id } },
-    });
+    const projectWhere: any = { id: projectId };
+    if (isClientPm(req)) projectWhere.projectManagerId = req.user!.id;
+    else projectWhere.client = { userId: req.user!.id };
+    const project = await prisma.project.findFirst({ where: projectWhere });
     if (!project) {
       res.status(404).json({ error: "Proyecto no encontrado" });
       return;

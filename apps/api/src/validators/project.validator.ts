@@ -7,6 +7,7 @@ export const createProjectSchema = z.object({
   adoOrgUrl: z.string().optional(),
   adoProject: z.string().optional(),
   adoToken: z.string().optional(),
+  projectManagerId: z.string().nullable().optional(),
 });
 
 export const updateProjectSchema = createProjectSchema.partial().extend({

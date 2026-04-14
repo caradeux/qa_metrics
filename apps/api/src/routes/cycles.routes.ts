@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { createCycleSchema, updateCycleSchema } from "../validators/cycle.validator.js";
+import { isClientPm } from "../lib/access.js";
 import { ZodError } from "zod";
 
 const router = Router();
@@ -17,9 +18,10 @@ router.get("/", requirePermission("cycles", "read") as any, async (req: AuthRequ
     }
 
     // Verify project belongs to user
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, client: { userId: req.user!.id } },
-    });
+    const projectWhere: any = { id: projectId };
+    if (isClientPm(req)) projectWhere.projectManagerId = req.user!.id;
+    else projectWhere.client = { userId: req.user!.id };
+    const project = await prisma.project.findFirst({ where: projectWhere });
     if (!project) {
       res.status(404).json({ error: "Proyecto no encontrado" });
       return;
@@ -41,6 +43,7 @@ router.get("/", requirePermission("cycles", "read") as any, async (req: AuthRequ
 // POST / — create cycle
 router.post("/", requirePermission("cycles", "create") as any, async (req: AuthRequest, res: Response) => {
   try {
+    if (isClientPm(req)) { res.status(403).json({ error: "Sin permiso" }); return; }
     const data = createCycleSchema.parse(req.body);
 
     // Verify project belongs to user

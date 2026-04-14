@@ -29,6 +29,21 @@ async function canActOn(req: AuthRequest, testerId: string): Promise<boolean> {
   return tester?.userId === req.user?.id;
 }
 
+async function canReadTester(req: AuthRequest, testerId: string): Promise<boolean> {
+  const roleName = req.user?.role?.name;
+  if (roleName === "ADMIN" || roleName === "QA_LEAD") return true;
+  const tester = await prisma.tester.findUnique({ where: { id: testerId }, select: { userId: true, projectId: true } });
+  if (!tester) return false;
+  if (roleName === "CLIENT_PM") {
+    const p = await prisma.project.findFirst({
+      where: { id: tester.projectId, projectManagerId: req.user!.id },
+      select: { id: true },
+    });
+    return !!p;
+  }
+  return tester.userId === req.user?.id;
+}
+
 router.get("/", async (req: AuthRequest, res: Response) => {
   const parsed = z
     .object({
@@ -40,7 +55,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  if (!(await canActOn(req, parsed.data.testerId))) {
+  if (!(await canReadTester(req, parsed.data.testerId))) {
     res.status(403).json({ error: "forbidden" });
     return;
   }

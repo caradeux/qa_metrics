@@ -12,9 +12,12 @@ function isLeader(req: AuthRequest) {
   const r = req.user?.role?.name;
   return r === "ADMIN" || r === "QA_LEAD";
 }
+function isClientPmRole(req: AuthRequest) {
+  return req.user?.role?.name === "CLIENT_PM";
+}
 
 router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
-  if (!isLeader(req)) {
+  if (!isLeader(req) && !isClientPmRole(req)) {
     res.status(403).json({ error: "forbidden" });
     return;
   }
@@ -28,18 +31,19 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
   const monthsCount = parse.data.months;
 
   const clientIdParam = req.params.id as string;
+  const projectsFilter: any = isClientPmRole(req)
+    ? { where: { projectManagerId: req.user!.id }, include: { testers: { select: { id: true, name: true, projectId: true } } } }
+    : { include: { testers: { select: { id: true, name: true, projectId: true } } } };
   const client = await prisma.client.findUnique({
     where: { id: clientIdParam },
-    include: {
-      projects: {
-        include: {
-          testers: { select: { id: true, name: true, projectId: true } },
-        },
-      },
-    },
-  });
+    include: { projects: projectsFilter },
+  }) as any;
   if (!client) {
     res.status(404).json({ error: "client not found" });
+    return;
+  }
+  if (isClientPmRole(req) && client.projects.length === 0) {
+    res.status(403).json({ error: "forbidden" });
     return;
   }
 
@@ -59,8 +63,8 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
     });
   }
 
-  const projectIds = client.projects.map((p) => p.id);
-  const testerIds = client.projects.flatMap((p) => p.testers.map((t) => t.id));
+  const projectIds = client.projects.map((p: any) => p.id);
+  const testerIds = client.projects.flatMap((p: any) => p.testers.map((t: any) => t.id));
 
   const records =
     testerIds.length > 0
@@ -83,8 +87,8 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
       : [];
 
   const testerProject = new Map<string, string>();
-  for (const p of client.projects)
-    for (const t of p.testers) testerProject.set(t.id, p.id);
+  for (const p of client.projects as any[])
+    for (const t of p.testers as any[]) testerProject.set(t.id, p.id);
 
   type Agg = {
     designed: number;
@@ -104,7 +108,7 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
   );
   const byProjectMonth: Record<string, Record<string, Agg>> =
     Object.fromEntries(
-      projectIds.map((pid) => [
+      projectIds.map((pid: string) => [
         pid,
         Object.fromEntries(buckets.map((b) => [b.key, makeAgg()])),
       ])
@@ -136,7 +140,7 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
     });
 
   const byProjectSeries = (field: "designed" | "executed" | "defects") =>
-    client.projects.map((p) => ({
+    client.projects.map((p: any) => ({
       project: p.name,
       values: buckets.map((b) => byProjectMonth[p.id]![b.key]![field]),
     }));
@@ -152,9 +156,9 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
     executedAverage: { months, values: avgValues("executed") },
     defectsTotal: { months, values: totalValues("defects") },
     defectsByProject: byProjectSeries("defects"),
-    analysts: client.projects.map((p) => ({
+    analysts: client.projects.map((p: any) => ({
       project: p.name,
-      testers: p.testers.map((t) => t.name),
+      testers: p.testers.map((t: any) => t.name),
     })),
   });
 });

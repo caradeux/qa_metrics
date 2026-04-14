@@ -11,7 +11,9 @@ router.use(authMiddleware as any);
 // GET / — list all users (exclude password)
 router.get("/", requirePermission("users", "read") as any, async (req: AuthRequest, res: Response) => {
   try {
+    const roleFilter = req.query.role as string | undefined;
     const users = await prisma.user.findMany({
+      where: roleFilter ? { role: { name: roleFilter } } : undefined,
       select: {
         id: true,
         email: true,

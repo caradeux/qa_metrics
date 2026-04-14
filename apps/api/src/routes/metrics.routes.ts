@@ -6,6 +6,7 @@ import {
   type AuthRequest,
 } from "../middleware/auth.js";
 import { aggregateDailyToWeekly } from "../services/metrics.service.js";
+import { isClientPm } from "../lib/access.js";
 import { addDays } from "date-fns";
 import { z } from "zod";
 
@@ -124,6 +125,17 @@ router.get(
       if (!projectId) {
         res.status(400).json({ error: "projectId es obligatorio" });
         return;
+      }
+
+      if (isClientPm(req)) {
+        const owned = await prisma.project.findFirst({
+          where: { id: projectId as string, projectManagerId: req.user!.id },
+          select: { id: true },
+        });
+        if (!owned) {
+          res.status(403).json({ error: "Sin acceso a este proyecto" });
+          return;
+        }
       }
 
       const where: Record<string, unknown> = {
@@ -285,10 +297,17 @@ router.get(
         return;
       }
 
+      const projectsWhere: any = { clientId: clientId as string };
+      if (isClientPm(req)) projectsWhere.projectManagerId = req.user!.id;
       const projects = await prisma.project.findMany({
-        where: { clientId: clientId as string },
+        where: projectsWhere,
         select: { id: true, name: true, modality: true },
       });
+
+      if (isClientPm(req) && projects.length === 0) {
+        res.status(403).json({ error: "Sin acceso a este cliente" });
+        return;
+      }
 
       const projectMetrics = await Promise.all(
         projects.map(async (project) => {

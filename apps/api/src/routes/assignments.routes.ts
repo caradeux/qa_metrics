@@ -10,6 +10,7 @@ import {
   updateAssignmentSchema,
 } from "../validators/assignment.validator.js";
 import { ZodError } from "zod";
+import { isClientPm, clientPmProjectIds } from "../lib/access.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -24,6 +25,15 @@ router.get(
 
       const where: Record<string, unknown> = {};
       if (projectId) where.tester = { projectId };
+
+      if (isClientPm(req)) {
+        const ids = await clientPmProjectIds(req.user!.id);
+        if (projectId && !ids.includes(projectId as string)) {
+          res.status(403).json({ error: "Sin acceso" });
+          return;
+        }
+        where.tester = { projectId: projectId ? projectId : { in: ids } };
+      }
 
       const assignments = await prisma.testerAssignment.findMany({
         where,
