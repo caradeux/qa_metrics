@@ -10,6 +10,7 @@ import ComplexityDistribution from "@/components/dashboard/ComplexityDistributio
 import TesterSummaryTable from "@/components/dashboard/TesterSummaryTable";
 import CycleComparison from "@/components/dashboard/CycleComparison";
 import DashboardFilters from "@/components/dashboard/DashboardFilters";
+import { DailyActivityChart } from "@/components/dashboard/DailyActivityChart";
 import { apiClient } from "@/lib/api-client";
 
 interface Project {
@@ -216,6 +217,9 @@ export default function ProjectDashboard({ params }: { params: Promise<{ project
         <div className="space-y-6">
           {/* KPI Cards */}
           <KPICards kpis={metrics.kpis} />
+
+          {/* Daily Activity (L-V) */}
+          <DailyActivityChart projectId={projectId} />
 
           {/* Weekly Trend - full width */}
           <div

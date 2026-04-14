@@ -6,6 +6,8 @@ import {
   type AuthRequest,
 } from "../middleware/auth.js";
 import { aggregateDailyToWeekly } from "../services/metrics.service.js";
+import { addDays } from "date-fns";
+import { z } from "zod";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -390,6 +392,58 @@ router.get(
     } catch (err) {
       res.status(500).json({ error: "Error al obtener metricas del cliente" });
     }
+  }
+);
+
+// GET /projects/:id/daily-activity — Mon–Fri aggregated daily activity for a week
+router.get(
+  "/projects/:id/daily-activity",
+  async (req: AuthRequest, res: Response) => {
+    const projectId = req.params.id as string;
+    const { weekStart } = req.query as { weekStart?: string };
+    const parse = z
+      .object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
+      .safeParse({ weekStart });
+    if (!parse.success) {
+      res.status(400).json({ error: parse.error.flatten() });
+      return;
+    }
+
+    const monday = new Date(parse.data.weekStart + "T00:00:00");
+    const friday = addDays(monday, 4);
+    const records = await prisma.dailyRecord.findMany({
+      where: {
+        date: { gte: monday, lte: friday },
+        tester: { projectId },
+      },
+      select: { date: true, designed: true, executed: true, defects: true },
+    });
+
+    const byDay = new Map<
+      string,
+      { designed: number; executed: number; defects: number }
+    >();
+    for (const r of records) {
+      const key = r.date.toISOString().slice(0, 10);
+      const cur = byDay.get(key) ?? { designed: 0, executed: 0, defects: 0 };
+      cur.designed += r.designed;
+      cur.executed += r.executed;
+      cur.defects += r.defects;
+      byDay.set(key, cur);
+    }
+    const days: Array<{
+      date: string;
+      designed: number;
+      executed: number;
+      defects: number;
+    }> = [];
+    for (let i = 0; i < 5; i++) {
+      const d = addDays(monday, i);
+      const key = d.toISOString().slice(0, 10);
+      const agg = byDay.get(key) ?? { designed: 0, executed: 0, defects: 0 };
+      days.push({ date: key, ...agg });
+    }
+    res.json({ weekStart: parse.data.weekStart, days });
   }
 );
 
