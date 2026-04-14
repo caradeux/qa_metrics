@@ -16,9 +16,9 @@ export default function LoginPage() {
   // If already authenticated, redirect to dashboard
   useEffect(() => {
     if (!authLoading && user) {
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     }
-  }, [authLoading, user, router]);
+  }, [authLoading, user]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,7 +27,8 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
+      return;
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);

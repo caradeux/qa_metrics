@@ -40,13 +40,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load user from localStorage on mount
     const stored = localStorage.getItem("user");
     const token = localStorage.getItem("accessToken");
-    if (stored && token) {
+    const hasCookie = document.cookie
+      .split(";")
+      .some((c) => c.trim().startsWith("auth-token="));
+
+    if (stored && token && hasCookie) {
       try {
         setUser(JSON.parse(stored));
       } catch {}
+    } else if (stored || token) {
+      localStorage.removeItem("user");
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
     }
     setLoading(false);
   }, []);
