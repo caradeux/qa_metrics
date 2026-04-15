@@ -48,6 +48,63 @@ interface ProjectDetail { id: string; name: string; client: { name: string } }
 const COMPLEXITIES = ["LOW", "MEDIUM", "HIGH"] as const;
 const complexityLabels: Record<string, string> = { LOW: "Baja", MEDIUM: "Media", HIGH: "Alta" };
 
+const PHASE_LABEL: Record<string, string> = { ANALYSIS: "Análisis", TEST_DESIGN: "Diseño", EXECUTION: "Ejecución" };
+
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+function daysBetween(startIso: string, endIso: string): number {
+  const s = new Date(startIso).getTime();
+  const e = new Date(endIso).getTime();
+  return Math.max(0, Math.floor((e - s) / 86400000) + 1);
+}
+
+function buildEstimationText(story: Story, projectName: string, clientName: string): string {
+  const lines: string[] = [];
+  lines.push(`HU: ${story.externalId ? `#${story.externalId} - ` : ""}${story.title}`);
+  lines.push(`Cliente: ${clientName}`);
+  lines.push(`Proyecto: ${projectName}`);
+  lines.push(`Complejidad diseño: ${complexityLabels[story.designComplexity] ?? story.designComplexity}`);
+  lines.push(`Complejidad ejecución: ${complexityLabels[story.executionComplexity] ?? story.executionComplexity}`);
+  lines.push("");
+
+  if (story.cycles.length === 0) {
+    lines.push("Sin ciclos definidos.");
+    return lines.join("\n");
+  }
+
+  for (const cycle of story.cycles) {
+    const rango = cycle.startDate ? ` (${fmtDate(cycle.startDate)} - ${fmtDate(cycle.endDate)})` : "";
+    lines.push(`${cycle.name}${rango}`);
+    if (cycle.assignments.length === 0) {
+      lines.push("  Sin asignaciones.");
+      lines.push("");
+      continue;
+    }
+    for (const a of cycle.assignments) {
+      const testerName = a.tester?.name ?? "Sin asignar";
+      const endForCalc = a.endDate ?? new Date().toISOString();
+      const dur = daysBetween(a.startDate, endForCalc);
+      lines.push(`  Tester: ${testerName}`);
+      lines.push(`  Rango: ${fmtDate(a.startDate)} → ${fmtDate(a.endDate)} (${dur} día${dur === 1 ? "" : "s"})`);
+      if (a.phases && a.phases.length > 0) {
+        lines.push(`  Fases:`);
+        const order: Record<string, number> = { ANALYSIS: 1, TEST_DESIGN: 2, EXECUTION: 3 };
+        const sorted = [...a.phases].sort((x, y) => (order[x.phase] ?? 9) - (order[y.phase] ?? 9));
+        for (const p of sorted) {
+          const pDur = daysBetween(p.startDate, p.endDate);
+          lines.push(`    - ${PHASE_LABEL[p.phase] ?? p.phase}: ${fmtDate(p.startDate)} → ${fmtDate(p.endDate)} (${pDur} día${pDur === 1 ? "" : "s"})`);
+        }
+      }
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
+}
+
 export default function ProjectStoriesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = use(params);
   const { can } = usePermissions();
@@ -147,6 +204,8 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
             <StoryCard
               key={story.id}
               story={story}
+              projectName={project?.name ?? ""}
+              clientName={project?.client?.name ?? ""}
               canUpdate={can("stories", "update")}
               canDelete={can("stories", "delete")}
               canCreateCycle={can("cycles", "create")}
@@ -237,10 +296,12 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
 }
 
 function StoryCard({
-  story, canUpdate, canDelete, canCreateCycle, canDeleteCycle, canAssign, canChangeStatus,
+  story, projectName, clientName, canUpdate, canDelete, canCreateCycle, canDeleteCycle, canAssign, canChangeStatus,
   onEdit, onDelete, onNewCycle, onDeleteCycle, onAssignToCycle, onChangeStatus, onEditPhases,
 }: {
   story: Story;
+  projectName: string;
+  clientName: string;
   canUpdate: boolean;
   canDelete: boolean;
   canCreateCycle: boolean;
@@ -266,6 +327,27 @@ function StoryCard({
     return story.cycles[0].id;
   })();
   const [expanded, setExpanded] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  async function copyEstimation() {
+    const text = buildEstimationText(story, projectName, clientName);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback: create a temporary textarea
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50/80 to-white">
@@ -278,6 +360,13 @@ function StoryCard({
           <span className="text-xs text-gray-400 ml-auto">{story.cycles.length} ciclo(s)</span>
         </button>
         <div className="flex items-center gap-2 ml-3">
+          <button
+            onClick={copyEstimation}
+            className={`text-xs hover:underline ${copied ? "text-green-600" : "text-gray-600"}`}
+            title="Copiar estimación de esta HU al portapapeles"
+          >
+            {copied ? "✓ Copiado" : "Copiar estimación"}
+          </button>
           {canUpdate && <button onClick={onEdit} className="text-xs text-[#2E5FA3] hover:underline">Editar</button>}
           {canDelete && <button onClick={onDelete} className="text-xs text-red-600 hover:underline">Eliminar</button>}
         </div>
