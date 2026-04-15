@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { apiClient } from "@/lib/api-client";
+import { StatusDurationCard } from "@/components/dashboard/StatusDurationCard";
 
 interface Client { id: string; name: string; _count: { projects: number }; }
 interface Project { id: string; name: string; modality: "MANUAL" | "AZURE_DEVOPS"; client: { id: string; name: string }; }
@@ -41,6 +42,14 @@ export default function DashboardPage() {
             Por Proyecto
           </button>
         </div>
+      </div>
+
+      {/* Vista global QA: lead time por estado cruzando todos los proyectos */}
+      <div className="mb-6">
+        <StatusDurationCard
+          title="Lead Time por Estado — Vista Global QA"
+          subtitle="Días promedio que una HU permanece en cada estado, agregado en todos los proyectos accesibles. Sirve para validar el desempeño del equipo QA como un todo."
+        />
       </div>
 
       {view === "clients" ? (

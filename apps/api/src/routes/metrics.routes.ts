@@ -6,7 +6,7 @@ import {
   type AuthRequest,
 } from "../middleware/auth.js";
 import { aggregateDailyToWeekly } from "../services/metrics.service.js";
-import { isClientPm, isAnalyst } from "../lib/access.js";
+import { isClientPm, isAnalyst, projectScopeFilter } from "../lib/access.js";
 import { addDays } from "date-fns";
 import { z } from "zod";
 
@@ -486,6 +486,121 @@ router.get(
         max: values.length > 0 ? values[values.length - 1] : null,
       },
       stories: items.sort((a, b) => (b.leadTimeDays ?? -1) - (a.leadTimeDays ?? -1)),
+    });
+  }
+);
+
+// GET /status-duration — tiempo promedio que las HUs permanecen en cada estado.
+// Query params:
+//   - projectId (opcional): si se pasa, limita al proyecto. Si no, agrega todos
+//     los proyectos accesibles para el usuario.
+router.get(
+  "/status-duration",
+  async (req: AuthRequest, res: Response) => {
+    const projectId = (req.query.projectId as string | undefined) || undefined;
+
+    const where: any = {};
+    if (projectId) {
+      where.story = { projectId };
+    } else {
+      // Scope a los proyectos accesibles
+      const scope = await projectScopeFilter(req);
+      where.story = { project: scope };
+    }
+
+    const assignments = await prisma.testerAssignment.findMany({
+      where,
+      select: {
+        createdAt: true,
+        status: true,
+        statusLogs: {
+          select: { status: true, changedAt: true },
+          orderBy: { changedAt: "asc" },
+        },
+      },
+    });
+
+    const DAY = 86400000;
+    const now = Date.now();
+    const TERMINAL = new Set(["PRODUCTION"]);
+
+    // Acumulamos tiempo por estado: map<status, { totalMs, intervals[] }>
+    const byStatus = new Map<string, { totalMs: number; intervals: number[]; entries: number }>();
+
+    function add(status: string, ms: number) {
+      if (ms <= 0) return;
+      const cur = byStatus.get(status) ?? { totalMs: 0, intervals: [], entries: 0 };
+      cur.totalMs += ms;
+      cur.intervals.push(ms);
+      cur.entries += 1;
+      byStatus.set(status, cur);
+    }
+
+    for (const a of assignments) {
+      // Construir la serie de eventos: inicial (createdAt, REGISTERED) + logs
+      const events: Array<{ at: number; status: string }> = [
+        { at: new Date(a.createdAt).getTime(), status: "REGISTERED" },
+        ...a.statusLogs.map((l) => ({ at: new Date(l.changedAt).getTime(), status: l.status as string })),
+      ];
+      // Deduplicar eventos consecutivos con mismo status
+      const compacted: Array<{ at: number; status: string }> = [];
+      for (const e of events) {
+        const last = compacted[compacted.length - 1];
+        if (!last || last.status !== e.status) compacted.push(e);
+      }
+
+      for (let i = 0; i < compacted.length - 1; i++) {
+        const cur = compacted[i]!;
+        const nxt = compacted[i + 1]!;
+        add(cur.status, nxt.at - cur.at);
+      }
+      // Tail: el último estado sigue vigente salvo que sea terminal
+      const last = compacted[compacted.length - 1];
+      if (last && !TERMINAL.has(last.status)) {
+        add(last.status, now - last.at);
+      }
+    }
+
+    function percentile(arr: number[], p: number): number | null {
+      if (arr.length === 0) return null;
+      const sorted = [...arr].sort((a, b) => a - b);
+      const idx = Math.ceil((p / 100) * sorted.length) - 1;
+      return sorted[Math.max(0, Math.min(sorted.length - 1, idx))] ?? null;
+    }
+
+    const rows = [...byStatus.entries()].map(([status, v]) => ({
+      status,
+      avgDays: v.intervals.length > 0 ? Math.round((v.totalMs / v.intervals.length / DAY) * 10) / 10 : 0,
+      p50Days: v.intervals.length > 0 ? Math.round(((percentile(v.intervals, 50) ?? 0) / DAY) * 10) / 10 : 0,
+      p90Days: v.intervals.length > 0 ? Math.round(((percentile(v.intervals, 90) ?? 0) / DAY) * 10) / 10 : 0,
+      totalDays: Math.round((v.totalMs / DAY) * 10) / 10,
+      entries: v.entries,
+    }));
+
+    // Orden definido (pipeline lógico) + resto al final
+    const ORDER = [
+      "REGISTERED",
+      "ANALYSIS",
+      "TEST_DESIGN",
+      "WAITING_QA_DEPLOY",
+      "EXECUTION",
+      "RETURNED_TO_DEV",
+      "WAITING_UAT",
+      "UAT",
+      "ON_HOLD",
+      "PRODUCTION",
+    ];
+    rows.sort((a, b) => {
+      const ai = ORDER.indexOf(a.status);
+      const bi = ORDER.indexOf(b.status);
+      return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+    });
+
+    res.json({
+      scope: projectId ? "project" : "global",
+      projectId: projectId ?? null,
+      assignmentsCount: assignments.length,
+      statuses: rows,
     });
   }
 );

@@ -12,6 +12,7 @@ import CycleComparison from "@/components/dashboard/CycleComparison";
 import DashboardFilters from "@/components/dashboard/DashboardFilters";
 import { DailyActivityChart } from "@/components/dashboard/DailyActivityChart";
 import { LeadTimeCard } from "@/components/dashboard/LeadTimeCard";
+import { StatusDurationCard } from "@/components/dashboard/StatusDurationCard";
 import { apiClient } from "@/lib/api-client";
 
 interface Project {
@@ -232,6 +233,9 @@ export default function ProjectDashboard({ params }: { params: Promise<{ project
 
           {/* Lead Time por HU */}
           <LeadTimeCard projectId={projectId} />
+
+          {/* Lead Time por Estado */}
+          <StatusDurationCard projectId={projectId} />
 
           {/* Weekly Trend - full width */}
           <div
