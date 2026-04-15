@@ -127,15 +127,24 @@ function KPICard({
   icon,
   accent,
   trend,
+  subtitle,
+  hint,
+  suffix,
 }: {
   title: string;
   value: number;
   icon: React.ReactNode;
   accent: string;
   trend?: { delta: number; period: string };
+  subtitle?: string;
+  hint?: string;
+  suffix?: string;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md print:shadow-none">
+    <div
+      title={hint}
+      className="relative overflow-hidden rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md print:shadow-none"
+    >
       <div
         className="absolute right-0 top-0 h-24 w-24 -translate-y-8 translate-x-8 rounded-full opacity-10"
         style={{ backgroundColor: accent }}
@@ -148,10 +157,18 @@ function KPICard({
           {icon}
         </span>
         <div className="flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">{title}</p>
-          <p className="font-mono text-2xl font-bold tabular-nums" style={{ color: accent }}>
-            {value.toLocaleString("es-CL")}
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 flex items-center gap-1">
+            {title}
+            {hint && (
+              <svg className="w-3 h-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
           </p>
+          <p className="font-mono text-2xl font-bold tabular-nums" style={{ color: accent }}>
+            {value.toLocaleString("es-CL")}{suffix ?? ""}
+          </p>
+          {subtitle && <p className="text-[10px] text-gray-400">{subtitle}</p>}
           {trend && (
             <p className="text-[10px] text-gray-400">
               {trend.delta >= 0 ? "▲" : "▼"} {Math.abs(trend.delta)}% vs {trend.period}
@@ -390,12 +407,36 @@ export function ClientMonthlyReport({
 
       {/* KPIs */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <KPICard title="Total Diseñados" value={totals.designed} icon={ICONS.designed} accent={METRIC.designed.color} />
-        <KPICard title="Total Ejecutados" value={totals.executed} icon={ICONS.executed} accent={METRIC.executed.color} />
-        <KPICard title="Total Defectos" value={totals.defects} icon={ICONS.defects} accent={METRIC.defects.color} />
+        <KPICard
+          title="Total Diseñados"
+          value={totals.designed}
+          icon={ICONS.designed}
+          accent={METRIC.designed.color}
+          subtitle="Casos de prueba creados"
+          hint="Total de casos de prueba que se diseñaron en el período del reporte."
+        />
+        <KPICard
+          title="Total Ejecutados"
+          value={totals.executed}
+          icon={ICONS.executed}
+          accent={METRIC.executed.color}
+          subtitle="Casos de prueba ejecutados"
+          hint="Casos ejecutados (corridos) por los testers en el período del reporte."
+        />
+        <KPICard
+          title="Total Defectos"
+          value={totals.defects}
+          icon={ICONS.defects}
+          accent={METRIC.defects.color}
+          subtitle="Bugs detectados"
+          hint="Incidencias o defectos reportados por los testers en el período."
+        />
         <KPICard
           title="Ratio Ejec./Dis."
           value={ratio}
+          suffix="%"
+          subtitle="Ejecutados ÷ Diseñados × 100"
+          hint="Porcentaje de cobertura: qué parte de los casos diseñados ya fueron ejecutados. 100% significa que todos los casos diseñados corrieron al menos una vez."
           icon={
             <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />

@@ -15,7 +15,8 @@ export default function KPICards({ kpis }: KPICardsProps) {
       label: "Diseñados",
       value: kpis.totalDesigned,
       color: "#2E5FA3",
-      context: "Casos de prueba totales",
+      context: "Casos de prueba creados en el período",
+      hint: "Total de casos de prueba que se diseñaron durante el rango seleccionado.",
       icon: (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -26,7 +27,8 @@ export default function KPICards({ kpis }: KPICardsProps) {
       label: "Ejecutados",
       value: kpis.totalExecuted,
       color: "#10b981",
-      context: "Casos completados",
+      context: "Casos de prueba ejecutados en el período",
+      hint: "Casos ejecutados (corridos) durante el rango seleccionado.",
       icon: (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -37,7 +39,8 @@ export default function KPICards({ kpis }: KPICardsProps) {
       label: "Defectos",
       value: kpis.totalDefects,
       color: "#ef4444",
-      context: "Incidencias registradas",
+      context: "Bugs detectados en el período",
+      hint: "Incidencias o defectos reportados por los testers en el rango seleccionado.",
       icon: (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -48,7 +51,8 @@ export default function KPICards({ kpis }: KPICardsProps) {
       label: "Ratio de Ejecución",
       value: kpis.executionRatio,
       color: "#8b5cf6",
-      context: "Cobertura de ejecución",
+      context: "Ejecutados ÷ Diseñados × 100",
+      hint: "Porcentaje de cobertura: cuántos casos diseñados ya fueron ejecutados. 100% = todos los casos fueron ejecutados al menos una vez.",
       isRatio: true,
       icon: (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -64,6 +68,7 @@ export default function KPICards({ kpis }: KPICardsProps) {
       {cards.map((card, index) => (
         <div
           key={card.label}
+          title={card.hint}
           className="bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-200 hover:translate-y-[-1px] overflow-hidden animate-fadeInUp"
           style={{
             borderLeft: `4px solid ${card.color}`,
@@ -72,8 +77,11 @@ export default function KPICards({ kpis }: KPICardsProps) {
         >
           <div className="p-4 flex flex-col gap-1.5">
             {/* Label */}
-            <span className="uppercase tracking-wider text-[11px] text-gray-400 font-medium">
+            <span className="uppercase tracking-wider text-[11px] text-gray-400 font-medium flex items-center gap-1">
               {card.label}
+              <svg className="w-3 h-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </span>
 
             {/* Value */}
