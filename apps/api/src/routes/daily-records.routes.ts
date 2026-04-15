@@ -3,7 +3,7 @@ import { z } from "zod";
 import { addDays, startOfDay } from "date-fns";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
-import { ACTIVE_STATUSES } from "../lib/assignment-states.js";
+import { ACTIVE_STATUSES, type AssignmentStatus } from "../lib/assignment-states.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -110,7 +110,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
 
   // Get assignments overlapping the week. By default ACTIVE statuses + RETURNED_TO_DEV
   // (returned HUs can still receive bug reports / late executions during the week).
-  const defaultStatuses = [...ACTIVE_STATUSES, "RETURNED_TO_DEV"];
+  const defaultStatuses: AssignmentStatus[] = [...ACTIVE_STATUSES, "RETURNED_TO_DEV"];
   const assignments = await prisma.testerAssignment.findMany({
     where: {
       testerId: parsed.data.testerId,
