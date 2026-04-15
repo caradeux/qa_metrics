@@ -111,11 +111,6 @@ router.put("/:id", requirePermission("roles", "update") as any, async (req: Auth
       res.status(404).json({ error: "Rol no encontrado" });
       return;
     }
-    if (existing.isSystem) {
-      res.status(403).json({ error: "No se puede modificar un rol de sistema" });
-      return;
-    }
-
     // Check name uniqueness if changing
     if (data.name && data.name !== existing.name) {
       const nameTaken = await prisma.role.findUnique({ where: { name: data.name } });

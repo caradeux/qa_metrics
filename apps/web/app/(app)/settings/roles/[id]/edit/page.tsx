@@ -42,7 +42,7 @@ export default function EditRolePage({ params }: { params: Promise<{ id: string 
       .catch((err) => { setError(err.message || "Error al cargar"); setLoaded(true); });
   }, [id]);
 
-  const disabled = !!role?.isSystem;
+  const disabled = false;
 
   function togglePerm(r: string, a: string) {
     if (disabled) return;
