@@ -461,9 +461,9 @@ export function ClientMonthlyReport({
                 onChange={(e) => onChangeWeeks(Number(e.target.value))}
                 className="rounded-md border border-white/20 bg-white/10 px-2 py-1 text-xs text-white backdrop-blur-sm focus:outline-none"
               >
-                {[4, 8, 12, 26].map((n) => (
+                {[1, 2, 4, 8, 12, 26].map((n) => (
                   <option key={n} value={n} className="text-gray-900">
-                    {n} semanas
+                    {n === 1 ? "1 semana (actual)" : `${n} semanas`}
                   </option>
                 ))}
               </select>
