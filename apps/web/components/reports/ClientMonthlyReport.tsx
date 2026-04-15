@@ -1,4 +1,5 @@
 "use client";
+import { useRef, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -11,6 +12,75 @@ import {
   LineChart,
   Line,
 } from "recharts";
+
+// Copia el primer <svg> encontrado dentro del contenedor como PNG al portapapeles.
+async function copyChartAsImage(container: HTMLElement | null): Promise<boolean> {
+  if (!container) return false;
+  const svg = container.querySelector("svg");
+  if (!svg) return false;
+  const rect = svg.getBoundingClientRect();
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  if (!clone.getAttribute("width")) clone.setAttribute("width", String(rect.width));
+  if (!clone.getAttribute("height")) clone.setAttribute("height", String(rect.height));
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bg.setAttribute("width", "100%");
+  bg.setAttribute("height", "100%");
+  bg.setAttribute("fill", "#ffffff");
+  clone.insertBefore(bg, clone.firstChild);
+  const xml = new XMLSerializer().serializeToString(clone);
+  const svg64 = btoa(unescape(encodeURIComponent(xml)));
+  const imgSrc = `data:image/svg+xml;base64,${svg64}`;
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("img load"));
+    img.src = imgSrc;
+  });
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(rect.width * scale);
+  canvas.height = Math.ceil(rect.height * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return false;
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, 0, 0, rect.width, rect.height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob((b) => resolve(b), "image/png"));
+  if (!blob) return false;
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    return true;
+  } catch {
+    // Fallback: abrir en nueva pestaña para que el usuario la copie manualmente
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    return true;
+  }
+}
+
+function CopyChartButton({ targetRef }: { targetRef: React.RefObject<HTMLDivElement | null> }) {
+  const [state, setState] = useState<"idle" | "copied" | "error">("idle");
+  async function onClick() {
+    const ok = await copyChartAsImage(targetRef.current);
+    setState(ok ? "copied" : "error");
+    setTimeout(() => setState("idle"), 2000);
+  }
+  return (
+    <button
+      onClick={onClick}
+      title="Copiar gráfico como imagen al portapapeles"
+      className={`absolute right-3 top-3 inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[10px] font-semibold transition ${
+        state === "copied" ? "border-green-300 bg-green-50 text-green-700" :
+        state === "error" ? "border-red-300 bg-red-50 text-red-700" :
+        "border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:text-gray-800"
+      }`}
+    >
+      {state === "copied" ? "✓ Copiado" : state === "error" ? "Error" : "Copiar gráfico"}
+    </button>
+  );
+}
 
 // Paleta temática por métrica (coherente con WeeklyGrid)
 const METRIC = {
@@ -195,8 +265,10 @@ function SingleBarCard({
 }) {
   const m = METRIC[metric];
   const gradId = `grad-${metric}-${title.replace(/\s+/g, "-")}`;
+  const ref = useRef<HTMLDivElement>(null);
   return (
-    <div className="rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md print:shadow-none">
+    <div ref={ref} className="relative rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md print:shadow-none">
+      <CopyChartButton targetRef={ref} />
       <SectionTitle icon={icon ?? ICONS[metric]} title={title} subtitle={subtitle} />
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={singleSeries(data)} margin={{ top: 20, right: 8, left: -10, bottom: 0 }}>
@@ -234,8 +306,10 @@ function AverageLineCard({
   data: SeriesTotal;
   color: string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
   return (
-    <div className="rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md print:shadow-none">
+    <div ref={ref} className="relative rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md print:shadow-none">
+      <CopyChartButton targetRef={ref} />
       <SectionTitle icon={ICONS.average} title={title} subtitle={subtitle} />
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={singleSeries(data)} margin={{ top: 20, right: 12, left: -10, bottom: 0 }}>
@@ -272,8 +346,10 @@ function GroupedBarCard({
   series: SeriesByProject[];
   icon: React.ReactNode;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
   return (
-    <div className="rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md print:shadow-none">
+    <div ref={ref} className="relative rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md print:shadow-none">
+      <CopyChartButton targetRef={ref} />
       <SectionTitle icon={icon} title={title} subtitle={subtitle} />
       <ResponsiveContainer width="100%" height={280}>
         <BarChart data={multiSeries(labels, series)} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
@@ -392,15 +468,6 @@ export function ClientMonthlyReport({
                 ))}
               </select>
             )}
-            <button
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-white/20"
-            >
-              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-              </svg>
-              Imprimir / PDF
-            </button>
           </div>
         </div>
       </div>
