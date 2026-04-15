@@ -4,30 +4,45 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 
-interface User { id: string; email: string; name: string; role: string; }
+interface Role { id: string; name: string }
+interface User { id: string; email: string; name: string; role: Role | string | null }
 
-const ROLE_OPTS = [
-  { value: "ADMIN", label: "Administrador", desc: "Acceso total", icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" },
-  { value: "QA_LEAD", label: "Jefe QA", desc: "Gestion y reportes", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
-  { value: "QA_ANALYST", label: "Analista QA", desc: "Registro de datos", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
-] as const;
+const ROLE_META: Record<string, { label: string; desc: string; icon: string }> = {
+  ADMIN: { label: "Administrador", desc: "Acceso total", icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" },
+  QA_LEAD: { label: "Jefe QA", desc: "Gestion y reportes", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
+  QA_ANALYST: { label: "Analista QA", desc: "Registro de datos", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
+  CLIENT_PM: { label: "Jefe Cliente", desc: "Solo ver proyectos", icon: "M12 4v16m8-8H4" },
+};
+
+const FALLBACK_ICON = ROLE_META.QA_ANALYST.icon;
 
 export default function EditUserPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState("QA_ANALYST");
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [roleId, setRoleId] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    apiClient<User[]>("/api/users")
-      .then((list) => {
-        const u = list.find((x) => x.id === id);
-        if (u) { setName(u.name); setEmail(u.email); setRole(u.role); }
-        else setError("Usuario no encontrado");
+    Promise.all([
+      apiClient<User[]>("/api/users"),
+      apiClient<Role[]>("/api/roles"),
+    ])
+      .then(([users, rs]) => {
+        setRoles(rs);
+        const u = users.find((x) => x.id === id);
+        if (u) {
+          setName(u.name);
+          setEmail(u.email);
+          const currentRoleId = typeof u.role === "object" && u.role ? u.role.id : rs.find((r) => r.name === u.role)?.id ?? "";
+          setRoleId(currentRoleId);
+        } else {
+          setError("Usuario no encontrado");
+        }
         setLoaded(true);
       })
       .catch((err) => { setError(err.message || "Error al cargar"); setLoaded(true); });
@@ -36,11 +51,12 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !email) { setError("Completa todos los campos"); return; }
+    if (!roleId) { setError("Selecciona un rol"); return; }
     setSaving(true); setError("");
     try {
       await apiClient(`/api/users/${id}`, {
         method: "PUT",
-        body: JSON.stringify({ name, email, role }),
+        body: JSON.stringify({ name, email, roleId }),
       });
       router.push("/users");
     } catch (err: any) {
@@ -68,15 +84,19 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-2">Rol</label>
-          <div className="grid grid-cols-3 gap-2">
-            {ROLE_OPTS.map((opt) => (
-              <button key={opt.value} type="button" onClick={() => setRole(opt.value)}
-                className={`p-3 rounded-lg border text-left transition-all ${role === opt.value ? "border-[#2E5FA3] bg-[#2E5FA3]/5 shadow-sm" : "border-gray-200 hover:border-gray-300"}`}>
-                <svg className={`w-5 h-5 mb-1.5 ${role === opt.value ? "text-[#2E5FA3]" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d={opt.icon} /></svg>
-                <p className={`text-[11px] font-semibold ${role === opt.value ? "text-[#2E5FA3]" : "text-gray-700"}`}>{opt.label}</p>
-                <p className="text-[9px] text-gray-400 mt-0.5">{opt.desc}</p>
-              </button>
-            ))}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {roles.map((r) => {
+              const meta = ROLE_META[r.name] ?? { label: r.name, desc: "", icon: FALLBACK_ICON };
+              const active = roleId === r.id;
+              return (
+                <button key={r.id} type="button" onClick={() => setRoleId(r.id)}
+                  className={`p-3 rounded-lg border text-left transition-all ${active ? "border-[#2E5FA3] bg-[#2E5FA3]/5 shadow-sm" : "border-gray-200 hover:border-gray-300"}`}>
+                  <svg className={`w-5 h-5 mb-1.5 ${active ? "text-[#2E5FA3]" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d={meta.icon} /></svg>
+                  <p className={`text-[11px] font-semibold ${active ? "text-[#2E5FA3]" : "text-gray-700"}`}>{meta.label}</p>
+                  <p className="text-[9px] text-gray-400 mt-0.5">{meta.desc}</p>
+                </button>
+              );
+            })}
           </div>
         </div>
         {error && <p className="text-sm text-danger">{error}</p>}

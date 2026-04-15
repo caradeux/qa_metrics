@@ -108,13 +108,15 @@ router.get("/", async (req: AuthRequest, res: Response) => {
 
   const includeIdle = req.query.includeIdle === "true";
 
-  // Get assignments overlapping the week. By default only ACTIVE statuses.
+  // Get assignments overlapping the week. By default ACTIVE statuses + RETURNED_TO_DEV
+  // (returned HUs can still receive bug reports / late executions during the week).
+  const defaultStatuses = [...ACTIVE_STATUSES, "RETURNED_TO_DEV"];
   const assignments = await prisma.testerAssignment.findMany({
     where: {
       testerId: parsed.data.testerId,
       startDate: { lte: friday },
       OR: [{ endDate: null }, { endDate: { gte: monday } }],
-      ...(includeIdle ? {} : { status: { in: [...ACTIVE_STATUSES] } }),
+      ...(includeIdle ? {} : { status: { in: defaultStatuses } }),
     },
     include: {
       story: { select: { id: true, title: true, externalId: true } },

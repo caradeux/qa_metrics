@@ -67,3 +67,5 @@ deploy/azure/.azure-credentials
 
 # Database snapshots (contienen hashes bcrypt de passwords)
 deploy/snapshots/*.json
+
+deploy/.env.production.secrets
