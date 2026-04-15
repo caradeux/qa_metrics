@@ -390,6 +390,106 @@ router.get(
   }
 );
 
+// GET /projects/:id/lead-time — lead time por HU (desde primera asignación hasta PRODUCTION)
+router.get(
+  "/projects/:id/lead-time",
+  async (req: AuthRequest, res: Response) => {
+    const projectId = req.params.id as string;
+
+    const stories = await prisma.userStory.findMany({
+      where: { projectId },
+      select: {
+        id: true,
+        externalId: true,
+        title: true,
+        assignments: {
+          select: {
+            createdAt: true,
+            statusLogs: {
+              select: { status: true, changedAt: true },
+              orderBy: { changedAt: "asc" },
+            },
+          },
+        },
+      },
+    });
+
+    const now = Date.now();
+    const DAY = 86400000;
+
+    const items = stories.map((s) => {
+      if (s.assignments.length === 0) {
+        return {
+          storyId: s.id,
+          externalId: s.externalId,
+          title: s.title,
+          startDate: null as string | null,
+          endDate: null as string | null,
+          leadTimeDays: null as number | null,
+          status: "NOT_STARTED" as const,
+        };
+      }
+
+      const startMs = Math.min(
+        ...s.assignments.map((a) => new Date(a.createdAt).getTime())
+      );
+
+      let prodMs: number | null = null;
+      for (const a of s.assignments) {
+        for (const log of a.statusLogs) {
+          if (log.status === "PRODUCTION") {
+            const t = new Date(log.changedAt).getTime();
+            if (prodMs === null || t < prodMs) prodMs = t;
+            break; // first PRODUCTION per assignment is enough
+          }
+        }
+      }
+
+      const endMs = prodMs ?? now;
+      const leadTimeDays = Math.max(0, Math.floor((endMs - startMs) / DAY));
+
+      return {
+        storyId: s.id,
+        externalId: s.externalId,
+        title: s.title,
+        startDate: new Date(startMs).toISOString(),
+        endDate: prodMs ? new Date(prodMs).toISOString() : null,
+        leadTimeDays,
+        status: prodMs ? ("CLOSED" as const) : ("OPEN" as const),
+      };
+    });
+
+    const closed = items.filter((i) => i.status === "CLOSED" && i.leadTimeDays !== null);
+    const values = closed.map((i) => i.leadTimeDays as number).sort((a, b) => a - b);
+
+    function percentile(p: number): number | null {
+      if (values.length === 0) return null;
+      const idx = Math.ceil((p / 100) * values.length) - 1;
+      return values[Math.max(0, Math.min(values.length - 1, idx))] ?? null;
+    }
+
+    const avg = values.length > 0 ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null;
+
+    res.json({
+      projectId,
+      totals: {
+        total: items.length,
+        closed: closed.length,
+        open: items.filter((i) => i.status === "OPEN").length,
+        notStarted: items.filter((i) => i.status === "NOT_STARTED").length,
+      },
+      aggregates: {
+        p50: percentile(50),
+        p90: percentile(90),
+        avg,
+        min: values.length > 0 ? values[0] : null,
+        max: values.length > 0 ? values[values.length - 1] : null,
+      },
+      stories: items.sort((a, b) => (b.leadTimeDays ?? -1) - (a.leadTimeDays ?? -1)),
+    });
+  }
+);
+
 // GET /projects/:id/daily-activity — Mon–Fri aggregated daily activity for a week
 router.get(
   "/projects/:id/daily-activity",
