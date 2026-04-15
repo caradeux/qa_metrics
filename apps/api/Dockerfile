@@ -29,6 +29,7 @@ COPY packages/types/package.json packages/types/
 COPY packages/utils/package.json packages/utils/
 
 RUN npm ci --omit=dev --workspace=@qa-metrics/api --workspace=@qa-metrics/database --workspace=@qa-metrics/types --workspace=@qa-metrics/utils --include-workspace-root
+RUN npm i -g tsx
 
 COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
@@ -39,4 +40,4 @@ ENV NODE_ENV=production
 ENV PORT=8080
 EXPOSE 8080
 
-CMD ["node", "dist/index.js"]
+CMD ["tsx", "dist/index.js"]
