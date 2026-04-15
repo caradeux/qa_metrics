@@ -12,6 +12,7 @@ export function setAuthCookies(res: Response, accessToken: string, refreshToken?
     httpOnly: true,
     secure: env.COOKIE_SECURE,
     sameSite: "lax",
+    domain: env.COOKIE_DOMAIN,
     path: "/",
     maxAge: ACCESS_MAX_AGE_MS,
   });
@@ -31,6 +32,7 @@ export function clearAuthCookies(res: Response) {
     httpOnly: true,
     secure: env.COOKIE_SECURE,
     sameSite: "lax",
+    domain: env.COOKIE_DOMAIN,
     path: "/",
     maxAge: 0,
   });
@@ -38,6 +40,7 @@ export function clearAuthCookies(res: Response) {
     httpOnly: true,
     secure: env.COOKIE_SECURE,
     sameSite: "lax",
+    domain: env.COOKIE_DOMAIN,
     path: "/api/auth",
     maxAge: 0,
   });

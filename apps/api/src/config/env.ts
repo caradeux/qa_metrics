@@ -9,6 +9,7 @@ const envSchema = z.object({
   ENCRYPTION_KEY: z.string().min(16),
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
   COOKIE_SECURE: z.coerce.boolean().default(process.env.NODE_ENV === "production"),
+  COOKIE_DOMAIN: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);
