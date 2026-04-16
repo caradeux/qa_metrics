@@ -64,6 +64,9 @@ function groupByDay(items: LogItem[]): { day: string; entries: LogItem[] }[] {
   return Array.from(groups.entries()).map(([day, entries]) => ({ day, entries }));
 }
 
+interface ProjectLite { id: string; name: string; client?: { name: string } }
+interface StoryLite { id: string; title: string; externalId?: string | null }
+
 export default function AuditPage() {
   const [logs, setLogs] = useState<LogItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +76,12 @@ export default function AuditPage() {
   const [entityType, setEntityType] = useState<"" | EntityType>("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [storyId, setStoryId] = useState("");
+
+  // Listas para selectores dependientes
+  const [projects, setProjects] = useState<ProjectLite[]>([]);
+  const [stories, setStories] = useState<StoryLite[]>([]);
 
   async function fetchLogs() {
     setLoading(true); setError("");
@@ -81,6 +90,8 @@ export default function AuditPage() {
       if (entityType) params.set("entityType", entityType);
       if (dateFrom) params.set("dateFrom", dateFrom);
       if (dateTo) params.set("dateTo", dateTo);
+      if (projectId) params.set("projectId", projectId);
+      if (storyId) params.set("storyId", storyId);
       params.set("limit", "200");
       const data = await apiClient<LogResponse>(`/api/date-change-logs?${params.toString()}`);
       setLogs(data.items);
@@ -91,7 +102,23 @@ export default function AuditPage() {
     }
   }
 
-  useEffect(() => { void fetchLogs(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // Carga inicial: logs + proyectos
+  useEffect(() => {
+    void fetchLogs();
+    apiClient<ProjectLite[]>("/api/projects")
+      .then((list) => setProjects(list))
+      .catch(() => setProjects([]));
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, []);
+
+  // Cargar HUs cuando cambia el proyecto
+  useEffect(() => {
+    setStoryId("");
+    if (!projectId) { setStories([]); return; }
+    apiClient<StoryLite[]>(`/api/stories?projectId=${projectId}`)
+      .then((list) => setStories(list))
+      .catch(() => setStories([]));
+  }, [projectId]);
 
   const groups = useMemo(() => groupByDay(logs), [logs]);
 
@@ -106,6 +133,34 @@ export default function AuditPage() {
 
       {/* Filtros */}
       <div className="bg-card p-4 rounded-xl border border-border mb-6 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Proyecto</label>
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={inp} style={{ minWidth: 200 }}>
+            <option value="">Todos</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.client?.name ? `${p.client.name} · ${p.name}` : p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Historia de Usuario</label>
+          <select
+            value={storyId}
+            onChange={(e) => setStoryId(e.target.value)}
+            disabled={!projectId}
+            className={`${inp} disabled:bg-gray-50 disabled:text-gray-400`}
+            style={{ minWidth: 240 }}
+          >
+            <option value="">{projectId ? "Todas" : "Selecciona un proyecto primero"}</option>
+            {stories.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.externalId ? `${s.externalId} · ` : ""}{s.title}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Tipo</label>
           <select value={entityType} onChange={(e) => setEntityType(e.target.value as any)} className={inp}>
@@ -132,7 +187,11 @@ export default function AuditPage() {
         </button>
         <button
           type="button"
-          onClick={() => { setEntityType(""); setDateFrom(""); setDateTo(""); setTimeout(fetchLogs, 0); }}
+          onClick={() => {
+            setEntityType(""); setDateFrom(""); setDateTo("");
+            setProjectId(""); setStoryId("");
+            setTimeout(fetchLogs, 0);
+          }}
           className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
         >
           Limpiar

@@ -37,6 +37,8 @@ router.get(
         entityType,
         entityId,
         userId,
+        projectId,
+        storyId,
         dateFrom,
         dateTo,
         limit: limitQ,
@@ -55,6 +57,47 @@ router.get(
         if (dateFrom) range.gte = new Date(dateFrom);
         if (dateTo) range.lte = new Date(dateTo);
         where.createdAt = range;
+      }
+
+      // Filtro por proyecto y/o HU: pre-resolver IDs válidos de ciclos/asignaciones/fases.
+      if (projectId || storyId) {
+        const storyFilter: Record<string, unknown> = {};
+        if (storyId) storyFilter.id = storyId;
+        if (projectId) storyFilter.projectId = projectId;
+
+        const [validCycleIds, validAssignmentIds, validPhaseIds] = await Promise.all([
+          prisma.testCycle.findMany({
+            where: { story: storyFilter },
+            select: { id: true },
+          }).then((r) => r.map((x) => x.id)),
+          prisma.testerAssignment.findMany({
+            where: {
+              ...(storyId ? { storyId } : {}),
+              ...(projectId ? { tester: { projectId } } : {}),
+            },
+            select: { id: true },
+          }).then((r) => r.map((x) => x.id)),
+          prisma.assignmentPhase.findMany({
+            where: {
+              assignment: {
+                ...(storyId ? { storyId } : {}),
+                ...(projectId ? { tester: { projectId } } : {}),
+              },
+            },
+            select: { id: true },
+          }).then((r) => r.map((x) => x.id)),
+        ]);
+
+        const ors: Record<string, unknown>[] = [];
+        if (validCycleIds.length > 0) ors.push({ entityType: "CYCLE", entityId: { in: validCycleIds } });
+        if (validAssignmentIds.length > 0) ors.push({ entityType: "ASSIGNMENT", entityId: { in: validAssignmentIds } });
+        if (validPhaseIds.length > 0) ors.push({ entityType: "PHASE", entityId: { in: validPhaseIds } });
+        if (ors.length === 0) {
+          // Ninguna entidad matchea el filtro → resultado vacío
+          res.json({ items: [], count: 0, limit, offset });
+          return;
+        }
+        where.OR = ors;
       }
 
       // Scope por rol
