@@ -7,8 +7,8 @@ const prisma = new PrismaClient({
 });
 
 // Recursos nuevos a incorporar al RBAC (2026-04-16).
-// "stories" ya existía en seed pero faltaba en UI; "phases", "dashboard", "gantt" y "story-status" son nuevos.
-const NEW_RESOURCES = ["stories", "phases", "dashboard", "gantt", "story-status"] as const;
+// "stories" ya existía en seed pero faltaba en UI; el resto son nuevos.
+const NEW_RESOURCES = ["stories", "phases", "dashboard", "gantt", "story-status", "audit"] as const;
 const ACTIONS = ["create", "read", "update", "delete"] as const;
 
 async function upsertPermission(resource: string, action: string) {
@@ -49,7 +49,7 @@ async function main() {
     }
   }
 
-  // QA_LEAD: CRUD en stories + phases, read en dashboard + gantt, update en story-status
+  // QA_LEAD: CRUD en stories + phases, read en dashboard + gantt + audit, update en story-status
   if (qaLead) {
     for (const action of ACTIONS) {
       await linkRolePermission(qaLead.id, perms[`stories:${action}`].id);
@@ -58,6 +58,7 @@ async function main() {
     await linkRolePermission(qaLead.id, perms["dashboard:read"].id);
     await linkRolePermission(qaLead.id, perms["gantt:read"].id);
     await linkRolePermission(qaLead.id, perms["story-status:update"].id);
+    await linkRolePermission(qaLead.id, perms["audit:read"].id);
   }
 
   // QA_ANALYST: read en todos (menos story-status que solo tiene update); create/update en phases; update en story-status
@@ -73,10 +74,10 @@ async function main() {
     await linkRolePermission(qaAnalyst.id, perms["stories:update"].id);
   }
 
-  // CLIENT_PM: solo read (sin story-status ya que este solo tiene update significativo)
+  // CLIENT_PM: solo read (sin story-status ni audit)
   if (clientPm) {
     for (const resource of NEW_RESOURCES) {
-      if (resource === "story-status") continue;
+      if (resource === "story-status" || resource === "audit") continue;
       await linkRolePermission(clientPm.id, perms[`${resource}:read`].id);
     }
   }

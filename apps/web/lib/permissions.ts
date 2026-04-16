@@ -13,6 +13,7 @@ export const RESOURCES = [
   "dashboard",
   "gantt",
   "reports",
+  "audit",
 ] as const;
 
 export const ACTIONS = ["create", "read", "update", "delete"] as const;
@@ -35,6 +36,7 @@ export const RESOURCE_LABELS: Record<Resource, string> = {
   dashboard: "Dashboard",
   gantt: "Planificación (Gantt)",
   reports: "Reportes",
+  audit: "Auditoría de fechas",
 };
 
 export const ACTION_LABELS: Record<Action, string> = {

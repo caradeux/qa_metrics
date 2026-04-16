@@ -523,25 +523,39 @@ router.put(
       }
 
       const updated = await prisma.$transaction(async (tx) => {
-        await tx.assignmentPhase.deleteMany({ where: { assignmentId: id } });
+        // Upsert por (assignmentId, phase) preserva IDs cuando la fase ya existía,
+        // lo cual mantiene la trazabilidad en DateChangeLog tras múltiples ediciones.
         const createdByType: Record<string, { id: string; startDate: Date; endDate: Date }> = {};
-        if (phases.length > 0) {
-          for (const p of phases) {
-            const created = await tx.assignmentPhase.create({
-              data: {
-                assignmentId: id,
-                phase: p.phase,
-                startDate: new Date(p.startDate),
-                endDate: new Date(p.endDate),
-              },
-              select: { id: true, phase: true, startDate: true, endDate: true },
-            });
-            createdByType[created.phase] = {
-              id: created.id,
-              startDate: created.startDate,
-              endDate: created.endDate,
-            };
+        const incomingPhases = new Set(phases.map((p) => p.phase));
+        // Eliminar fases removidas (las que había antes y no están en la nueva lista)
+        for (const existingPhase of existing.phases) {
+          if (!incomingPhases.has(existingPhase.phase)) {
+            await tx.assignmentPhase.delete({ where: { id: existingPhase.id } });
           }
+        }
+        // Upsert por (assignmentId, phase)
+        for (const p of phases) {
+          const upserted = await tx.assignmentPhase.upsert({
+            where: { assignmentId_phase: { assignmentId: id, phase: p.phase } },
+            update: {
+              startDate: new Date(p.startDate),
+              endDate: new Date(p.endDate),
+            },
+            create: {
+              assignmentId: id,
+              phase: p.phase,
+              startDate: new Date(p.startDate),
+              endDate: new Date(p.endDate),
+            },
+            select: { id: true, phase: true, startDate: true, endDate: true },
+          });
+          createdByType[upserted.phase] = {
+            id: upserted.id,
+            startDate: upserted.startDate,
+            endDate: upserted.endDate,
+          };
+        }
+        if (phases.length > 0) {
           const minStart = sorted[0].startDate;
           const maxEnd = sorted.reduce((acc, p) => (p.endDate > acc ? p.endDate : acc), sorted[0].endDate);
           await tx.testerAssignment.update({
