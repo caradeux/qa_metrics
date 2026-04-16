@@ -946,6 +946,7 @@ function EditPhasesModal({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [reason, setReason] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -961,9 +962,25 @@ function EditPhasesModal({
         };
       }
       setPhases(base);
+      setReason("");
       setError("");
     }
   }, [open, initialPhases]);
+
+  // Detecta si las fechas actuales difieren del estado inicial.
+  function currentFor(phase: string): { start: string; end: string } {
+    const found = initialPhases.find((p) => p.phase === phase);
+    return {
+      start: found ? found.startDate.slice(0, 10) : "",
+      end: found ? found.endDate.slice(0, 10) : "",
+    };
+  }
+  const hasChanges = PHASE_ORDER.some((p) => {
+    const orig = currentFor(p);
+    return phases[p].start !== orig.start || phases[p].end !== orig.end;
+  });
+  const reasonTooShort = reason.trim().length < 10;
+  const saveBlocked = hasChanges && reasonTooShort;
 
   async function save() {
     if (!assignmentId) return;
@@ -982,7 +999,10 @@ function EditPhasesModal({
     try {
       await apiClient(`/api/assignments/${assignmentId}/phases`, {
         method: "PUT",
-        body: JSON.stringify({ phases: payload }),
+        body: JSON.stringify({
+          phases: payload,
+          ...(hasChanges ? { reason: reason.trim() } : {}),
+        }),
       });
       onSaved();
     } catch (e: any) {
@@ -1016,10 +1036,27 @@ function EditPhasesModal({
             </div>
           </div>
         ))}
+        {hasChanges && (
+          <div className="border border-amber-200 bg-amber-50 rounded-lg p-2.5">
+            <label className="block text-[11px] font-semibold text-amber-800 mb-1 uppercase tracking-wider">
+              Motivo del cambio de fechas (obligatorio, mín. 10 caracteres)
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              className={`${inp} resize-none`}
+              placeholder="Ej: Se extendió ejecución por retraso en ambiente"
+            />
+            <p className="text-[10px] text-amber-700 mt-1">
+              {reason.trim().length}/10 caracteres mínimos
+            </p>
+          </div>
+        )}
         {error && <p className="text-xs text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200">Cancelar</button>
-          <button type="button" onClick={save} disabled={saving} className="px-3 py-2 text-xs font-semibold text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] disabled:opacity-50">
+          <button type="button" onClick={save} disabled={saving || saveBlocked} className="px-3 py-2 text-xs font-semibold text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] disabled:opacity-50">
             {saving ? "Guardando..." : "Guardar"}
           </button>
         </div>

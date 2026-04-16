@@ -3,20 +3,10 @@
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
+import { RESOURCES, ACTIONS, RESOURCE_LABELS, ACTION_LABELS, permKey } from "@/lib/permissions";
 
 interface Permission { resource: string; action: string; }
 interface Role { id: string; name: string; description: string | null; isSystem: boolean; permissions: Permission[]; }
-
-const RESOURCES = ["users", "roles", "clients", "projects", "cycles", "testers", "records", "assignments", "reports"] as const;
-const ACTIONS = ["create", "read", "update", "delete"] as const;
-
-const RESOURCE_LABELS: Record<string, string> = {
-  users: "Usuarios", roles: "Roles", clients: "Clientes", projects: "Proyectos",
-  cycles: "Ciclos", testers: "Testers", records: "Registros", assignments: "Asignaciones", reports: "Reportes",
-};
-const ACTION_LABELS: Record<string, string> = { create: "Crear", read: "Ver", update: "Editar", delete: "Eliminar" };
-
-const permKey = (r: string, a: string) => `${r}:${a}`;
 
 export default function EditRolePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);

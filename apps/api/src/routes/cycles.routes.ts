@@ -4,6 +4,12 @@ import { authMiddleware, requirePermission, type AuthRequest } from "../middlewa
 import { createCycleSchema, updateCycleSchema } from "../validators/cycle.validator.js";
 import { isClientPm, isAnalyst, clientPmProjectIds } from "../lib/access.js";
 import { isWorkday } from "../lib/workdays.js";
+import {
+  dateChanged,
+  validateReasonForChanges,
+  writeDateChangeLogs,
+  type DateDiff,
+} from "../lib/date-change-log.js";
 import { ZodError } from "zod";
 
 const router = Router();
@@ -139,14 +145,44 @@ router.put("/:id", requirePermission("cycles", "update") as any, async (req: Aut
       }
     }
 
-    const cycle = await prisma.testCycle.update({
-      where: { id },
-      data: {
-        ...(data.name !== undefined ? { name: data.name } : {}),
-        ...(data.startDate !== undefined ? { startDate: data.startDate ? new Date(data.startDate) : null } : {}),
-        ...(data.endDate !== undefined ? { endDate: data.endDate ? new Date(data.endDate) : null } : {}),
-      },
+    const newStart = data.startDate !== undefined ? (data.startDate ? new Date(data.startDate) : null) : undefined;
+    const newEnd = data.endDate !== undefined ? (data.endDate ? new Date(data.endDate) : null) : undefined;
+
+    const diffs: DateDiff[] = [];
+    if (newStart !== undefined && dateChanged(existing.startDate, newStart)) {
+      diffs.push({ field: "startDate", oldValue: existing.startDate, newValue: newStart });
+    }
+    if (newEnd !== undefined && dateChanged(existing.endDate, newEnd)) {
+      diffs.push({ field: "endDate", oldValue: existing.endDate, newValue: newEnd });
+    }
+
+    const reasonError = validateReasonForChanges(data.reason, diffs);
+    if (reasonError) {
+      res.status(400).json({ error: reasonError });
+      return;
+    }
+
+    const cycle = await prisma.$transaction(async (tx) => {
+      const updated = await tx.testCycle.update({
+        where: { id },
+        data: {
+          ...(data.name !== undefined ? { name: data.name } : {}),
+          ...(newStart !== undefined ? { startDate: newStart } : {}),
+          ...(newEnd !== undefined ? { endDate: newEnd } : {}),
+        },
+      });
+      if (diffs.length > 0) {
+        await writeDateChangeLogs(tx, {
+          entityType: "CYCLE",
+          entityId: id,
+          userId: req.user!.id,
+          reason: data.reason!,
+          diffs,
+        });
+      }
+      return updated;
     });
+
     res.json(cycle);
   } catch (err) {
     if (err instanceof ZodError) {

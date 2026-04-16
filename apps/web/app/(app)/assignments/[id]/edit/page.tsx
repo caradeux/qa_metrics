@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
+import { ReasonDialog } from "@/components/ui/ReasonDialog";
 
 interface Assignment {
   id: string; startDate: string; endDate: string | null;
@@ -24,6 +25,11 @@ const STATUSES = [
   { value: "ON_HOLD", label: "Detenido" },
 ];
 
+function originalDateOf(info: Assignment | null): string {
+  if (!info?.endDate) return "";
+  return info.endDate.split("T")[0] ?? "";
+}
+
 export default function EditAssignmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
@@ -34,6 +40,7 @@ export default function EditAssignmentPage({ params }: { params: Promise<{ id: s
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [reasonOpen, setReasonOpen] = useState(false);
 
   useEffect(() => {
     apiClient<Assignment[]>("/api/assignments")
@@ -50,8 +57,9 @@ export default function EditAssignmentPage({ params }: { params: Promise<{ id: s
       .catch((err) => { setError(err.message || "Error al cargar"); setLoaded(true); });
   }, [id]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const dateChanged = endDate !== originalDateOf(info);
+
+  async function persist(reason?: string) {
     setSaving(true); setError("");
     try {
       await apiClient(`/api/assignments/${id}`, {
@@ -60,14 +68,25 @@ export default function EditAssignmentPage({ params }: { params: Promise<{ id: s
           status,
           endDate: endDate || null,
           notes: notes || null,
+          ...(reason ? { reason } : {}),
         }),
       });
       router.push("/assignments");
     } catch (err: any) {
       setError(err.message || "Error al guardar");
+      setReasonOpen(false);
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (dateChanged) {
+      setReasonOpen(true);
+      return;
+    }
+    void persist();
   }
 
   if (!loaded) return <div className="animate-pulse h-64 bg-gray-100 rounded-lg" />;
@@ -92,6 +111,11 @@ export default function EditAssignmentPage({ params }: { params: Promise<{ id: s
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Fecha Fin</label>
           <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inp} />
+          {dateChanged && (
+            <p className="text-[11px] text-amber-600 mt-1">
+              Cambiaste la fecha — al guardar se te pedirá un motivo
+            </p>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Notas</label>
@@ -105,6 +129,14 @@ export default function EditAssignmentPage({ params }: { params: Promise<{ id: s
           </button>
         </div>
       </form>
+
+      <ReasonDialog
+        open={reasonOpen}
+        description="Estás modificando la fecha de fin de la asignación. Indica el motivo para dejar registro en la auditoría."
+        onCancel={() => setReasonOpen(false)}
+        onConfirm={(reason) => persist(reason)}
+        saving={saving}
+      />
     </div>
   );
 }

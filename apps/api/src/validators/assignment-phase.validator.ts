@@ -12,4 +12,5 @@ export const phasesArraySchema = z.array(phaseInputSchema).max(3);
 
 export const updatePhasesSchema = z.object({
   phases: phasesArraySchema,
+  reason: z.string().optional(),
 });

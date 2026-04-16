@@ -35,4 +35,5 @@ export const updateAssignmentSchema = z.object({
   startDate: z.string().optional(),
   endDate: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
+  reason: z.string().optional(),
 });

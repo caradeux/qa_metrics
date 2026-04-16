@@ -3,17 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
-
-const RESOURCES = ["users", "roles", "clients", "projects", "cycles", "testers", "records", "assignments", "reports"] as const;
-const ACTIONS = ["create", "read", "update", "delete"] as const;
-
-const RESOURCE_LABELS: Record<string, string> = {
-  users: "Usuarios", roles: "Roles", clients: "Clientes", projects: "Proyectos",
-  cycles: "Ciclos", testers: "Testers", records: "Registros", assignments: "Asignaciones", reports: "Reportes",
-};
-const ACTION_LABELS: Record<string, string> = { create: "Crear", read: "Ver", update: "Editar", delete: "Eliminar" };
-
-const permKey = (r: string, a: string) => `${r}:${a}`;
+import { RESOURCES, ACTIONS, RESOURCE_LABELS, ACTION_LABELS, permKey } from "@/lib/permissions";
 
 export default function NewRolePage() {
   const router = useRouter();

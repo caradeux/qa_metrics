@@ -71,7 +71,13 @@ async function main() {
   const clientPmRole = await upsertRole("CLIENT_PM", "Jefe de Proyecto del Cliente (solo lectura de proyectos asignados)");
 
   // Permissions
-  const resources = ["users", "roles", "clients", "projects", "cycles", "testers", "records", "assignments", "reports", "stories"];
+  const resources = [
+    "users", "roles", "clients", "projects",
+    "stories", "story-status", "cycles", "testers",
+    "assignments", "phases",
+    "records",
+    "dashboard", "gantt", "reports",
+  ];
   const actions = ["create", "read", "update", "delete"];
   const permissions: Record<string, { id: string }> = {};
   for (const resource of resources) {
@@ -87,7 +93,7 @@ async function main() {
   }
 
   // QA_LEAD: todo menos gestionar users/roles (solo lectura)
-  const leadResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports", "stories"];
+  const leadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "reports"];
   for (const resource of leadResources) {
     for (const action of actions) {
       await linkRolePermission(qaLeadRole.id, permissions[`${resource}:${action}`].id);
@@ -95,19 +101,24 @@ async function main() {
   }
   await linkRolePermission(qaLeadRole.id, permissions["users:read"].id);
   await linkRolePermission(qaLeadRole.id, permissions["roles:read"].id);
+  await linkRolePermission(qaLeadRole.id, permissions["dashboard:read"].id);
+  await linkRolePermission(qaLeadRole.id, permissions["gantt:read"].id);
+  await linkRolePermission(qaLeadRole.id, permissions["story-status:update"].id);
 
   // QA_ANALYST
-  const analystReadResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports", "stories"];
+  const analystReadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "dashboard", "gantt", "reports"];
   for (const resource of analystReadResources) {
     await linkRolePermission(qaAnalystRole.id, permissions[`${resource}:read`].id);
   }
   for (const action of ["create", "update"] as const) {
     await linkRolePermission(qaAnalystRole.id, permissions[`records:${action}`].id);
     await linkRolePermission(qaAnalystRole.id, permissions[`assignments:${action}`].id);
+    await linkRolePermission(qaAnalystRole.id, permissions[`phases:${action}`].id);
   }
+  await linkRolePermission(qaAnalystRole.id, permissions["story-status:update"].id);
 
   // CLIENT_PM: read-only
-  const clientPmResources = ["clients", "projects", "cycles", "testers", "records", "assignments", "reports", "stories"];
+  const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "dashboard", "gantt", "reports"];
   for (const resource of clientPmResources) {
     await linkRolePermission(clientPmRole.id, permissions[`${resource}:read`].id);
   }

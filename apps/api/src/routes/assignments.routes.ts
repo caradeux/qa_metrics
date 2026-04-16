@@ -13,6 +13,12 @@ import { updatePhasesSchema } from "../validators/assignment-phase.validator.js"
 import { ZodError } from "zod";
 import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../lib/access.js";
 import { isWorkday } from "../lib/workdays.js";
+import {
+  dateChanged,
+  validateReasonForChanges,
+  writeDateChangeLogs,
+  type DateDiff,
+} from "../lib/date-change-log.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -177,10 +183,10 @@ router.post(
             return;
           }
         }
-        // Overlap check
+        // Overlap check — permite borde compartido (fin de una fase = inicio de la siguiente)
         const sorted = [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate));
         for (let i = 1; i < sorted.length; i++) {
-          if (sorted[i].startDate <= sorted[i - 1].endDate) {
+          if (sorted[i].startDate < sorted[i - 1].endDate) {
             res.status(400).json({ error: "Las fases no pueden solaparse" });
             return;
           }
@@ -274,6 +280,14 @@ router.put(
       const data: Record<string, unknown> = {};
       let statusChanged = false;
       if (body.status && body.status !== existing.status) {
+        // Chequeo granular: cambiar el estado de una HU requiere `story-status:update`
+        const hasStoryStatusPerm = req.user?.role.permissions.some(
+          (p) => p.resource === "story-status" && p.action === "update",
+        );
+        if (!hasStoryStatusPerm) {
+          res.status(403).json({ error: "Sin permiso para cambiar el estado de la HU" });
+          return;
+        }
         data.status = body.status;
         statusChanged = true;
         if (body.status === "PRODUCTION" && !body.endDate) {
@@ -298,16 +312,35 @@ router.put(
       }
       if (body.notes !== undefined) data.notes = body.notes;
 
-      const updated = await prisma.testerAssignment.update({
-        where: { id },
-        data,
-      });
-
-      if (statusChanged) {
-        await prisma.assignmentStatusLog.create({
-          data: { assignmentId: id, status: body.status! },
-        });
+      const diffs: DateDiff[] = [];
+      if (data.startDate !== undefined && dateChanged(existing.startDate, data.startDate as Date)) {
+        diffs.push({ field: "startDate", oldValue: existing.startDate, newValue: data.startDate as Date });
       }
+      if (data.endDate !== undefined && dateChanged(existing.endDate, data.endDate as Date | null)) {
+        diffs.push({ field: "endDate", oldValue: existing.endDate, newValue: data.endDate as Date | null });
+      }
+      const reasonError = validateReasonForChanges(body.reason, diffs);
+      if (reasonError) {
+        res.status(400).json({ error: reasonError });
+        return;
+      }
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const u = await tx.testerAssignment.update({ where: { id }, data });
+        if (statusChanged) {
+          await tx.assignmentStatusLog.create({ data: { assignmentId: id, status: body.status! } });
+        }
+        if (diffs.length > 0) {
+          await writeDateChangeLogs(tx, {
+            entityType: "ASSIGNMENT",
+            entityId: id,
+            userId: req.user!.id,
+            reason: body.reason!,
+            diffs,
+          });
+        }
+        return u;
+      });
 
       res.json(updated);
     } catch (err) {
@@ -410,11 +443,14 @@ router.put(
   async (req: AuthRequest, res: Response) => {
     try {
       const id = req.params.id as string;
-      const { phases } = updatePhasesSchema.parse(req.body);
+      const { phases, reason } = updatePhasesSchema.parse(req.body);
       const phasesCheck = await assertCanActOnAssignment(req, id);
       if (!phasesCheck.ok) { res.status(phasesCheck.status).json({ error: phasesCheck.error }); return; }
 
-      const existing = await prisma.testerAssignment.findUnique({ where: { id } });
+      const existing = await prisma.testerAssignment.findUnique({
+        where: { id },
+        include: { phases: true },
+      });
       if (!existing) {
         res.status(404).json({ error: "Asignacion no encontrada" });
         return;
@@ -438,28 +474,104 @@ router.put(
       }
       const sorted = [...phases].sort((a, b) => a.startDate.localeCompare(b.startDate));
       for (let i = 1; i < sorted.length; i++) {
-        if (sorted[i].startDate <= sorted[i - 1].endDate) {
+        // Permite borde compartido (fin de una fase = inicio de la siguiente).
+        if (sorted[i].startDate < sorted[i - 1].endDate) {
           res.status(400).json({ error: "Las fases no pueden solaparse" });
           return;
         }
       }
 
+      // Diff de fases contra existentes (match por tipo de fase). Se registra un diff por fase×campo modificado.
+      type PhaseDiff = { phaseId: string; diffs: DateDiff[] };
+      const phaseDiffs: PhaseDiff[] = [];
+      for (const existingPhase of existing.phases) {
+        const incoming = phases.find((p) => p.phase === existingPhase.phase);
+        if (!incoming) {
+          phaseDiffs.push({
+            phaseId: existingPhase.id,
+            diffs: [
+              { field: "startDate", oldValue: existingPhase.startDate, newValue: null },
+              { field: "endDate", oldValue: existingPhase.endDate, newValue: null },
+            ],
+          });
+          continue;
+        }
+        const newStart = new Date(incoming.startDate);
+        const newEnd = new Date(incoming.endDate);
+        const diffs: DateDiff[] = [];
+        if (dateChanged(existingPhase.startDate, newStart)) {
+          diffs.push({ field: "startDate", oldValue: existingPhase.startDate, newValue: newStart });
+        }
+        if (dateChanged(existingPhase.endDate, newEnd)) {
+          diffs.push({ field: "endDate", oldValue: existingPhase.endDate, newValue: newEnd });
+        }
+        if (diffs.length > 0) {
+          phaseDiffs.push({ phaseId: existingPhase.id, diffs });
+        }
+      }
+      const newlyAdded = phases.filter((p) => !existing.phases.some((ep) => ep.phase === p.phase));
+
+      const aggregatedDiffs: DateDiff[] = phaseDiffs.flatMap((pd) => pd.diffs);
+      const reasonError = validateReasonForChanges(reason, aggregatedDiffs);
+      if (reasonError) {
+        res.status(400).json({ error: reasonError });
+        return;
+      }
+      if (aggregatedDiffs.length === 0 && newlyAdded.length > 0 && (reason ?? "").trim().length < 10) {
+        res.status(400).json({ error: "Debes indicar un motivo de al menos 10 caracteres para modificar fases" });
+        return;
+      }
+
       const updated = await prisma.$transaction(async (tx) => {
         await tx.assignmentPhase.deleteMany({ where: { assignmentId: id } });
+        const createdByType: Record<string, { id: string; startDate: Date; endDate: Date }> = {};
         if (phases.length > 0) {
-          await tx.assignmentPhase.createMany({
-            data: phases.map((p) => ({
-              assignmentId: id,
-              phase: p.phase,
-              startDate: new Date(p.startDate),
-              endDate: new Date(p.endDate),
-            })),
-          });
+          for (const p of phases) {
+            const created = await tx.assignmentPhase.create({
+              data: {
+                assignmentId: id,
+                phase: p.phase,
+                startDate: new Date(p.startDate),
+                endDate: new Date(p.endDate),
+              },
+              select: { id: true, phase: true, startDate: true, endDate: true },
+            });
+            createdByType[created.phase] = {
+              id: created.id,
+              startDate: created.startDate,
+              endDate: created.endDate,
+            };
+          }
           const minStart = sorted[0].startDate;
           const maxEnd = sorted.reduce((acc, p) => (p.endDate > acc ? p.endDate : acc), sorted[0].endDate);
           await tx.testerAssignment.update({
             where: { id },
             data: { startDate: new Date(minStart), endDate: new Date(maxEnd) },
+          });
+        }
+        // Log de cambios sobre fases preexistentes (modificadas/eliminadas)
+        for (const pd of phaseDiffs) {
+          await writeDateChangeLogs(tx, {
+            entityType: "PHASE",
+            entityId: pd.phaseId,
+            userId: req.user!.id,
+            reason: reason!,
+            diffs: pd.diffs,
+          });
+        }
+        // Log de fases nuevas (creadas desde null)
+        for (const added of newlyAdded) {
+          const createdPhase = createdByType[added.phase];
+          if (!createdPhase) continue;
+          await writeDateChangeLogs(tx, {
+            entityType: "PHASE",
+            entityId: createdPhase.id,
+            userId: req.user!.id,
+            reason: reason!,
+            diffs: [
+              { field: "startDate", oldValue: null, newValue: createdPhase.startDate },
+              { field: "endDate", oldValue: null, newValue: createdPhase.endDate },
+            ],
           });
         }
         return tx.testerAssignment.findUnique({

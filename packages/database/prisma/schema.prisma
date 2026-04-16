@@ -50,6 +50,7 @@ model User {
   clients      Client[]
   testers      Tester[]
   managedProjects Project[] @relation("ProjectManagerOfProject")
+  dateChangeLogs  DateChangeLog[]
 }
 
 model Client {
@@ -179,6 +180,29 @@ model DailyRecord {
 model Holiday {
   date DateTime @id @db.Date
   name String
+}
+
+model DateChangeLog {
+  id         String              @id @default(cuid())
+  entityType DateChangeEntityType
+  entityId   String
+  userId     String
+  user       User                @relation(fields: [userId], references: [id])
+  field      String              // startDate | endDate
+  oldValue   DateTime?
+  newValue   DateTime?
+  reason     String              // mínimo 10 caracteres, validado en API
+  createdAt  DateTime            @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum DateChangeEntityType {
+  CYCLE
+  ASSIGNMENT
+  PHASE
 }
 
 enum Modality {

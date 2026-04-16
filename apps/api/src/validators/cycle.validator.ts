@@ -11,4 +11,5 @@ export const updateCycleSchema = z.object({
   name: z.string().min(1, "Nombre requerido").max(200).optional(),
   startDate: z.string().nullable().optional(),
   endDate: z.string().nullable().optional(),
+  reason: z.string().optional(),
 });
