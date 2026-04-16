@@ -4,6 +4,9 @@ import pptxgenModule from "pptxgenjs";
 const PptxGenJS: any = (pptxgenModule as any).default ?? pptxgenModule;
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 // Mapeo estado interno → label cliente-facing (confirmado por Líder QA 2026-04-16)
 const STATUS_LABEL: Record<string, string> = {
@@ -19,23 +22,40 @@ const STATUS_LABEL: Record<string, string> = {
   ON_HOLD: "Detenido",
 };
 
-// Paleta corporativa InovaBiz (derivada del PPTX original)
-const COLORS = {
-  navy: "1F3864",
-  blue: "2E5FA3",
-  lightBlue: "4A90D9",
+// Paleta corporativa derivada del PPTX original (InovaBiz 2026)
+const C = {
+  navyDark: "0F172A",     // fondo portada y despedida
+  navy: "1E293B",          // texto dark alternativo
+  cyanAccent: "06B6D4",    // acento cyan
+  greenAccent: "22C55E",   // acento verde
+  blueHeader: "1A5276",    // header EQUIPO
+  blueMid: "2D8DBB",       // header OBSERVACIONES
   white: "FFFFFF",
-  textDark: "1F3864",
-  textMuted: "6B7280",
-  tableHeaderBg: "1F3864",
-  tableRowEven: "F5F7FA",
-  tableRowOdd: "FFFFFF",
+  softGray: "F8FAFC",      // fondo bloques claros
+  lightBlueTint: "EBF4FB", // row alterna tabla
+  lighterBlueTint: "D6EAF8",
+  textMuted: "64748B",
+  textDark: "1E293B",
+  textLight: "94A3B8",
   borderSubtle: "E5E7EB",
 };
 
+// Logo InovaBiz (portada y despedida). Resolviendo al momento de carga del módulo.
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// apps/api/src/lib -> ../../assets
+const LOGO_PATH = join(__dirname, "..", "..", "assets", "logo-inovabiz.png");
+let logoDataUrl: string | null = null;
+try {
+  const buf = readFileSync(LOGO_PATH);
+  logoDataUrl = `data:image/png;base64,${buf.toString("base64")}`;
+} catch {
+  logoDataUrl = null;
+}
+
 export interface WeeklyHU {
   title: string;
-  status: string;           // estado interno (REGISTERED, EXECUTION, etc.)
+  status: string;
   designed: number | null;
   executed: number | null;
   defects: number | null;
@@ -51,8 +71,8 @@ export interface WeeklyProjectSlide {
 }
 
 export interface WeeklyPptxInput {
-  weekStart: Date;  // lunes
-  weekEnd: Date;    // viernes
+  weekStart: Date;
+  weekEnd: Date;
   projects: WeeklyProjectSlide[];
 }
 
@@ -87,183 +107,240 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
   const SLIDE_W = 13.33;
   const SLIDE_H = 7.5;
 
-  // ── Slide 1 — Portada ──
+  // ══════ Slide 1 — Portada ══════
   {
     const s = pres.addSlide();
-    s.background = { color: COLORS.navy };
-    // Barra lateral azul claro
+    s.background = { color: C.navyDark };
+
+    // Logo arriba-izquierda
+    if (logoDataUrl) {
+      s.addImage({ data: logoDataUrl, x: 0.6, y: 0.5, w: 2.2, h: 0.43 });
+    }
+
+    // Barra de acento cyan vertical
     s.addShape(pres.ShapeType.rect, {
-      x: 0, y: 0, w: 0.35, h: SLIDE_H,
-      fill: { color: COLORS.lightBlue }, line: { color: COLORS.lightBlue },
+      x: 0, y: 0, w: 0.18, h: SLIDE_H,
+      fill: { color: C.cyanAccent }, line: { color: C.cyanAccent },
     });
+
+    // Título principal (3 líneas)
     s.addText("Seguimiento", {
-      x: 1, y: 2.4, w: 11, h: 0.9,
-      fontSize: 48, bold: true, color: COLORS.white, fontFace: "Calibri",
+      x: 0.8, y: 2.3, w: 12, h: 0.95,
+      fontSize: 54, bold: true, color: C.white, fontFace: "Calibri",
     });
     s.addText("Semanal QA", {
-      x: 1, y: 3.2, w: 11, h: 0.9,
-      fontSize: 48, bold: true, color: COLORS.lightBlue, fontFace: "Calibri",
+      x: 0.8, y: 3.1, w: 12, h: 0.95,
+      fontSize: 54, bold: true, color: C.cyanAccent, fontFace: "Calibri",
     });
+
+    // Divider
     s.addShape(pres.ShapeType.rect, {
-      x: 1, y: 4.3, w: 1.2, h: 0.04,
-      fill: { color: COLORS.lightBlue }, line: { color: COLORS.lightBlue },
+      x: 0.85, y: 4.18, w: 1.3, h: 0.05,
+      fill: { color: C.greenAccent }, line: { color: C.greenAccent },
     });
+
     s.addText("Aseguramiento de Calidad & Seguridad | InovaBiz", {
-      x: 1, y: 4.5, w: 11, h: 0.4,
-      fontSize: 14, color: COLORS.white, fontFace: "Calibri",
+      x: 0.8, y: 4.4, w: 11, h: 0.4,
+      fontSize: 14, color: C.textLight, fontFace: "Calibri",
     });
+
     s.addText(format(input.weekEnd, "yyyy"), {
-      x: 1, y: 5.0, w: 4, h: 0.6,
-      fontSize: 28, bold: true, color: COLORS.lightBlue, fontFace: "Calibri",
+      x: 0.8, y: 5.0, w: 4, h: 0.7,
+      fontSize: 36, bold: true, color: C.cyanAccent, fontFace: "Calibri",
     });
+
     s.addText(formatWeekRange(input.weekStart, input.weekEnd), {
-      x: 1, y: 5.8, w: 10, h: 0.4,
-      fontSize: 14, color: "A0B4D3", fontFace: "Calibri", italic: true,
+      x: 0.8, y: 5.9, w: 10, h: 0.4,
+      fontSize: 14, color: C.textLight, fontFace: "Calibri", italic: true,
     });
+
     s.addText("DOCUMENTO CONFIDENCIAL", {
-      x: 1, y: SLIDE_H - 0.6, w: 11, h: 0.3,
-      fontSize: 9, color: "8FA5C4", fontFace: "Calibri",
+      x: 0.8, y: SLIDE_H - 0.55, w: 12, h: 0.3,
+      fontSize: 9, color: C.textMuted, fontFace: "Calibri",
       charSpacing: 4,
     });
   }
 
-  // ── Slides por proyecto ──
+  // ══════ Slides por proyecto ══════
   for (const p of input.projects) {
     const s = pres.addSlide();
-    s.background = { color: COLORS.white };
+    s.background = { color: C.white };
 
-    // Barra lateral navy
+    // Barra lateral izquierda navy
     s.addShape(pres.ShapeType.rect, {
-      x: 0, y: 0, w: 0.35, h: SLIDE_H,
-      fill: { color: COLORS.navy }, line: { color: COLORS.navy },
+      x: 0, y: 0, w: 0.18, h: SLIDE_H,
+      fill: { color: C.navyDark }, line: { color: C.navyDark },
+    });
+
+    // Barra horizontal superior navy con cliente
+    s.addShape(pres.ShapeType.rect, {
+      x: 0, y: 0, w: SLIDE_W, h: 0.35,
+      fill: { color: C.navyDark }, line: { color: C.navyDark },
+    });
+    s.addText(p.clientName.toUpperCase(), {
+      x: 0.5, y: 0.02, w: 8, h: 0.3,
+      fontSize: 10, bold: true, color: C.cyanAccent, fontFace: "Calibri",
+      charSpacing: 4, valign: "middle",
+    });
+    s.addText("SEGUIMIENTO SEMANAL QA", {
+      x: SLIDE_W - 3.5, y: 0.02, w: 3, h: 0.3,
+      fontSize: 9, color: C.textLight, fontFace: "Calibri",
+      align: "right", valign: "middle", charSpacing: 3,
     });
 
     // Título proyecto
     s.addText(p.projectName, {
-      x: 0.7, y: 0.35, w: 12, h: 0.8,
-      fontSize: 32, bold: true, color: COLORS.navy, fontFace: "Calibri",
+      x: 0.6, y: 0.5, w: 12, h: 0.8,
+      fontSize: 32, bold: true, color: C.navyDark, fontFace: "Calibri",
     });
-    // Subtítulo cliente
-    s.addText(p.clientName, {
-      x: 0.7, y: 1.0, w: 12, h: 0.35,
-      fontSize: 12, color: COLORS.textMuted, fontFace: "Calibri",
+
+    // Divider cyan+green bajo título
+    s.addShape(pres.ShapeType.rect, {
+      x: 0.65, y: 1.3, w: 0.8, h: 0.05,
+      fill: { color: C.cyanAccent }, line: { color: C.cyanAccent },
+    });
+    s.addShape(pres.ShapeType.rect, {
+      x: 1.45, y: 1.3, w: 0.4, h: 0.05,
+      fill: { color: C.greenAccent }, line: { color: C.greenAccent },
     });
 
     // ── Bloque EQUIPO (izquierda) ──
     s.addShape(pres.ShapeType.rect, {
-      x: 0.7, y: 1.7, w: 4.2, h: 0.4,
-      fill: { color: COLORS.navy }, line: { color: COLORS.navy },
+      x: 0.6, y: 1.7, w: 4.3, h: 0.4,
+      fill: { color: C.blueHeader }, line: { color: C.blueHeader },
     });
     s.addText("EQUIPO", {
-      x: 0.7, y: 1.7, w: 4.2, h: 0.4,
-      fontSize: 13, bold: true, color: COLORS.white, align: "center",
-      valign: "middle", fontFace: "Calibri", charSpacing: 3,
+      x: 0.6, y: 1.7, w: 4.3, h: 0.4,
+      fontSize: 12, bold: true, color: C.white, align: "center",
+      valign: "middle", fontFace: "Calibri", charSpacing: 4,
     });
     s.addShape(pres.ShapeType.rect, {
-      x: 0.7, y: 2.1, w: 4.2, h: 2.0,
-      fill: { color: "F5F7FA" }, line: { color: COLORS.borderSubtle },
+      x: 0.6, y: 2.1, w: 4.3, h: 2.05,
+      fill: { color: C.softGray }, line: { color: C.borderSubtle },
     });
     const equipoText = [
-      { text: "Jefe de Proyecto: ", options: { bold: true, color: COLORS.navy } },
-      { text: (p.projectManagerName ?? "—") + "\n", options: { color: COLORS.textDark } },
-      { text: "Analista QA: ", options: { bold: true, color: COLORS.navy } },
-      { text: (p.testerName ?? "—") + "\n", options: { color: COLORS.textDark } },
-      { text: "Asignación: ", options: { bold: true, color: COLORS.navy } },
-      { text: p.testerAllocation !== null ? `${p.testerAllocation}%` : "—", options: { color: COLORS.textDark } },
+      { text: "Jefe de Proyecto:  ", options: { bold: true, color: C.blueHeader } },
+      { text: (p.projectManagerName ?? "—") + "\n", options: { color: C.textDark } },
+      { text: "Analista QA:  ", options: { bold: true, color: C.blueHeader } },
+      { text: (p.testerName ?? "—") + "\n", options: { color: C.textDark } },
+      { text: "Asignación:  ", options: { bold: true, color: C.blueHeader } },
+      { text: p.testerAllocation !== null ? `${p.testerAllocation}%` : "—", options: { color: C.textDark } },
     ];
     s.addText(equipoText, {
-      x: 0.9, y: 2.25, w: 3.9, h: 1.8,
-      fontSize: 13, fontFace: "Calibri", valign: "top",
+      x: 0.8, y: 2.3, w: 3.95, h: 1.8,
+      fontSize: 13, fontFace: "Calibri", valign: "top", paraSpaceAfter: 8,
     });
 
-    // ── Bloque OBSERVACIONES (derecha del equipo) ──
+    // ── Bloque OBSERVACIONES (derecha) ──
     s.addShape(pres.ShapeType.rect, {
-      x: 5.1, y: 1.7, w: 7.5, h: 0.4,
-      fill: { color: COLORS.blue }, line: { color: COLORS.blue },
+      x: 5.1, y: 1.7, w: 7.6, h: 0.4,
+      fill: { color: C.blueMid }, line: { color: C.blueMid },
     });
     s.addText("OBSERVACIONES", {
-      x: 5.1, y: 1.7, w: 7.5, h: 0.4,
-      fontSize: 13, bold: true, color: COLORS.white, align: "center",
-      valign: "middle", fontFace: "Calibri", charSpacing: 3,
+      x: 5.1, y: 1.7, w: 7.6, h: 0.4,
+      fontSize: 12, bold: true, color: C.white, align: "center",
+      valign: "middle", fontFace: "Calibri", charSpacing: 4,
     });
     s.addShape(pres.ShapeType.rect, {
-      x: 5.1, y: 2.1, w: 7.5, h: 2.0,
-      fill: { color: "F5F7FA" }, line: { color: COLORS.borderSubtle },
+      x: 5.1, y: 2.1, w: 7.6, h: 2.05,
+      fill: { color: C.softGray }, line: { color: C.borderSubtle },
     });
     s.addText("[Escribe aquí las observaciones de la semana]", {
-      x: 5.3, y: 2.25, w: 7.1, h: 1.8,
-      fontSize: 12, color: "9CA3AF", italic: true, fontFace: "Calibri", valign: "top",
+      x: 5.3, y: 2.3, w: 7.2, h: 1.8,
+      fontSize: 12, color: C.textLight, italic: true, fontFace: "Calibri", valign: "top",
     });
 
-    // ── MÉTRICAS POR HU (abajo) ──
+    // ── Header MÉTRICAS POR HU ──
     s.addShape(pres.ShapeType.rect, {
-      x: 0.7, y: 4.4, w: 11.9, h: 0.4,
-      fill: { color: COLORS.lightBlue }, line: { color: COLORS.lightBlue },
+      x: 0.6, y: 4.45, w: 12.1, h: 0.4,
+      fill: { color: C.cyanAccent }, line: { color: C.cyanAccent },
     });
     s.addText(`MÉTRICAS POR HISTORIA DE USUARIO — ${p.projectName.toUpperCase()}`, {
-      x: 0.7, y: 4.4, w: 11.9, h: 0.4,
-      fontSize: 13, bold: true, color: COLORS.white, align: "center",
-      valign: "middle", fontFace: "Calibri", charSpacing: 2,
+      x: 0.6, y: 4.45, w: 12.1, h: 0.4,
+      fontSize: 12, bold: true, color: C.white, align: "center",
+      valign: "middle", fontFace: "Calibri", charSpacing: 3,
     });
 
+    // ── Tabla de HUs ──
+    const headerOpts = {
+      bold: true, color: C.white, fill: { color: C.navyDark },
+      fontFace: "Calibri", fontSize: 11,
+      align: "center" as const, valign: "middle" as const,
+    };
     const headers = [
-      { text: "Historia de Usuario", options: { bold: true, color: COLORS.white, fill: { color: COLORS.tableHeaderBg }, fontFace: "Calibri", fontSize: 11, align: "center" as const, valign: "middle" as const } },
-      { text: "Estado", options: { bold: true, color: COLORS.white, fill: { color: COLORS.tableHeaderBg }, fontFace: "Calibri", fontSize: 11, align: "center" as const, valign: "middle" as const } },
-      { text: "Casos Diseñados", options: { bold: true, color: COLORS.white, fill: { color: COLORS.tableHeaderBg }, fontFace: "Calibri", fontSize: 11, align: "center" as const, valign: "middle" as const } },
-      { text: "Casos Ejecutados", options: { bold: true, color: COLORS.white, fill: { color: COLORS.tableHeaderBg }, fontFace: "Calibri", fontSize: 11, align: "center" as const, valign: "middle" as const } },
-      { text: "Bugs Detectados", options: { bold: true, color: COLORS.white, fill: { color: COLORS.tableHeaderBg }, fontFace: "Calibri", fontSize: 11, align: "center" as const, valign: "middle" as const } },
+      { text: "Historia de Usuario", options: headerOpts },
+      { text: "Estado", options: headerOpts },
+      { text: "Casos Diseñados", options: headerOpts },
+      { text: "Casos Ejecutados", options: headerOpts },
+      { text: "Bugs Detectados", options: headerOpts },
     ];
+
+    const cellOpts = (idx: number) => ({
+      color: C.textDark, fontFace: "Calibri", fontSize: 11,
+      valign: "middle" as const,
+      fill: { color: idx % 2 === 0 ? C.white : C.lightBlueTint },
+    });
 
     const dataRows = p.hus.length === 0
       ? [[
-          { text: "(Sin HU con actividad esta semana)", options: { color: COLORS.textMuted, italic: true, fontFace: "Calibri", fontSize: 11, align: "center" as const, colspan: 5 } },
+          { text: "(Sin HU con actividad esta semana)", options: { ...cellOpts(0), italic: true, align: "center" as const, colspan: 5 } },
         ]]
       : p.hus.map((hu, idx) => [
-          { text: hu.title, options: { color: COLORS.textDark, fontFace: "Calibri", fontSize: 11, align: "left" as const, valign: "middle" as const, fill: { color: idx % 2 === 0 ? COLORS.tableRowOdd : COLORS.tableRowEven } } },
-          { text: labelFor(hu.status), options: { color: COLORS.textDark, fontFace: "Calibri", fontSize: 11, align: "center" as const, valign: "middle" as const, fill: { color: idx % 2 === 0 ? COLORS.tableRowOdd : COLORS.tableRowEven } } },
-          { text: fmtNum(hu.designed), options: { color: COLORS.textDark, fontFace: "Calibri", fontSize: 11, align: "center" as const, valign: "middle" as const, fill: { color: idx % 2 === 0 ? COLORS.tableRowOdd : COLORS.tableRowEven } } },
-          { text: fmtNum(hu.executed), options: { color: COLORS.textDark, fontFace: "Calibri", fontSize: 11, align: "center" as const, valign: "middle" as const, fill: { color: idx % 2 === 0 ? COLORS.tableRowOdd : COLORS.tableRowEven } } },
-          { text: fmtNum(hu.defects), options: { color: COLORS.textDark, fontFace: "Calibri", fontSize: 11, align: "center" as const, valign: "middle" as const, fill: { color: idx % 2 === 0 ? COLORS.tableRowOdd : COLORS.tableRowEven } } },
+          { text: hu.title, options: { ...cellOpts(idx), align: "left" as const } },
+          { text: labelFor(hu.status), options: { ...cellOpts(idx), align: "center" as const } },
+          { text: fmtNum(hu.designed), options: { ...cellOpts(idx), align: "center" as const } },
+          { text: fmtNum(hu.executed), options: { ...cellOpts(idx), align: "center" as const } },
+          { text: fmtNum(hu.defects), options: { ...cellOpts(idx), align: "center" as const } },
         ]);
 
     s.addTable([headers, ...dataRows] as any, {
-      x: 0.7, y: 4.8, w: 11.9,
-      colW: [5.7, 2.4, 1.2, 1.3, 1.3],
+      x: 0.6, y: 4.85, w: 12.1,
+      colW: [5.7, 2.5, 1.2, 1.3, 1.4],
       rowH: 0.4,
-      border: { type: "solid", pt: 0.5, color: COLORS.borderSubtle },
+      border: { type: "solid", pt: 0.5, color: C.borderSubtle },
       fontFace: "Calibri",
     });
 
     // Fecha abajo derecha
     s.addText(formatWeekRange(input.weekStart, input.weekEnd), {
-      x: 8.5, y: SLIDE_H - 0.5, w: 4.3, h: 0.35,
-      fontSize: 10, color: COLORS.textMuted, italic: true, align: "right", fontFace: "Calibri",
+      x: 8.5, y: SLIDE_H - 0.45, w: 4.3, h: 0.3,
+      fontSize: 10, color: C.textMuted, italic: true, align: "right", fontFace: "Calibri",
     });
   }
 
-  // ── Slide final — Despedida ──
+  // ══════ Slide final — Despedida ══════
   {
     const s = pres.addSlide();
-    s.background = { color: COLORS.navy };
+    s.background = { color: C.navyDark };
+
+    // Logo centrado arriba
+    if (logoDataUrl) {
+      s.addImage({ data: logoDataUrl, x: (SLIDE_W - 3.5) / 2, y: 1.2, w: 3.5, h: 0.68 });
+    }
+
     s.addText("Gracias", {
-      x: 1, y: 2.8, w: 11, h: 1.5,
-      fontSize: 80, bold: true, color: COLORS.white, fontFace: "Calibri", align: "center",
+      x: 0, y: 2.6, w: SLIDE_W, h: 1.5,
+      fontSize: 90, bold: true, color: C.white, fontFace: "Calibri", align: "center",
     });
     s.addShape(pres.ShapeType.rect, {
-      x: 5.5, y: 4.3, w: 2.3, h: 0.04,
-      fill: { color: COLORS.lightBlue }, line: { color: COLORS.lightBlue },
+      x: SLIDE_W / 2 - 1, y: 4.3, w: 1.2, h: 0.05,
+      fill: { color: C.cyanAccent }, line: { color: C.cyanAccent },
     });
+    s.addShape(pres.ShapeType.rect, {
+      x: SLIDE_W / 2 + 0.2, y: 4.3, w: 0.8, h: 0.05,
+      fill: { color: C.greenAccent }, line: { color: C.greenAccent },
+    });
+
     s.addText("contacto@inovabiz.com  |  www.inovabiz.com  |  +562 2269 0490", {
-      x: 1, y: 4.6, w: 11, h: 0.4,
-      fontSize: 14, color: "A0B4D3", fontFace: "Calibri", align: "center",
+      x: 0, y: 4.7, w: SLIDE_W, h: 0.4,
+      fontSize: 14, color: C.textLight, fontFace: "Calibri", align: "center",
     });
     s.addText("INNOVATION & BUSINESS", {
-      x: 1, y: SLIDE_H - 0.6, w: 11, h: 0.3,
-      fontSize: 10, color: "8FA5C4", fontFace: "Calibri", align: "center", charSpacing: 6,
+      x: 0, y: SLIDE_H - 0.6, w: SLIDE_W, h: 0.3,
+      fontSize: 10, color: C.textMuted, fontFace: "Calibri", align: "center", charSpacing: 6,
     });
   }
 
-  // pptxgenjs devuelve Promise<string | Buffer | Blob>. Forzar base64 → Buffer.
   const base64 = (await pres.write({ outputType: "base64" })) as string;
   return Buffer.from(base64, "base64");
 }

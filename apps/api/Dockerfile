@@ -33,6 +33,7 @@ RUN npm i -g tsx
 
 COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/apps/api/assets ./apps/api/assets
 
 WORKDIR /app/apps/api
 
