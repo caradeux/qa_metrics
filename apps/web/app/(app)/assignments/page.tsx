@@ -13,6 +13,13 @@ interface Assignment {
   story: { id: string; title: string; designComplexity: string; executionComplexity: string };
 }
 interface Project { id: string; name: string; }
+interface TesterInfo {
+  id: string;
+  name: string;
+  allocation: number;
+  userId: string | null;
+  project: { id: string; name: string; client: { id: string; name: string } };
+}
 
 // Flujo de estados QA
 const STATUSES = [
@@ -44,8 +51,11 @@ export default function AssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [allTesters, setAllTesters] = useState<TesterInfo[]>([]);
   const [filterProject, setFilterProject] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterTester, setFilterTester] = useState("");
+  const [filterAvail, setFilterAvail] = useState<"" | "available" | "soon" | "busy">("");
   const [activeCycleByStory, setActiveCycleByStory] = useState<Record<string, string>>({});
   const { can } = usePermissions();
 
@@ -60,7 +70,18 @@ export default function AssignmentsPage() {
     setLoading(false);
   }, [filterProject]);
 
+  const fetchTesters = useCallback(async () => {
+    const params = filterProject ? `?projectId=${filterProject}` : "";
+    try {
+      const data = await apiClient<TesterInfo[]>(`/api/testers${params}`);
+      setAllTesters(data);
+    } catch {
+      setAllTesters([]);
+    }
+  }, [filterProject]);
+
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
+  useEffect(() => { fetchTesters(); }, [fetchTesters]);
   useEffect(() => { apiClient<Project[]>("/api/projects").then(setProjects).catch(() => setProjects([])); }, []);
 
   async function changeStatus(id: string, status: string) {
@@ -74,26 +95,65 @@ export default function AssignmentsPage() {
     fetchAssignments();
   }
 
-  // Filter
+  // Filter por estado (nivel asignación) + por tester (nivel grupo)
   const filtered = filterStatus ? assignments.filter(a => a.status === filterStatus) : assignments;
 
-  // Group by tester
-  const groups = new Map<string, { name: string; allocation: number; project: string; client: string; assignments: Assignment[] }>();
-  for (const a of filtered) {
-    if (!groups.has(a.tester.id)) groups.set(a.tester.id, { name: a.tester.name, allocation: a.tester.allocation ?? 100, project: a.tester.project.name, client: a.tester.project.client.name, assignments: [] });
-    groups.get(a.tester.id)!.assignments.push(a);
+  // Group por tester — partiendo de TODOS los testers (incluye los sin asignaciones)
+  type Group = {
+    testerId: string;
+    name: string;
+    allocation: number;
+    project: string;
+    client: string;
+    assignments: Assignment[];
+    availability: "available" | "soon" | "busy";
+    freeInDays: number | null;
+  };
+  const groupsArr: Group[] = [];
+  for (const t of allTesters) {
+    if (filterTester && t.id !== filterTester) continue;
+    const testerAssignments = filtered.filter(a => a.tester.id === t.id);
+    const activeAssignments = testerAssignments.filter(a => isActive(a.status));
+    let availability: Group["availability"] = "available";
+    let freeInDays: number | null = null;
+    if (activeAssignments.length > 0) {
+      // Si todas las activas tienen endDate definido y el mayor está ≤7d, es "soon"
+      const ends = activeAssignments.map(a => a.endDate ? daysUntil(a.endDate) : null);
+      const hasOpen = ends.some(e => e === null);
+      if (!hasOpen) {
+        const maxEnd = Math.max(...(ends as number[]));
+        if (maxEnd <= 7) {
+          availability = "soon";
+          freeInDays = maxEnd;
+        } else {
+          availability = "busy";
+          freeInDays = Math.min(...(ends as number[]));
+        }
+      } else {
+        availability = "busy";
+      }
+    }
+    groupsArr.push({
+      testerId: t.id,
+      name: t.name,
+      allocation: t.allocation,
+      project: t.project.name,
+      client: t.project.client.name,
+      assignments: testerAssignments,
+      availability,
+      freeInDays,
+    });
   }
 
-  // ── RESUMEN GERENCIAL ──
-  const totalHU = assignments.length;
-  const byStatus = STATUSES.map(s => ({ ...s, count: assignments.filter(a => a.status === s.value).length }));
-  const activeHU = assignments.filter(a => isActive(a.status)).length;
-  const prodHU = assignments.filter(a => a.status === "PRODUCTION").length;
-  const returnedHU = assignments.filter(a => a.status === "RETURNED_TO_DEV").length;
-  const uniqueTesters = new Set(assignments.map(a => a.tester.id)).size;
-  const busyTesters = new Set(assignments.filter(a => isActive(a.status)).map(a => a.tester.id)).size;
-  const availableTesters = uniqueTesters - busyTesters;
-  const completionRate = totalHU > 0 ? Math.round((prodHU / totalHU) * 100) : 0;
+  // Aplicar filterAvail
+  const visibleGroups = filterAvail
+    ? groupsArr.filter(g => g.availability === filterAvail)
+    : groupsArr;
+
+  // ── Resumen de disponibilidad ──
+  const countAvailable = groupsArr.filter(g => g.availability === "available").length;
+  const countSoon = groupsArr.filter(g => g.availability === "soon").length;
+  const countBusy = groupsArr.filter(g => g.availability === "busy").length;
 
   return (
     <div>
@@ -111,11 +171,71 @@ export default function AssignmentsPage() {
         )}
       </div>
 
+      {/* Banner de disponibilidad */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <button
+          type="button"
+          onClick={() => setFilterAvail(filterAvail === "available" ? "" : "available")}
+          className={`p-3 rounded-xl border text-left transition ${
+            filterAvail === "available"
+              ? "border-emerald-400 bg-emerald-50 shadow-sm"
+              : "border-gray-200 bg-white hover:border-emerald-200"
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Disponibles</span>
+          </div>
+          <p className="text-2xl font-bold text-emerald-600 font-mono">{countAvailable}</p>
+          <p className="text-[10px] text-gray-400">Sin asignaciones activas</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterAvail(filterAvail === "soon" ? "" : "soon")}
+          className={`p-3 rounded-xl border text-left transition ${
+            filterAvail === "soon"
+              ? "border-amber-400 bg-amber-50 shadow-sm"
+              : "border-gray-200 bg-white hover:border-amber-200"
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-amber-500" />
+            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Pronto a liberar</span>
+          </div>
+          <p className="text-2xl font-bold text-amber-600 font-mono">{countSoon}</p>
+          <p className="text-[10px] text-gray-400">Terminan en ≤7 días</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterAvail(filterAvail === "busy" ? "" : "busy")}
+          className={`p-3 rounded-xl border text-left transition ${
+            filterAvail === "busy"
+              ? "border-blue-400 bg-blue-50 shadow-sm"
+              : "border-gray-200 bg-white hover:border-blue-200"
+          }`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-blue-500" />
+            <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Ocupados</span>
+          </div>
+          <p className="text-2xl font-bold text-blue-600 font-mono">{countBusy}</p>
+          <p className="text-[10px] text-gray-400">Con trabajo activo</p>
+        </button>
+      </div>
+
       {/* Filters */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
         <select value={filterProject} onChange={e => setFilterProject(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:border-[#4A90D9] outline-none">
           <option value="">Todos los proyectos</option>
           {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select value={filterTester} onChange={e => setFilterTester(e.target.value)} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs focus:border-[#4A90D9] outline-none" style={{ minWidth: 180 }}>
+          <option value="">Todos los testers</option>
+          {allTesters.map(t => (
+            <option key={t.id} value={t.id}>
+              {t.name} · {t.project.name}
+            </option>
+          ))}
         </select>
         <div className="flex bg-gray-100 rounded-lg p-0.5 overflow-x-auto">
           <button onClick={() => setFilterStatus("")} className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition whitespace-nowrap ${!filterStatus ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>Todos</button>
@@ -132,13 +252,14 @@ export default function AssignmentsPage() {
       {/* Tester cards */}
       {loading ? (
         <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-40 bg-gray-100 rounded-xl animate-pulse"/>)}</div>
-      ) : groups.size === 0 ? (
+      ) : visibleGroups.length === 0 ? (
         <div className="text-center py-20 bg-white rounded-xl border border-gray-200">
           <p className="text-sm font-medium text-gray-500">Sin resultados</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {Array.from(groups.entries()).map(([testerId, group]) => {
+          {visibleGroups.map((group) => {
+            const testerId = group.testerId;
             const activeCount = group.assignments.filter(a => isActive(a.status)).length;
             const prodCount = group.assignments.filter(a => a.status === "PRODUCTION").length;
             const hasReturned = group.assignments.some(a => a.status === "RETURNED_TO_DEV");
@@ -171,6 +292,24 @@ export default function AssignmentsPage() {
                     {nextEnd && <div className="pl-4 border-l border-gray-200"><p className={`font-mono text-lg font-bold ${dLeft !== null && dLeft <= 3 ? "text-amber-500" : "text-gray-600"}`}>{dLeft !== null ? (dLeft <= 0 ? "Hoy" : `${dLeft}d`) : "—"}</p><p className="text-[8px] text-gray-400 uppercase">Libera</p></div>}
                   </div>
                 </div>
+
+                {/* Empty state cuando el tester no tiene asignaciones */}
+                {group.assignments.length === 0 && (
+                  <div className="px-4 py-6 text-center bg-emerald-50/30">
+                    <svg className="w-8 h-8 mx-auto mb-2 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                    <p className="text-xs text-gray-500 mb-2">Sin asignaciones activas — disponible para nuevo trabajo</p>
+                    {can("assignments", "create") && (
+                      <Link
+                        href={`/assignments/new?testerId=${testerId}`}
+                        className="inline-block px-3 py-1 text-[11px] font-medium text-emerald-700 bg-emerald-100 rounded-md hover:bg-emerald-200 transition"
+                      >
+                        + Asignar HU
+                      </Link>
+                    )}
+                  </div>
+                )}
 
                 {/* Assignments — agrupados por HU (si tiene múltiples ciclos, tabs) */}
                 <div className="divide-y divide-gray-50">
