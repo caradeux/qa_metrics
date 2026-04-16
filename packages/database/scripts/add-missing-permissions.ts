@@ -8,7 +8,7 @@ const prisma = new PrismaClient({
 
 // Recursos nuevos a incorporar al RBAC (2026-04-16).
 // "stories" ya existía en seed pero faltaba en UI; el resto son nuevos.
-const NEW_RESOURCES = ["stories", "phases", "dashboard", "gantt", "story-status", "audit"] as const;
+const NEW_RESOURCES = ["stories", "phases", "dashboard", "gantt", "story-status", "audit", "holidays"] as const;
 const ACTIONS = ["create", "read", "update", "delete"] as const;
 
 async function upsertPermission(resource: string, action: string) {
@@ -59,6 +59,10 @@ async function main() {
     await linkRolePermission(qaLead.id, perms["gantt:read"].id);
     await linkRolePermission(qaLead.id, perms["story-status:update"].id);
     await linkRolePermission(qaLead.id, perms["audit:read"].id);
+    // Holidays: CRUD completo para que el Líder QA mantenga el calendario
+    for (const action of ACTIONS) {
+      await linkRolePermission(qaLead.id, perms[`holidays:${action}`].id);
+    }
   }
 
   // QA_ANALYST: read en todos (menos story-status que solo tiene update); create/update en phases; update en story-status

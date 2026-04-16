@@ -78,6 +78,7 @@ async function main() {
     "records",
     "dashboard", "gantt", "reports",
     "audit",
+    "holidays",
   ];
   const actions = ["create", "read", "update", "delete"];
   const permissions: Record<string, { id: string }> = {};
@@ -106,9 +107,12 @@ async function main() {
   await linkRolePermission(qaLeadRole.id, permissions["gantt:read"].id);
   await linkRolePermission(qaLeadRole.id, permissions["story-status:update"].id);
   await linkRolePermission(qaLeadRole.id, permissions["audit:read"].id);
+  for (const action of actions) {
+    await linkRolePermission(qaLeadRole.id, permissions[`holidays:${action}`].id);
+  }
 
   // QA_ANALYST
-  const analystReadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "dashboard", "gantt", "reports", "audit"];
+  const analystReadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "dashboard", "gantt", "reports", "audit", "holidays"];
   for (const resource of analystReadResources) {
     await linkRolePermission(qaAnalystRole.id, permissions[`${resource}:read`].id);
   }

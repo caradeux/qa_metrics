@@ -96,7 +96,7 @@ async function validateAndResolve(
   const stories = projects.length
     ? await prisma.userStory.findMany({
         where: { projectId: { in: projects.map((p) => p.id) } },
-        include: { cycles: { orderBy: { startDate: "desc" } } },
+        include: { cycles: { orderBy: { startDate: "asc" } } },
       })
     : [];
   const storyKey = (projectId: string, title: string) => `${projectId}::${title}`;

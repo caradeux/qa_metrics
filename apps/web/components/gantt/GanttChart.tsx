@@ -195,11 +195,11 @@ export function GanttChart({
                     <div
                       key={i}
                       title={holiday || ""}
-                      className={`flex flex-col items-center justify-center py-1 border-r text-[9px] ${
+                      className={`flex flex-col items-center justify-center py-1 border-r text-[9px] relative ${
                         isToday
                           ? "bg-red-50 border-red-200 text-red-700 font-bold"
                           : holiday
-                            ? "bg-yellow-50 border-yellow-100 text-yellow-800"
+                            ? "bg-amber-100 border-amber-300 text-amber-900 font-semibold"
                             : weekend
                               ? "bg-gray-100 border-gray-200 text-gray-400"
                               : "bg-white border-gray-100 text-gray-500"
@@ -210,6 +210,12 @@ export function GanttChart({
                       <span className="uppercase leading-none mt-0.5 opacity-70">
                         {format(d, "EEE", { locale: es }).slice(0, 2)}
                       </span>
+                      {holiday && !isToday && (
+                        <span
+                          className="absolute top-0 right-0.5 text-[7px] font-bold text-amber-700 leading-none"
+                          aria-hidden="true"
+                        >F</span>
+                      )}
                     </div>
                   );
                 })}
@@ -360,7 +366,7 @@ export function GanttChart({
                           key={i}
                           className={`border-r ${
                             holiday
-                              ? "bg-yellow-50/60 border-yellow-100"
+                              ? "bg-amber-100/50 border-amber-200"
                               : weekend
                                 ? "bg-gray-100/70 border-gray-200"
                                 : "border-gray-100"

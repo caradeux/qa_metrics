@@ -128,7 +128,12 @@ router.get(
             orderBy: { startDate: "asc" },
           },
         },
-        orderBy: { startDate: "desc" },
+        orderBy: [
+          { tester: { name: "asc" } },
+          { story: { title: "asc" } },
+          { cycle: { name: "asc" } },
+          { startDate: "asc" },
+        ],
       });
 
       res.json(assignments);

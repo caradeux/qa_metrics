@@ -262,6 +262,16 @@ export default function GanttPage() {
               {s.label}
             </span>
           ))}
+          <span className="inline-flex items-center gap-1.5 text-[10px] text-gray-600">
+            <span className="w-3 h-3 rounded-sm bg-amber-100 border border-amber-300 relative">
+              <span className="absolute top-0 right-0 text-[7px] font-bold text-amber-700 leading-none">F</span>
+            </span>
+            Feriado CL
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[10px] text-gray-600">
+            <span className="w-3 h-3 rounded-sm bg-gray-100 border border-gray-200" />
+            Fin de semana
+          </span>
         </div>
       </div>
 
