@@ -11,8 +11,11 @@ interface Holiday {
 }
 
 function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric", weekday: "long" });
+  // Parseo local (YYYY-MM-DD) para evitar corrimiento por zona horaria
+  const ymd = iso.slice(0, 10);
+  const [y, m, d] = ymd.split("-").map(Number);
+  const local = new Date(y!, m! - 1, d!);
+  return local.toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric", weekday: "long" });
 }
 
 function isoOnly(iso: string): string {
