@@ -63,11 +63,12 @@ export async function apiClient<T = any>(
     throw new ApiError(res.status, message);
   }
 
-  // Handle blob responses (PDF, Excel)
+  // Handle blob responses (PDF, Excel, PowerPoint)
   const contentType = res.headers.get("content-type") || "";
   if (
     contentType.includes("application/pdf") ||
     contentType.includes("spreadsheetml") ||
+    contentType.includes("presentationml") ||
     contentType.includes("octet-stream")
   ) {
     return res.blob() as any;

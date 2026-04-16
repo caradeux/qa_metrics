@@ -359,6 +359,7 @@ router.get(
   async (req: AuthRequest, res: Response) => {
     try {
       const weekStartParam = (req.query.weekStart as string | undefined)?.slice(0, 10);
+      const clientIdFilter = req.query.clientId as string | undefined;
       const monday = weekStartParam
         ? new Date(weekStartParam)
         : startOfWeek(new Date(), { weekStartsOn: 1 });
@@ -374,6 +375,10 @@ router.get(
         projectScope.id = { in: ids };
       } else {
         projectScope.client = { userId: req.user!.id };
+      }
+      // Filtro adicional por cliente (opcional)
+      if (clientIdFilter) {
+        projectScope.clientId = clientIdFilter;
       }
 
       // Proyectos con al menos una asignación en los estados incluidos cuyo rango
