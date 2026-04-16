@@ -45,6 +45,11 @@ export interface WeeklyPptxInput {
   weekStart: Date;
   weekEnd: Date;
   projects: WeeklyProjectSlide[];
+  charts?: {
+    pipeline: Buffer;
+    designedVsExecuted: Buffer;
+    defects: Buffer;
+  };
 }
 
 // XML escaping para valores que irán dentro de <a:t>
@@ -311,6 +316,70 @@ function cleanSlideRels(relsXml: string): string {
   return relsXml.replace(/<Relationship [^/]+notesSlide[^/]*\/>/g, "");
 }
 
+/**
+ * Construye el XML de un slide "Resumen Semanal" con 3 gráficos embebidos
+ * como imágenes. Layout: donut arriba centrado, 2 barras abajo.
+ */
+function buildSummarySlideXml(): string {
+  // Tamaños en EMU (1 inch = 914400 EMU). Slide widescreen: 12192000 x 6858000
+  const SLIDE_W = 12192000;
+  const SLIDE_H = 6858000;
+  // Pipeline (donut) arriba a la izquierda (50% ancho, 55% alto)
+  const CHART1 = { x: 152400, y: 914400, cx: 5943600, cy: 3657600 };
+  // Designed vs Executed a la derecha del pipeline
+  const CHART2 = { x: 6096000, y: 914400, cx: 5943600, cy: 3657600 };
+  // Defectos abajo (ancho completo)
+  const CHART3 = { x: 152400, y: 4724400, cx: 11887200, cy: 1905000 };
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
+<p:cSld name="Resumen Semanal">
+  <p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
+  <p:spTree>
+    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
+    <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
+    <p:sp><p:nvSpPr><p:cNvPr id="2" name="Side bar"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="73152" cy="${SLIDE_H}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="22C55E"/></a:solidFill><a:ln/></p:spPr>
+      <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="es-CL"/></a:p></p:txBody>
+    </p:sp>
+    <p:sp><p:nvSpPr><p:cNvPr id="3" name="Title"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+      <p:spPr><a:xfrm><a:off x="457200" y="320040"/><a:ext cx="${SLIDE_W - 914400}" cy="548640"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln/></p:spPr>
+      <p:txBody><a:bodyPr wrap="square" rtlCol="0" anchor="ctr"/><a:lstStyle/>
+        <a:p><a:pPr marL="0" indent="0"><a:buNone/></a:pPr>
+          <a:r><a:rPr lang="es-CL" sz="3400" b="1"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill><a:latin typeface="Arial"/></a:rPr><a:t>Resumen Semanal</a:t></a:r>
+        </a:p>
+      </p:txBody>
+    </p:sp>
+    <p:pic><p:nvPicPr><p:cNvPr id="10" name="Chart Pipeline"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill><a:blip r:embed="rIdChart1"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+      <p:spPr><a:xfrm><a:off x="${CHART1.x}" y="${CHART1.y}"/><a:ext cx="${CHART1.cx}" cy="${CHART1.cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+    </p:pic>
+    <p:pic><p:nvPicPr><p:cNvPr id="11" name="Chart Designed vs Executed"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill><a:blip r:embed="rIdChart2"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+      <p:spPr><a:xfrm><a:off x="${CHART2.x}" y="${CHART2.y}"/><a:ext cx="${CHART2.cx}" cy="${CHART2.cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+    </p:pic>
+    <p:pic><p:nvPicPr><p:cNvPr id="12" name="Chart Defects"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>
+      <p:blipFill><a:blip r:embed="rIdChart3"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>
+      <p:spPr><a:xfrm><a:off x="${CHART3.x}" y="${CHART3.y}"/><a:ext cx="${CHART3.cx}" cy="${CHART3.cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>
+    </p:pic>
+  </p:spTree>
+</p:cSld>
+<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
+</p:sld>`;
+}
+
+/**
+ * Rels del slide de resumen: 3 imágenes de gráficos.
+ */
+function buildSummarySlideRels(chartFileNames: [string, string, string]): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rIdChart1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${chartFileNames[0]}"/>
+<Relationship Id="rIdChart2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${chartFileNames[1]}"/>
+<Relationship Id="rIdChart3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${chartFileNames[2]}"/>
+</Relationships>`;
+}
+
 export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buffer> {
   const templateBuf = readFileSync(TEMPLATE_PATH);
   const zip = await JSZip.loadAsync(templateBuf);
@@ -365,8 +434,27 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
     });
   });
 
+  // Slide de Resumen Semanal con los 3 gráficos (si vienen cargados)
+  if (input.charts) {
+    const baseIdx = input.projects.length + 2;
+    // Guardar imágenes en ppt/media/
+    const chartFiles: [string, string, string] = [
+      `chartPipeline.png`,
+      `chartDesignedExecuted.png`,
+      `chartDefects.png`,
+    ];
+    zip.file(`ppt/media/${chartFiles[0]}`, input.charts.pipeline);
+    zip.file(`ppt/media/${chartFiles[1]}`, input.charts.designedVsExecuted);
+    zip.file(`ppt/media/${chartFiles[2]}`, input.charts.defects);
+    generated.push({
+      name: `slide${baseIdx}.xml`,
+      content: buildSummarySlideXml(),
+      rels: buildSummarySlideRels(chartFiles),
+    });
+  }
+
   generated.push({
-    name: `slide${input.projects.length + 2}.xml`,
+    name: `slide${generated.length + 1}.xml`,
     content: closingXml,
     rels: closingRels,
   });

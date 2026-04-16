@@ -12,6 +12,13 @@ import {
 import { aggregateDailyToWeekly } from "../services/metrics.service.js";
 import { jsPDF } from "jspdf";
 import { buildWeeklyPptxBuffer, type WeeklyProjectSlide } from "../lib/weekly-pptx.js";
+import {
+  buildPipelineDonut,
+  buildDesignedVsExecutedBars,
+  buildDefectsBars,
+  type PipelineDatum,
+  type ProjectMetricsDatum,
+} from "../lib/weekly-charts.js";
 import { addDays, startOfWeek } from "date-fns";
 import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../lib/access.js";
 
@@ -479,10 +486,61 @@ router.get(
         };
       });
 
+      // ── Agregar dataset para los 3 gráficos ──
+      // Pipeline: agrupa por label del estado mapeado
+      const STATUS_LABEL_INLINE: Record<string, string> = {
+        REGISTERED: "No Iniciado",
+        ANALYSIS: "En Diseño",
+        TEST_DESIGN: "En Diseño",
+        WAITING_QA_DEPLOY: "Pdte. Instalación QA",
+        EXECUTION: "En Curso",
+        RETURNED_TO_DEV: "Devuelto a Desarrollo",
+        WAITING_UAT: "Pdte. Aprobación",
+        UAT: "Pdte. Aprobación",
+        PRODUCTION: "Completado",
+        ON_HOLD: "Detenido",
+      };
+      const pipelineMap = new Map<string, number>();
+      const projectMetrics: ProjectMetricsDatum[] = [];
+      for (const p of projects) {
+        let d = 0, e = 0, bug = 0;
+        for (const s of p.stories) {
+          for (const a of s.assignments) {
+            const label = STATUS_LABEL_INLINE[a.status] ?? a.status;
+            pipelineMap.set(label, (pipelineMap.get(label) ?? 0) + 1);
+            for (const r of a.dailyRecords) {
+              d += r.designed;
+              e += r.executed;
+              bug += r.defects;
+            }
+          }
+        }
+        projectMetrics.push({ projectName: p.name, designed: d, executed: e, defects: bug });
+      }
+      const pipelineData: PipelineDatum[] = Array.from(pipelineMap.entries()).map(
+        ([label, count]) => ({ label, count }),
+      );
+
+      // Generar gráficos como PNG (puede fallar si el runtime no tiene canvas)
+      let charts: { pipeline: Buffer; designedVsExecuted: Buffer; defects: Buffer } | undefined;
+      try {
+        const [pipeline, dve, defects] = await Promise.all([
+          buildPipelineDonut(pipelineData),
+          buildDesignedVsExecutedBars(projectMetrics),
+          buildDefectsBars(projectMetrics),
+        ]);
+        charts = { pipeline, designedVsExecuted: dve, defects };
+      } catch (chartErr) {
+        // Si chartjs-node-canvas falla (p.ej. sin canvas nativo), no insertamos
+        // el slide de resumen y seguimos con el resto del PPTX.
+        console.warn("Charts generation failed, omitting summary slide:", chartErr);
+      }
+
       const buffer = await buildWeeklyPptxBuffer({
         weekStart: monday,
         weekEnd: friday,
         projects: projectSlides,
+        charts,
       });
 
       const isoWeek = monday.toISOString().slice(0, 10);
