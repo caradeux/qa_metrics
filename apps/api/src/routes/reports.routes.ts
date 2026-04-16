@@ -11,6 +11,9 @@ import {
 } from "../services/report-excel.js";
 import { aggregateDailyToWeekly } from "../services/metrics.service.js";
 import { jsPDF } from "jspdf";
+import { buildWeeklyPptxBuffer, type WeeklyProjectSlide } from "../lib/weekly-pptx.js";
+import { addDays, startOfWeek } from "date-fns";
+import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../lib/access.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -340,6 +343,162 @@ router.post(
       res.status(500).json({ error: "Error al generar el reporte PDF" });
     }
   }
+);
+
+// GET /weekly-pptx — Avance Semanal QA en PPTX (auto-generado desde los datos)
+// Query: ?weekStart=YYYY-MM-DD (opcional, default lunes de la semana actual)
+// Incluye proyectos con asignaciones activas o en UAT/WAITING_UAT
+const ACTIVE_OR_UAT = [
+  "REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY",
+  "EXECUTION", "RETURNED_TO_DEV", "WAITING_UAT", "UAT",
+] as const;
+
+router.get(
+  "/weekly-pptx",
+  requirePermission("reports", "read") as any,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const weekStartParam = (req.query.weekStart as string | undefined)?.slice(0, 10);
+      const monday = weekStartParam
+        ? new Date(weekStartParam)
+        : startOfWeek(new Date(), { weekStartsOn: 1 });
+      const friday = addDays(monday, 4);
+
+      // Scope de proyectos accesibles
+      const projectScope: any = {};
+      if (isClientPm(req)) {
+        const ids = await clientPmProjectIds(req.user!.id);
+        projectScope.id = { in: ids };
+      } else if (isAnalyst(req)) {
+        const ids = await analystProjectIds(req.user!.id);
+        projectScope.id = { in: ids };
+      } else {
+        projectScope.client = { userId: req.user!.id };
+      }
+
+      // Proyectos con al menos una asignación en los estados incluidos cuyo rango
+      // toque la semana (startDate <= friday y endDate >= monday o null)
+      const projects = await prisma.project.findMany({
+        where: {
+          ...projectScope,
+          stories: {
+            some: {
+              assignments: {
+                some: {
+                  status: { in: [...ACTIVE_OR_UAT] },
+                  startDate: { lte: friday },
+                  OR: [{ endDate: null }, { endDate: { gte: monday } }],
+                },
+              },
+            },
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+          client: { select: { name: true } },
+          projectManager: { select: { name: true } },
+          testers: {
+            select: { id: true, name: true, allocation: true },
+            orderBy: { allocation: "desc" },
+          },
+          stories: {
+            select: {
+              id: true,
+              title: true,
+              externalId: true,
+              assignments: {
+                where: {
+                  status: { in: [...ACTIVE_OR_UAT] },
+                  startDate: { lte: friday },
+                  OR: [{ endDate: null }, { endDate: { gte: monday } }],
+                },
+                select: {
+                  id: true,
+                  status: true,
+                  testerId: true,
+                  dailyRecords: {
+                    where: { date: { gte: monday, lte: friday } },
+                    select: { designed: true, executed: true, defects: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { name: "asc" },
+      });
+
+      const projectSlides: WeeklyProjectSlide[] = projects.map((p) => {
+        // Tester dominante del proyecto: el que aparece en más assignments de la semana
+        const testerHits = new Map<string, number>();
+        for (const story of p.stories) {
+          for (const a of story.assignments) {
+            testerHits.set(a.testerId, (testerHits.get(a.testerId) ?? 0) + 1);
+          }
+        }
+        let dominantTesterId: string | null = null;
+        let maxHits = 0;
+        for (const [tid, hits] of testerHits) {
+          if (hits > maxHits) { maxHits = hits; dominantTesterId = tid; }
+        }
+        const dominantTester = p.testers.find((t) => t.id === dominantTesterId) ?? p.testers[0] ?? null;
+
+        // HUs: cada story con al menos 1 assignment en la semana
+        const hus = p.stories
+          .filter((s) => s.assignments.length > 0)
+          .map((s) => {
+            // Agregar métricas de todos los assignments de esta story en la semana
+            const flatRecords = s.assignments.flatMap((a) => a.dailyRecords);
+            const designed = flatRecords.reduce((sum, r) => sum + r.designed, 0);
+            const executed = flatRecords.reduce((sum, r) => sum + r.executed, 0);
+            const defects = flatRecords.reduce((sum, r) => sum + r.defects, 0);
+            const hasAnyRecord = flatRecords.length > 0;
+
+            // Estado: el más "avanzado" entre los assignments (o cualquiera; tomamos el primero)
+            const status = s.assignments[0]?.status ?? "REGISTERED";
+
+            const title = s.externalId ? `${s.externalId} — ${s.title}` : s.title;
+            return {
+              title,
+              status,
+              designed: hasAnyRecord ? designed : null,
+              executed: hasAnyRecord ? executed : null,
+              defects: hasAnyRecord ? defects : null,
+            };
+          });
+
+        return {
+          projectName: p.name,
+          clientName: p.client.name,
+          projectManagerName: p.projectManager?.name ?? null,
+          testerName: dominantTester?.name ?? null,
+          testerAllocation: dominantTester?.allocation ?? null,
+          hus,
+        };
+      });
+
+      const buffer = await buildWeeklyPptxBuffer({
+        weekStart: monday,
+        weekEnd: friday,
+        projects: projectSlides,
+      });
+
+      const isoWeek = monday.toISOString().slice(0, 10);
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="Avance_Semanal_QA_${isoWeek}.pptx"`,
+      );
+      res.send(buffer);
+    } catch (err) {
+      console.error("weekly-pptx error:", err);
+      res.status(500).json({ error: "Error al generar el PPTX semanal" });
+    }
+  },
 );
 
 export default router;
