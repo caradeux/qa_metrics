@@ -391,8 +391,6 @@ router.get(
               assignments: {
                 some: {
                   status: { in: [...ACTIVE_OR_UAT] },
-                  startDate: { lte: friday },
-                  OR: [{ endDate: null }, { endDate: { gte: monday } }],
                 },
               },
             },
@@ -415,8 +413,6 @@ router.get(
               assignments: {
                 where: {
                   status: { in: [...ACTIVE_OR_UAT] },
-                  startDate: { lte: friday },
-                  OR: [{ endDate: null }, { endDate: { gte: monday } }],
                 },
                 select: {
                   id: true,
