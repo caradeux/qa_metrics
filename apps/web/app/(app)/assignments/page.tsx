@@ -46,6 +46,7 @@ export default function AssignmentsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [filterProject, setFilterProject] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [activeCycleByStory, setActiveCycleByStory] = useState<Record<string, string>>({});
   const { can } = usePermissions();
 
   const fetchAssignments = useCallback(async () => {
@@ -171,74 +172,123 @@ export default function AssignmentsPage() {
                   </div>
                 </div>
 
-                {/* Assignments */}
+                {/* Assignments — agrupados por HU (si tiene múltiples ciclos, tabs) */}
                 <div className="divide-y divide-gray-50">
-                  {group.assignments.sort((a, b) => (statusMap[a.status]?.step || 0) - (statusMap[b.status]?.step || 0)).map(a => {
-                    const s = statusMap[a.status] || STATUSES[0];
-                    const isProd = a.status === "PRODUCTION";
+                  {(() => {
+                    // Agrupar las asignaciones de este tester por story.id
+                    const byStory = new Map<string, Assignment[]>();
+                    for (const a of group.assignments) {
+                      if (!byStory.has(a.story.id)) byStory.set(a.story.id, []);
+                      byStory.get(a.story.id)!.push(a);
+                    }
+                    // Orden ciclos dentro de cada HU (natural: Ciclo 1, 2, 3, 10)
+                    for (const [, arr] of byStory) {
+                      arr.sort((a, b) => a.cycle.name.localeCompare(b.cycle.name, "es", { numeric: true }));
+                    }
+                    // Ordenar HUs por el estado más avanzado de su ciclo activo
+                    const storyEntries = Array.from(byStory.entries()).sort((x, y) => {
+                      const maxStepX = Math.max(...x[1].map(a => statusMap[a.status]?.step || 0));
+                      const maxStepY = Math.max(...y[1].map(a => statusMap[a.status]?.step || 0));
+                      return maxStepX - maxStepY;
+                    });
 
-                    return (
-                      <div key={a.id} className={`flex items-center gap-3 px-4 py-3 transition-colors ${isProd ? "bg-gray-50/50" : "hover:bg-gray-50/50"}`}>
-                        {/* Status dot + line */}
-                        <div className="flex flex-col items-center gap-0.5 shrink-0">
-                          <span className={`w-3 h-3 rounded-full border-2 border-white shadow-sm ${s.dot}`} />
-                          <span className={`w-0.5 h-4 rounded-full ${isProd ? "bg-emerald-200" : "bg-gray-200"}`} />
-                        </div>
+                    return storyEntries.map(([storyId, cycleList]) => {
+                      const activeId = activeCycleByStory[storyId] ?? cycleList[cycleList.length - 1]!.id;
+                      const a = cycleList.find(x => x.id === activeId) ?? cycleList[cycleList.length - 1]!;
+                      const s = statusMap[a.status] || STATUSES[0];
+                      const isProd = a.status === "PRODUCTION";
+                      const hasMultiple = cycleList.length > 1;
 
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
+                      return (
+                        <div key={storyId} className={`px-4 py-3 transition-colors ${isProd ? "bg-gray-50/50" : "hover:bg-gray-50/50"}`}>
+                          {/* Header HU: título + tabs de ciclos (si hay varios) */}
+                          <div className="flex items-center gap-2 flex-wrap mb-2">
                             <p className={`text-sm font-medium ${isProd ? "text-gray-400" : "text-gray-800"}`}>{a.story.title}</p>
                             <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase ${complexityBadge[a.story.executionComplexity] || ""}`}>
                               {a.story.executionComplexity === "HIGH" ? "Alta" : a.story.executionComplexity === "MEDIUM" ? "Media" : "Baja"}
                             </span>
+                            {hasMultiple && (
+                              <span className="px-1.5 py-0.5 rounded bg-[#1F3864]/10 text-[#1F3864] text-[9px] font-bold uppercase tracking-wider">
+                                {cycleList.length} ciclos
+                              </span>
+                            )}
+                            {hasMultiple && (
+                              <div className="ml-auto flex items-center gap-0.5 bg-gray-100 p-0.5 rounded-md">
+                                {cycleList.map((c) => {
+                                  const cStatus = statusMap[c.status];
+                                  const isActiveTab = c.id === a.id;
+                                  return (
+                                    <button
+                                      key={c.id}
+                                      type="button"
+                                      onClick={() => setActiveCycleByStory(prev => ({ ...prev, [storyId]: c.id }))}
+                                      title={`${c.cycle.name} · ${cStatus?.label}`}
+                                      className={`px-2 py-1 text-[10px] font-semibold rounded transition inline-flex items-center gap-1 ${
+                                        isActiveTab
+                                          ? "bg-white text-[#1F3864] shadow-sm"
+                                          : "text-gray-500 hover:text-gray-700"
+                                      }`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${cStatus?.dot ?? "bg-gray-400"}`} />
+                                      {c.cycle.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold ${s.bg}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />{s.label}
-                            </span>
-                            <span className="text-[10px] text-gray-400">{a.cycle?.name}</span>
-                            <span className="text-[10px] text-gray-300 font-mono">{fmtDate(a.startDate)}{a.endDate ? ` → ${fmtDate(a.endDate)}` : ""}</span>
-                          </div>
-                          {a.notes && (
-                            <div className="mt-1.5 inline-flex items-start gap-1 px-2 py-1 bg-amber-50 rounded border border-amber-100 max-w-md">
-                              <svg className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                              <p className="text-[10px] text-amber-700">{a.notes}</p>
+
+                          {/* Fila de detalle del ciclo activo */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-center gap-0.5 shrink-0">
+                              <span className={`w-3 h-3 rounded-full border-2 border-white shadow-sm ${s.dot}`} />
+                              <span className={`w-0.5 h-4 rounded-full ${isProd ? "bg-emerald-200" : "bg-gray-200"}`} />
                             </div>
-                          )}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-semibold ${s.bg}`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />{s.label}
+                                </span>
+                                {!hasMultiple && <span className="text-[10px] text-gray-400">{a.cycle?.name}</span>}
+                                <span className="text-[10px] text-gray-300 font-mono">{fmtDate(a.startDate)}{a.endDate ? ` → ${fmtDate(a.endDate)}` : ""}</span>
+                              </div>
+                              {a.notes && (
+                                <div className="mt-1.5 inline-flex items-start gap-1 px-2 py-1 bg-amber-50 rounded border border-amber-100 max-w-md">
+                                  <svg className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                  <p className="text-[10px] text-amber-700">{a.notes}</p>
+                                </div>
+                              )}
+                            </div>
+                            <div className="shrink-0 flex items-center gap-0.5">
+                              {STATUSES.map((st) => (
+                                <div key={st.value} className={`w-1.5 h-5 rounded-sm transition-all ${(statusMap[a.status]?.step || 0) >= st.step ? "" : "opacity-20"}`}
+                                  style={{ backgroundColor: (statusMap[a.status]?.step || 0) >= st.step ? s.color : "#e5e7eb" }}
+                                  title={st.label} />
+                              ))}
+                            </div>
+                            <div className="shrink-0 flex items-center gap-1">
+                              {can("assignments", "update") && (
+                                <Link href={`/assignments/${a.id}/edit`} className="px-2 py-1 text-[10px] text-gray-500 hover:text-[#2E5FA3] hover:bg-[#2E5FA3]/5 rounded transition font-medium">
+                                  Editar
+                                </Link>
+                              )}
+                              {!isProd && can("assignments", "update") && (
+                                <select value={a.status} onChange={e => changeStatus(a.id, e.target.value)}
+                                  className="px-2 py-1 text-[10px] border border-gray-200 rounded-md bg-white text-gray-600 focus:border-[#4A90D9] outline-none cursor-pointer hover:border-gray-300 transition">
+                                  {STATUSES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
+                                </select>
+                              )}
+                              {isProd && (
+                                <span className="inline-flex items-center gap-1 text-emerald-500 text-xs font-semibold">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4"/></svg>
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-
-                        {/* Step indicator */}
-                        <div className="shrink-0 flex items-center gap-0.5">
-                          {STATUSES.map((st, idx) => (
-                            <div key={st.value} className={`w-1.5 h-5 rounded-sm transition-all ${(statusMap[a.status]?.step || 0) >= st.step ? "" : "opacity-20"}`}
-                              style={{ backgroundColor: (statusMap[a.status]?.step || 0) >= st.step ? s.color : "#e5e7eb" }}
-                              title={st.label} />
-                          ))}
-                        </div>
-
-                        {/* Next action */}
-                        <div className="shrink-0 flex items-center gap-1">
-                          {can("assignments", "update") && (
-                            <Link href={`/assignments/${a.id}/edit`} className="px-2 py-1 text-[10px] text-gray-500 hover:text-[#2E5FA3] hover:bg-[#2E5FA3]/5 rounded transition font-medium">
-                              Editar
-                            </Link>
-                          )}
-                          {!isProd && can("assignments", "update") && (
-                            <select value={a.status} onChange={e => changeStatus(a.id, e.target.value)}
-                              className="px-2 py-1 text-[10px] border border-gray-200 rounded-md bg-white text-gray-600 focus:border-[#4A90D9] outline-none cursor-pointer hover:border-gray-300 transition">
-                              {STATUSES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
-                            </select>
-                          )}
-                          {isProd && (
-                            <span className="inline-flex items-center gap-1 text-emerald-500 text-xs font-semibold">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4"/></svg>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             );
