@@ -125,12 +125,12 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
 
     // Título principal (3 líneas)
     s.addText("Seguimiento", {
-      x: 0.8, y: 2.3, w: 12, h: 0.95,
-      fontSize: 54, bold: true, color: C.white, fontFace: "Calibri",
+      x: 0.8, y: 2.3, w: 12, h: 0.9,
+      fontSize: 46, bold: true, color: C.white, fontFace: "Arial",
     });
     s.addText("Semanal QA", {
-      x: 0.8, y: 3.1, w: 12, h: 0.95,
-      fontSize: 54, bold: true, color: C.cyanAccent, fontFace: "Calibri",
+      x: 0.8, y: 3.05, w: 12, h: 0.9,
+      fontSize: 46, bold: true, color: C.cyanAccent, fontFace: "Arial",
     });
 
     // Divider
@@ -141,22 +141,22 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
 
     s.addText("Aseguramiento de Calidad & Seguridad | InovaBiz", {
       x: 0.8, y: 4.4, w: 11, h: 0.4,
-      fontSize: 14, color: C.textLight, fontFace: "Calibri",
+      fontSize: 14, color: C.textLight, fontFace: "Arial",
     });
 
     s.addText(format(input.weekEnd, "yyyy"), {
       x: 0.8, y: 5.0, w: 4, h: 0.7,
-      fontSize: 36, bold: true, color: C.cyanAccent, fontFace: "Calibri",
+      fontSize: 36, bold: true, color: C.cyanAccent, fontFace: "Arial",
     });
 
     s.addText(formatWeekRange(input.weekStart, input.weekEnd), {
       x: 0.8, y: 5.9, w: 10, h: 0.4,
-      fontSize: 14, color: C.textLight, fontFace: "Calibri", italic: true,
+      fontSize: 14, color: C.textLight, fontFace: "Arial", italic: true,
     });
 
     s.addText("DOCUMENTO CONFIDENCIAL", {
       x: 0.8, y: SLIDE_H - 0.55, w: 12, h: 0.3,
-      fontSize: 9, color: C.textMuted, fontFace: "Calibri",
+      fontSize: 9, color: C.textMuted, fontFace: "Arial",
       charSpacing: 4,
     });
   }
@@ -179,19 +179,19 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
     });
     s.addText(p.clientName.toUpperCase(), {
       x: 0.5, y: 0.02, w: 8, h: 0.3,
-      fontSize: 10, bold: true, color: C.cyanAccent, fontFace: "Calibri",
+      fontSize: 10, bold: true, color: C.cyanAccent, fontFace: "Arial",
       charSpacing: 4, valign: "middle",
     });
     s.addText("SEGUIMIENTO SEMANAL QA", {
       x: SLIDE_W - 3.5, y: 0.02, w: 3, h: 0.3,
-      fontSize: 9, color: C.textLight, fontFace: "Calibri",
+      fontSize: 9, color: C.textLight, fontFace: "Arial",
       align: "right", valign: "middle", charSpacing: 3,
     });
 
     // Título proyecto
     s.addText(p.projectName, {
-      x: 0.6, y: 0.5, w: 12, h: 0.8,
-      fontSize: 32, bold: true, color: C.navyDark, fontFace: "Calibri",
+      x: 0.6, y: 0.5, w: 12, h: 0.85,
+      fontSize: 34, bold: true, color: C.navyDark, fontFace: "Arial",
     });
 
     // Divider cyan+green bajo título
@@ -206,16 +206,16 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
 
     // ── Bloque EQUIPO (izquierda) ──
     s.addShape(pres.ShapeType.rect, {
-      x: 0.6, y: 1.7, w: 4.3, h: 0.4,
+      x: 0.6, y: 1.7, w: 4.3, h: 0.5,
       fill: { color: C.blueHeader }, line: { color: C.blueHeader },
     });
     s.addText("EQUIPO", {
-      x: 0.6, y: 1.7, w: 4.3, h: 0.4,
-      fontSize: 12, bold: true, color: C.white, align: "center",
-      valign: "middle", fontFace: "Calibri", charSpacing: 4,
+      x: 0.6, y: 1.7, w: 4.3, h: 0.5,
+      fontSize: 18, bold: true, color: C.white, align: "center",
+      valign: "middle", fontFace: "Arial", charSpacing: 4,
     });
     s.addShape(pres.ShapeType.rect, {
-      x: 0.6, y: 2.1, w: 4.3, h: 2.05,
+      x: 0.6, y: 2.2, w: 4.3, h: 1.95,
       fill: { color: C.softGray }, line: { color: C.borderSubtle },
     });
     const equipoText = [
@@ -227,44 +227,44 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
       { text: p.testerAllocation !== null ? `${p.testerAllocation}%` : "—", options: { color: C.textDark } },
     ];
     s.addText(equipoText, {
-      x: 0.8, y: 2.3, w: 3.95, h: 1.8,
-      fontSize: 13, fontFace: "Calibri", valign: "top", paraSpaceAfter: 8,
+      x: 0.8, y: 2.35, w: 3.95, h: 1.75,
+      fontSize: 14, fontFace: "Arial", valign: "top", paraSpaceAfter: 10,
     });
 
     // ── Bloque OBSERVACIONES (derecha) ──
     s.addShape(pres.ShapeType.rect, {
-      x: 5.1, y: 1.7, w: 7.6, h: 0.4,
+      x: 5.1, y: 1.7, w: 7.6, h: 0.5,
       fill: { color: C.blueMid }, line: { color: C.blueMid },
     });
     s.addText("OBSERVACIONES", {
-      x: 5.1, y: 1.7, w: 7.6, h: 0.4,
-      fontSize: 12, bold: true, color: C.white, align: "center",
-      valign: "middle", fontFace: "Calibri", charSpacing: 4,
+      x: 5.1, y: 1.7, w: 7.6, h: 0.5,
+      fontSize: 18, bold: true, color: C.white, align: "center",
+      valign: "middle", fontFace: "Arial", charSpacing: 4,
     });
     s.addShape(pres.ShapeType.rect, {
-      x: 5.1, y: 2.1, w: 7.6, h: 2.05,
+      x: 5.1, y: 2.2, w: 7.6, h: 1.95,
       fill: { color: C.softGray }, line: { color: C.borderSubtle },
     });
     s.addText("[Escribe aquí las observaciones de la semana]", {
-      x: 5.3, y: 2.3, w: 7.2, h: 1.8,
-      fontSize: 12, color: C.textLight, italic: true, fontFace: "Calibri", valign: "top",
+      x: 5.3, y: 2.35, w: 7.2, h: 1.75,
+      fontSize: 12, color: C.textLight, italic: true, fontFace: "Arial", valign: "top",
     });
 
     // ── Header MÉTRICAS POR HU ──
     s.addShape(pres.ShapeType.rect, {
-      x: 0.6, y: 4.45, w: 12.1, h: 0.4,
+      x: 0.6, y: 4.35, w: 12.1, h: 0.5,
       fill: { color: C.cyanAccent }, line: { color: C.cyanAccent },
     });
     s.addText(`MÉTRICAS POR HISTORIA DE USUARIO — ${p.projectName.toUpperCase()}`, {
-      x: 0.6, y: 4.45, w: 12.1, h: 0.4,
-      fontSize: 12, bold: true, color: C.white, align: "center",
-      valign: "middle", fontFace: "Calibri", charSpacing: 3,
+      x: 0.6, y: 4.35, w: 12.1, h: 0.5,
+      fontSize: 14, bold: true, color: C.white, align: "center",
+      valign: "middle", fontFace: "Arial", charSpacing: 3,
     });
 
     // ── Tabla de HUs ──
     const headerOpts = {
       bold: true, color: C.white, fill: { color: C.navyDark },
-      fontFace: "Calibri", fontSize: 11,
+      fontFace: "Arial", fontSize: 10,
       align: "center" as const, valign: "middle" as const,
     };
     const headers = [
@@ -276,7 +276,7 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
     ];
 
     const cellOpts = (idx: number) => ({
-      color: C.textDark, fontFace: "Calibri", fontSize: 11,
+      color: C.textDark, fontFace: "Arial", fontSize: 9,
       valign: "middle" as const,
       fill: { color: idx % 2 === 0 ? C.white : C.lightBlueTint },
     });
@@ -296,15 +296,15 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
     s.addTable([headers, ...dataRows] as any, {
       x: 0.6, y: 4.85, w: 12.1,
       colW: [5.7, 2.5, 1.2, 1.3, 1.4],
-      rowH: 0.4,
+      rowH: 0.42,
       border: { type: "solid", pt: 0.5, color: C.borderSubtle },
-      fontFace: "Calibri",
+      fontFace: "Arial",
     });
 
     // Fecha abajo derecha
     s.addText(formatWeekRange(input.weekStart, input.weekEnd), {
       x: 8.5, y: SLIDE_H - 0.45, w: 4.3, h: 0.3,
-      fontSize: 10, color: C.textMuted, italic: true, align: "right", fontFace: "Calibri",
+      fontSize: 10, color: C.textMuted, italic: true, align: "right", fontFace: "Arial",
     });
   }
 
@@ -320,7 +320,7 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
 
     s.addText("Gracias", {
       x: 0, y: 2.6, w: SLIDE_W, h: 1.5,
-      fontSize: 90, bold: true, color: C.white, fontFace: "Calibri", align: "center",
+      fontSize: 80, bold: true, color: C.white, fontFace: "Arial", align: "center",
     });
     s.addShape(pres.ShapeType.rect, {
       x: SLIDE_W / 2 - 1, y: 4.3, w: 1.2, h: 0.05,
@@ -333,11 +333,11 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
 
     s.addText("contacto@inovabiz.com  |  www.inovabiz.com  |  +562 2269 0490", {
       x: 0, y: 4.7, w: SLIDE_W, h: 0.4,
-      fontSize: 14, color: C.textLight, fontFace: "Calibri", align: "center",
+      fontSize: 14, color: C.textLight, fontFace: "Arial", align: "center",
     });
     s.addText("INNOVATION & BUSINESS", {
       x: 0, y: SLIDE_H - 0.6, w: SLIDE_W, h: 0.3,
-      fontSize: 10, color: C.textMuted, fontFace: "Calibri", align: "center", charSpacing: 6,
+      fontSize: 10, color: C.textMuted, fontFace: "Arial", align: "center", charSpacing: 6,
     });
   }
 
