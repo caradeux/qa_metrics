@@ -34,7 +34,7 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
   const tester = await prisma.tester.findUnique({
     where: { id },
-    select: { id: true, projectId: true, name: true, userId: true },
+    select: { id: true, projectId: true, name: true, userId: true, allocation: true },
   });
   if (!tester) {
     res.status(404).json({ error: "Tester no encontrado" });

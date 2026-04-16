@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useMemo, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 
-interface AnalystUser { id: string; name: string; email: string; allocationUsed?: number; allocationAvailable?: number }
+interface AnalystUser {
+  id: string;
+  name: string;
+  email: string;
+  allocationUsed?: number;
+  allocationAvailable?: number;
+  allowOverallocation?: boolean;
+}
 
 export default function NewTesterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = use(params);
@@ -16,19 +23,25 @@ export default function NewTesterPage({ params }: { params: Promise<{ id: string
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Traemos TODOS los analistas (sin filtro de capacidad) para evitar crear testers
+  // "sin cuenta" cuando el analista ya está ocupado al 100%.
   useEffect(() => {
-    apiClient<AnalystUser[]>(`/api/users?role=QA_ANALYST&minCapacity=${allocation}`)
+    apiClient<AnalystUser[]>("/api/users?role=QA_ANALYST")
       .then(setAnalysts)
       .catch(() => setAnalysts([]));
-  }, [allocation]);
+  }, []);
 
   function onPickUser(id: string) {
     setUserId(id);
     if (id) {
-      const u = analysts.find(a => a.id === id);
+      const u = analysts.find((a) => a.id === id);
       if (u) setName(u.name);
     }
   }
+
+  const selected = useMemo(() => analysts.find((a) => a.id === userId), [analysts, userId]);
+  const available = selected?.allocationAvailable ?? 100;
+  const willOverallocate = !!selected && !selected.allowOverallocation && available < allocation;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,20 +65,40 @@ export default function NewTesterPage({ params }: { params: Promise<{ id: string
       <h1 className="text-2xl font-bold text-foreground mb-6">Nuevo Tester</h1>
       <form onSubmit={handleSubmit} className="space-y-5 bg-card p-6 rounded-xl border border-border">
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Vincular a analista existente (opcional)</label>
+          <label className="block text-sm font-medium text-foreground mb-1">
+            Vincular a analista existente
+            <span className="text-red-500 ml-1">*</span>
+            <span className="text-xs text-gray-400 font-normal ml-2">(recomendado)</span>
+          </label>
           <select value={userId} onChange={(e) => onPickUser(e.target.value)} className={inp}>
             <option value="">— Tester sin cuenta —</option>
-            {analysts.map(a => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({a.email}){a.allocationAvailable !== undefined ? ` — ${a.allocationAvailable}% disponible` : ""}
-              </option>
-            ))}
+            {analysts.map((a) => {
+              const av = a.allocationAvailable ?? 100;
+              const overflow = a.allowOverallocation
+                ? " (sin límite)"
+                : av <= 0
+                  ? " (ocupado)"
+                  : ` (${av}% disponible)`;
+              return (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.email}){overflow}
+                </option>
+              );
+            })}
           </select>
           <p className="text-[11px] text-gray-500 mt-1">
-            {analysts.length === 0
-              ? "No hay analistas QA disponibles sin vincular."
-              : "Al vincular, el tester podrá loguearse y cargar su propia grilla de registros."}
+            Vincular el tester a un User permite que el analista se loguee y cargue sus registros.
+            Si no lo vinculas, no podrá ver este proyecto en su listado.
           </p>
+          {willOverallocate && (
+            <div className="mt-2 px-3 py-2 bg-amber-50 border-l-4 border-amber-300 rounded-r">
+              <p className="text-[11px] text-amber-800">
+                <span className="font-semibold">Atención:</span> {selected!.name} tiene solo {available}% disponible.
+                Al crearlo con {allocation}% sobrecargarás al analista. Considera bajar la dedicación o pedirle
+                al LEADER que active "allowOverallocation" en el User.
+              </p>
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Nombre del tester</label>
