@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { startOfWeek, addWeeks, subWeeks, format } from "date-fns";
 import { es } from "date-fns/locale";
-import { apiClient } from "@/lib/api-client";
+import { activitiesApi, apiClient, type Activity } from "@/lib/api-client";
 import { WeeklyGrid } from "@/components/records/WeeklyGrid";
+import { ActivityForm } from "@/components/activities/ActivityForm";
+import { ActivityList } from "@/components/activities/ActivityList";
 
 interface TesterProfile {
   id: string;
@@ -20,6 +22,12 @@ export default function MiSemanaPage() {
   const [week, setWeek] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [error, setError] = useState<string | null>(null);
 
+  // Activities state
+  const [selectedDate, setSelectedDate] = useState<string>(() => format(new Date(), "yyyy-MM-dd"));
+  const [dayActivities, setDayActivities] = useState<Activity[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Activity | null>(null);
+
   useEffect(() => {
     apiClient<TesterProfile[]>("/api/testers/me")
       .then((rows) => {
@@ -28,6 +36,23 @@ export default function MiSemanaPage() {
       })
       .catch((e: any) => setError(e?.message ?? "Error"));
   }, []);
+
+  const loadActivities = useCallback(async (testerId: string, date: string) => {
+    const from = `${date}T00:00:00.000Z`;
+    const to = `${date}T23:59:59.999Z`;
+    try {
+      const rows = await activitiesApi.list({ testerId, from, to });
+      setDayActivities(rows);
+    } catch {
+      setDayActivities([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedTesterId && selectedDate) {
+      loadActivities(selectedTesterId, selectedDate);
+    }
+  }, [selectedTesterId, selectedDate, loadActivities]);
 
   const tester = testers.find((t) => t.id === selectedTesterId) ?? null;
 
@@ -64,7 +89,46 @@ export default function MiSemanaPage() {
           <button onClick={() => setWeek((w) => addWeeks(w, 1))} className="rounded border px-3 py-1">→</button>
         </div>
       </header>
+
       <WeeklyGrid testerId={tester.id} weekStart={week} />
+
+      {/* ── Actividades del día ── */}
+      <section className="mt-8">
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          <h2 className="text-lg font-semibold text-[#1F3864]">Actividades del día</h2>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="rounded border px-2 py-1 text-sm"
+          />
+          <button
+            onClick={() => { setEditing(null); setShowForm(true); }}
+            className="ml-auto px-3 py-1 bg-[#1F3864] text-white rounded text-sm hover:bg-[#2E5FA3]"
+          >
+            + Nueva actividad
+          </button>
+        </div>
+
+        <ActivityList
+          activities={dayActivities}
+          onEdit={(a) => { setEditing(a); setShowForm(true); }}
+          onDelete={async (a) => {
+            if (!confirm("¿Eliminar actividad?")) return;
+            await activitiesApi.remove(a.id);
+            loadActivities(tester.id, selectedDate);
+          }}
+        />
+
+        {showForm && (
+          <ActivityForm
+            testerId={tester.id}
+            initial={editing}
+            onClose={() => setShowForm(false)}
+            onSaved={() => { setShowForm(false); loadActivities(tester.id, selectedDate); }}
+          />
+        )}
+      </section>
     </div>
   );
 }
