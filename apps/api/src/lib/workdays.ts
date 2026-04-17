@@ -24,3 +24,34 @@ export async function isWorkday(date: Date | string): Promise<boolean> {
   const h = await prisma.holiday.findUnique({ where: { date: utc } });
   return !h;
 }
+
+/**
+ * Lista de días hábiles (lunes-viernes, excluyendo feriados) entre `from` y `to` inclusivos.
+ * Ambos valores se normalizan a UTC 00:00.
+ */
+export async function workdaysInRange(
+  from: Date | string,
+  to: Date | string
+): Promise<Date[]> {
+  const start = toUtcDateOnly(from);
+  const end = toUtcDateOnly(to);
+  if (start.getTime() > end.getTime()) return [];
+
+  const holidays = await prisma.holiday.findMany({
+    where: { date: { gte: start, lte: end } },
+    select: { date: true },
+  });
+  const holidaySet = new Set(holidays.map((h) => h.date.getTime()));
+
+  const result: Date[] = [];
+  const cursor = new Date(start);
+  while (cursor.getTime() <= end.getTime()) {
+    const dow = cursor.getUTCDay();
+    const isWeekend = dow === 0 || dow === 6;
+    if (!isWeekend && !holidaySet.has(cursor.getTime())) {
+      result.push(new Date(cursor));
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return result;
+}
