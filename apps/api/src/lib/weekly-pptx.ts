@@ -175,7 +175,7 @@ function replaceTableRows(xml: string, hus: WeeklyHU[]): string {
   const headerRow = rows[0]!;
   const dataRowTemplate = rows[1]!;
 
-  function buildRow(cells: string[], statusLabel?: string): string {
+  function buildRow(cells: string[], statusLabel?: string, isOdd?: boolean): string {
     const tcMatches = Array.from(dataRowTemplate.matchAll(/<a:tc[\s\S]*?<\/a:tc>/g)).map((m) => m[0]);
     const newTcs = tcMatches.map((tc, i) => {
       const val = cells[i] ?? "-";
@@ -186,6 +186,8 @@ function replaceTableRows(xml: string, hus: WeeklyHU[]): string {
       if (i === 1 && statusLabel) {
         const bg = STATUS_BG_COLOR[statusLabel] ?? "64748B";
         newTc = newTc.replace(/srgbClr val="[A-F0-9]{6}"/, `srgbClr val="${bg}"`);
+      } else if (i !== 1 && isOdd) {
+        newTc = newTc.replace(/srgbClr val="1C2833"/, `srgbClr val="243342"`);
       }
       return newTc;
     });
@@ -197,18 +199,16 @@ function replaceTableRows(xml: string, hus: WeeklyHU[]): string {
   }
 
   const newDataRows = hus.length === 0
-    ? [buildRow(["(Sin HU con actividad esta semana)", "-", "-", "-", "-", "-", "-"])]
-    : hus.map((hu) => {
+    ? [buildRow(["(Sin HU con actividad esta semana)", "-", "-", "-", "-"])]
+    : hus.map((hu, idx) => {
         const label = labelFor(hu.status);
         return buildRow([
           hu.title,
           label,
-          "-",
-          "-",
           fmtNum(hu.designed),
           fmtNum(hu.executed),
           fmtNum(hu.defects),
-        ], label);
+        ], label, idx % 2 === 1);
       });
 
   const newRowsBlock = headerRow + newDataRows.join("");
