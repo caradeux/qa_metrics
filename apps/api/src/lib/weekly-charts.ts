@@ -196,28 +196,56 @@ export async function buildMonthlyCumulativeBars(
   weeks: WeekBucket[],
   monthLabel: string,
 ): Promise<Buffer> {
-  const config: ChartConfiguration<"bar"> = {
-    type: "bar",
+  // Calcular acumulados (running totals)
+  let cumD = 0, cumE = 0, cumB = 0;
+  const cumDesigned = weeks.map((w) => { cumD += w.designed; return cumD; });
+  const cumExecuted = weeks.map((w) => { cumE += w.executed; return cumE; });
+  const cumDefects = weeks.map((w) => { cumB += w.defects; return cumB; });
+
+  const FONT = "DejaVu Sans, Arial, sans-serif";
+  const config: ChartConfiguration<"line"> = {
+    type: "line",
     data: {
       labels: weeks.map((w) => w.label),
       datasets: [
         {
-          label: "Diseñados",
-          data: weeks.map((w) => w.designed),
-          backgroundColor: PALETTE.blue,
-          borderRadius: 4,
+          label: "Diseñados (acum.)",
+          data: cumDesigned,
+          borderColor: PALETTE.blue,
+          backgroundColor: "rgba(45, 141, 187, 0.15)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 6,
+          pointBackgroundColor: PALETTE.blue,
+          pointBorderColor: "#FFFFFF",
+          pointBorderWidth: 2,
+          borderWidth: 3,
         },
         {
-          label: "Ejecutados",
-          data: weeks.map((w) => w.executed),
-          backgroundColor: PALETTE.cyan,
-          borderRadius: 4,
+          label: "Ejecutados (acum.)",
+          data: cumExecuted,
+          borderColor: PALETTE.cyan,
+          backgroundColor: "rgba(6, 182, 212, 0.15)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 6,
+          pointBackgroundColor: PALETTE.cyan,
+          pointBorderColor: "#FFFFFF",
+          pointBorderWidth: 2,
+          borderWidth: 3,
         },
         {
-          label: "Defectos",
-          data: weeks.map((w) => w.defects),
-          backgroundColor: PALETTE.red,
-          borderRadius: 4,
+          label: "Defectos (acum.)",
+          data: cumDefects,
+          borderColor: PALETTE.red,
+          backgroundColor: "rgba(239, 68, 68, 0.10)",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 6,
+          pointBackgroundColor: PALETTE.red,
+          pointBorderColor: "#FFFFFF",
+          pointBorderWidth: 2,
+          borderWidth: 3,
         },
       ],
     },
@@ -226,25 +254,25 @@ export async function buildMonthlyCumulativeBars(
       plugins: {
         title: {
           display: true,
-          text: `Acumulado Mensual — ${monthLabel}`,
-          font: { size: 28, weight: "bold", family: "DejaVu Sans, Arial, sans-serif" },
-          color: PALETTE.navy,
+          text: [`Acumulado Mensual — ${monthLabel}`, `Total: ${cumD} diseñados · ${cumE} ejecutados · ${cumB} defectos`],
+          font: { size: 24, weight: "bold", family: FONT },
+          color: "#FFFFFF",
           padding: { top: 10, bottom: 20 },
         },
         legend: {
           position: "top",
-          labels: { font: { size: 18, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.navy },
+          labels: { font: { size: 16, family: FONT }, color: "#E2E8F0", usePointStyle: true, pointStyle: "circle", padding: 20 },
         },
       },
       scales: {
         x: {
-          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.navy },
-          grid: { display: false },
+          ticks: { font: { size: 16, family: FONT }, color: "#E2E8F0" },
+          grid: { color: "rgba(148,163,184,0.15)" },
         },
         y: {
           beginAtZero: true,
-          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.textMuted, precision: 0 },
-          grid: { color: "#E2E8F0" },
+          ticks: { font: { size: 14, family: FONT }, color: PALETTE.textMuted, precision: 0 },
+          grid: { color: "rgba(148,163,184,0.2)" },
         },
       },
     },
@@ -263,28 +291,39 @@ export async function buildYearlyCumulativeBars(
   months: MonthBucket[],
   year: number,
 ): Promise<Buffer> {
-  const config: ChartConfiguration<"bar"> = {
-    type: "bar",
+  let cumD = 0, cumE = 0, cumB = 0;
+  const cD = months.map((m) => { cumD += m.designed; return cumD; });
+  const cE = months.map((m) => { cumE += m.executed; return cumE; });
+  const cB = months.map((m) => { cumB += m.defects; return cumB; });
+  const FONT = "DejaVu Sans, Arial, sans-serif";
+  const config: ChartConfiguration<"line"> = {
+    type: "line",
     data: {
       labels: months.map((m) => m.label),
       datasets: [
         {
-          label: "Diseñados",
-          data: months.map((m) => m.designed),
-          backgroundColor: PALETTE.blue,
-          borderRadius: 4,
+          label: "Diseñados (acum.)",
+          data: cD,
+          borderColor: PALETTE.blue,
+          backgroundColor: "rgba(45, 141, 187, 0.15)",
+          fill: true, tension: 0.3, pointRadius: 5,
+          pointBackgroundColor: PALETTE.blue, pointBorderColor: "#FFFFFF", pointBorderWidth: 2, borderWidth: 3,
         },
         {
-          label: "Ejecutados",
-          data: months.map((m) => m.executed),
-          backgroundColor: PALETTE.cyan,
-          borderRadius: 4,
+          label: "Ejecutados (acum.)",
+          data: cE,
+          borderColor: PALETTE.cyan,
+          backgroundColor: "rgba(6, 182, 212, 0.15)",
+          fill: true, tension: 0.3, pointRadius: 5,
+          pointBackgroundColor: PALETTE.cyan, pointBorderColor: "#FFFFFF", pointBorderWidth: 2, borderWidth: 3,
         },
         {
-          label: "Defectos",
-          data: months.map((m) => m.defects),
-          backgroundColor: PALETTE.red,
-          borderRadius: 4,
+          label: "Defectos (acum.)",
+          data: cB,
+          borderColor: PALETTE.red,
+          backgroundColor: "rgba(239, 68, 68, 0.10)",
+          fill: true, tension: 0.3, pointRadius: 5,
+          pointBackgroundColor: PALETTE.red, pointBorderColor: "#FFFFFF", pointBorderWidth: 2, borderWidth: 3,
         },
       ],
     },
@@ -293,25 +332,25 @@ export async function buildYearlyCumulativeBars(
       plugins: {
         title: {
           display: true,
-          text: `Acumulado Anual — ${year}`,
-          font: { size: 28, weight: "bold", family: "DejaVu Sans, Arial, sans-serif" },
-          color: PALETTE.navy,
+          text: [`Acumulado Anual — ${year}`, `Total: ${cumD} diseñados · ${cumE} ejecutados · ${cumB} defectos`],
+          font: { size: 24, weight: "bold", family: FONT },
+          color: "#FFFFFF",
           padding: { top: 10, bottom: 20 },
         },
         legend: {
           position: "top",
-          labels: { font: { size: 18, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.navy },
+          labels: { font: { size: 16, family: FONT }, color: "#E2E8F0", usePointStyle: true, pointStyle: "circle", padding: 20 },
         },
       },
       scales: {
         x: {
-          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.navy },
-          grid: { display: false },
+          ticks: { font: { size: 14, family: FONT }, color: "#E2E8F0" },
+          grid: { color: "rgba(148,163,184,0.15)" },
         },
         y: {
           beginAtZero: true,
-          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.textMuted, precision: 0 },
-          grid: { color: "#E2E8F0" },
+          ticks: { font: { size: 14, family: FONT }, color: PALETTE.textMuted, precision: 0 },
+          grid: { color: "rgba(148,163,184,0.2)" },
         },
       },
     },
