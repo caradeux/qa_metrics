@@ -93,6 +93,7 @@ async function main() {
     "assignments", "phases",
     "records",
     "activities",
+    "activity-categories",
     "dashboard", "gantt", "reports",
     "audit",
     "holidays",
@@ -112,7 +113,7 @@ async function main() {
   }
 
   // QA_LEAD: todo menos gestionar users/roles (solo lectura)
-  const leadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "reports"];
+  const leadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "activity-categories", "reports"];
   for (const resource of leadResources) {
     for (const action of actions) {
       await linkRolePermission(qaLeadRole.id, permissions[`${resource}:${action}`].id);
@@ -139,11 +140,15 @@ async function main() {
     await linkRolePermission(qaAnalystRole.id, permissions[`phases:${action}`].id);
   }
   await linkRolePermission(qaAnalystRole.id, permissions["story-status:update"].id);
-  // QA_ANALYST puede leer categorías (para usarlas al registrar actividades) pero no gestionarlas
-  await linkRolePermission(qaAnalystRole.id, permissions["activities:read"].id);
+  // QA_ANALYST puede gestionar SUS propias actividades (scope por ruta)
+  for (const action of actions) {
+    await linkRolePermission(qaAnalystRole.id, permissions[`activities:${action}`].id);
+  }
+  // Pero las categorías solo las lee (las mutan ADMIN/QA_LEAD)
+  await linkRolePermission(qaAnalystRole.id, permissions["activity-categories:read"].id);
 
   // CLIENT_PM: read-only
-  const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "dashboard", "gantt", "reports"];
+  const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "activity-categories", "dashboard", "gantt", "reports"];
   for (const resource of clientPmResources) {
     await linkRolePermission(clientPmRole.id, permissions[`${resource}:read`].id);
   }

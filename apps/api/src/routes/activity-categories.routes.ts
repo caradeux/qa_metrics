@@ -10,7 +10,7 @@ import {
 const router = Router();
 router.use(authMiddleware as any);
 
-router.get("/", requirePermission("activities", "read"), async (req: AuthRequest, res: Response) => {
+router.get("/", requirePermission("activity-categories", "read"), async (req: AuthRequest, res: Response) => {
   const activeOnly = req.query.activeOnly === "true";
   const where = activeOnly ? { active: true } : {};
   const categories = await prisma.activityCategory.findMany({
@@ -20,7 +20,7 @@ router.get("/", requirePermission("activities", "read"), async (req: AuthRequest
   res.json(categories);
 });
 
-router.post("/", requirePermission("activities", "create"), async (req: AuthRequest, res: Response) => {
+router.post("/", requirePermission("activity-categories", "create"), async (req: AuthRequest, res: Response) => {
   try {
     const data = createActivityCategorySchema.parse(req.body);
     const created = await prisma.activityCategory.create({ data });
@@ -32,7 +32,7 @@ router.post("/", requirePermission("activities", "create"), async (req: AuthRequ
   }
 });
 
-router.patch("/:id", requirePermission("activities", "update"), async (req: AuthRequest, res: Response) => {
+router.patch("/:id", requirePermission("activity-categories", "update"), async (req: AuthRequest, res: Response) => {
   try {
     const data = updateActivityCategorySchema.parse(req.body);
     const updated = await prisma.activityCategory.update({
@@ -48,7 +48,7 @@ router.patch("/:id", requirePermission("activities", "update"), async (req: Auth
   }
 });
 
-router.delete("/:id", requirePermission("activities", "delete"), async (req: AuthRequest, res: Response) => {
+router.delete("/:id", requirePermission("activity-categories", "delete"), async (req: AuthRequest, res: Response) => {
   const inUse = await prisma.activity.count({ where: { categoryId: req.params.id } });
   if (inUse > 0) {
     return res.status(409).json({
