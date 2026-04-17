@@ -272,7 +272,7 @@ model Activity {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  tester     Tester            @relation(fields: [testerId], references: [id])
+  tester     Tester            @relation(fields: [testerId], references: [id], onDelete: Cascade)
   category   ActivityCategory  @relation(fields: [categoryId], references: [id])
   assignment TesterAssignment? @relation(fields: [assignmentId], references: [id])
   createdBy  User              @relation(fields: [createdById], references: [id])
