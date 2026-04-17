@@ -202,8 +202,143 @@ export async function buildDefectsBars(data: ProjectMetricsDatum[]): Promise<Buf
   return canvas.renderToBuffer(config, "image/png");
 }
 
+export interface WeekBucket {
+  label: string;
+  designed: number;
+  executed: number;
+  defects: number;
+}
+
+export async function buildMonthlyCumulativeBars(
+  weeks: WeekBucket[],
+  monthLabel: string,
+): Promise<Buffer> {
+  const config: ChartConfiguration<"bar"> = {
+    type: "bar",
+    data: {
+      labels: weeks.map((w) => w.label),
+      datasets: [
+        {
+          label: "Diseñados",
+          data: weeks.map((w) => w.designed),
+          backgroundColor: PALETTE.blue,
+          borderRadius: 4,
+        },
+        {
+          label: "Ejecutados",
+          data: weeks.map((w) => w.executed),
+          backgroundColor: PALETTE.cyan,
+          borderRadius: 4,
+        },
+        {
+          label: "Defectos",
+          data: weeks.map((w) => w.defects),
+          backgroundColor: PALETTE.red,
+          borderRadius: 4,
+        },
+      ],
+    },
+    options: {
+      responsive: false,
+      plugins: {
+        title: {
+          display: true,
+          text: `Acumulado Mensual — ${monthLabel}`,
+          font: { size: 28, weight: "bold", family: "Arial" },
+          color: PALETTE.navy,
+          padding: { top: 10, bottom: 20 },
+        },
+        legend: {
+          position: "top",
+          labels: { font: { size: 18, family: "Arial" }, color: PALETTE.navy },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.navy },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.textMuted, precision: 0 },
+          grid: { color: "#E2E8F0" },
+        },
+      },
+    },
+  };
+  return canvas.renderToBuffer(config, "image/png");
+}
+
+export interface MonthBucket {
+  label: string;
+  designed: number;
+  executed: number;
+  defects: number;
+}
+
+export async function buildYearlyCumulativeBars(
+  months: MonthBucket[],
+  year: number,
+): Promise<Buffer> {
+  const config: ChartConfiguration<"bar"> = {
+    type: "bar",
+    data: {
+      labels: months.map((m) => m.label),
+      datasets: [
+        {
+          label: "Diseñados",
+          data: months.map((m) => m.designed),
+          backgroundColor: PALETTE.blue,
+          borderRadius: 4,
+        },
+        {
+          label: "Ejecutados",
+          data: months.map((m) => m.executed),
+          backgroundColor: PALETTE.cyan,
+          borderRadius: 4,
+        },
+        {
+          label: "Defectos",
+          data: months.map((m) => m.defects),
+          backgroundColor: PALETTE.red,
+          borderRadius: 4,
+        },
+      ],
+    },
+    options: {
+      responsive: false,
+      plugins: {
+        title: {
+          display: true,
+          text: `Acumulado Anual — ${year}`,
+          font: { size: 28, weight: "bold", family: "Arial" },
+          color: PALETTE.navy,
+          padding: { top: 10, bottom: 20 },
+        },
+        legend: {
+          position: "top",
+          labels: { font: { size: 18, family: "Arial" }, color: PALETTE.navy },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.navy },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.textMuted, precision: 0 },
+          grid: { color: "#E2E8F0" },
+        },
+      },
+    },
+  };
+  return canvas.renderToBuffer(config, "image/png");
+}
+
 export interface ChartBuffers {
   pipeline: Buffer;
   designedVsExecuted: Buffer;
   defects: Buffer;
+  monthlyCumulative?: Buffer;
 }

@@ -49,6 +49,7 @@ export interface WeeklyPptxInput {
     pipeline: Buffer;
     designedVsExecuted: Buffer;
     defects: Buffer;
+    monthlyCumulative?: Buffer;
   };
 }
 
@@ -427,6 +428,15 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
         name: `slide${generated.length + 1}.xml`,
         content: buildChartSlideXml(chart.title),
         rels: buildChartSlideRels(chart.file),
+      });
+    }
+    if (input.charts.monthlyCumulative) {
+      const file = "chartMonthlyCumulative.png";
+      zip.file(`ppt/media/${file}`, input.charts.monthlyCumulative);
+      generated.push({
+        name: `slide${generated.length + 1}.xml`,
+        content: buildChartSlideXml("Acumulado Mensual"),
+        rels: buildChartSlideRels(file),
       });
     }
   }
