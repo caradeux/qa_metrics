@@ -24,6 +24,7 @@ import clientReportsRoutes from "./routes/client-reports.routes.js";
 import storiesRoutes from "./routes/stories.routes.js";
 import auditRoutes from "./routes/audit.routes.js";
 import activityCategoriesRoutes from "./routes/activity-categories.routes.js";
+import activitiesRoutes from "./routes/activities.routes.js";
 
 const app = express();
 
@@ -74,6 +75,7 @@ app.use("/api/records", recordsRoutes);
 app.use("/api", storiesRoutes);
 app.use("/api/date-change-logs", auditRoutes);
 app.use("/api/activity-categories", activityCategoriesRoutes);
+app.use("/api/activities", activitiesRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
