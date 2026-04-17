@@ -55,6 +55,9 @@ yarn-error.log*
 # MCP config (contiene URLs locales)
 .mcp.json
 
+# Worktrees locales
+.worktrees/
+
 # Misc
 *.pem
 next-env.d.ts
