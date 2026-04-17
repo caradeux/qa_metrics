@@ -15,6 +15,8 @@ export const RESOURCES = [
   "reports",
   "audit",
   "holidays",
+  "activities",
+  "activity-categories",
 ] as const;
 
 export const ACTIONS = ["create", "read", "update", "delete"] as const;
@@ -39,6 +41,8 @@ export const RESOURCE_LABELS: Record<Resource, string> = {
   reports: "Reportes",
   audit: "Auditoría de fechas",
   holidays: "Feriados",
+  activities: "Actividades",
+  "activity-categories": "Categorías de actividad",
 };
 
 export const ACTION_LABELS: Record<Action, string> = {
