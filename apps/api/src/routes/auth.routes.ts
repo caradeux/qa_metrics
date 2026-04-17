@@ -11,7 +11,7 @@ router.post("/login", async (req: Request, res: Response, next: NextFunction) =>
     const { email, password } = loginSchema.parse(req.body);
     const result = await authService.login(email, password);
     setAuthCookies(res, result.accessToken, result.refreshToken);
-    res.json({ user: result.user });
+    res.json({ user: result.user, accessToken: result.accessToken, refreshToken: result.refreshToken });
   } catch (error) {
     if (error instanceof authService.AuthError) {
       res.status(401).json({ error: error.message });

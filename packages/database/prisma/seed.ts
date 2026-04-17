@@ -139,9 +139,8 @@ async function main() {
     await linkRolePermission(qaAnalystRole.id, permissions[`phases:${action}`].id);
   }
   await linkRolePermission(qaAnalystRole.id, permissions["story-status:update"].id);
-  for (const action of actions) {
-    await linkRolePermission(qaAnalystRole.id, permissions[`activities:${action}`].id);
-  }
+  // QA_ANALYST puede leer categorías (para usarlas al registrar actividades) pero no gestionarlas
+  await linkRolePermission(qaAnalystRole.id, permissions["activities:read"].id);
 
   // CLIENT_PM: read-only
   const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "dashboard", "gantt", "reports"];
