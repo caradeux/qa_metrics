@@ -177,7 +177,7 @@ function replaceTableRows(xml: string, hus: WeeklyHU[]): string {
 
   function buildRow(cells: string[], statusLabel?: string, isOdd?: boolean): string {
     const tcMatches = Array.from(dataRowTemplate.matchAll(/<a:tc[\s\S]*?<\/a:tc>/g)).map((m) => m[0]);
-    const darkBg = isOdd ? "243342" : "1C2833";
+    const rowBg = isOdd ? "E2EFF9" : "EBF4FB";
     const newTcs = tcMatches.map((tc, i) => {
       const val = cells[i] ?? "-";
       let newTc = tc.replace(
@@ -188,7 +188,7 @@ function replaceTableRows(xml: string, hus: WeeklyHU[]): string {
         const bg = STATUS_BG_COLOR[statusLabel] ?? "64748B";
         newTc = newTc.replace(/srgbClr val="[A-Fa-f0-9]{6}"\/><\/a:solidFill><\/a:tcPr>/, `srgbClr val="${bg}"/></a:solidFill></a:tcPr>`);
       } else {
-        newTc = newTc.replace(/srgbClr val="[A-Fa-f0-9]{6}"\/><\/a:solidFill><\/a:tcPr>/, `srgbClr val="${darkBg}"/></a:solidFill></a:tcPr>`);
+        newTc = newTc.replace(/srgbClr val="[A-Fa-f0-9]{6}"\/><\/a:solidFill><\/a:tcPr>/, `srgbClr val="${rowBg}"/></a:solidFill></a:tcPr>`);
       }
       return newTc;
     });
@@ -271,10 +271,10 @@ function customizeProjectSlide(
 }
 
 function buildProjectKpiCards(designed: number, executed: number, defects: number): string {
-  const Y = 1950000;
-  const H = 480000;
-  const W = 1900000;
-  const GAP = 200000;
+  const Y = 1960000;
+  const H = 360000;
+  const W = 1700000;
+  const GAP = 180000;
   const X0 = 640080;
   const cards = [
     { x: X0, num: String(designed), label: "Diseñados", color: "2D8DBB", border: "2D8DBB" },
@@ -285,16 +285,14 @@ function buildProjectKpiCards(designed: number, executed: number, defects: numbe
 <p:sp><p:nvSpPr><p:cNvPr id="${60 + i}" name="KpiCard${i}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
   <p:spPr>
     <a:xfrm><a:off x="${c.x}" y="${Y}"/><a:ext cx="${W}" cy="${H}"/></a:xfrm>
-    <a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 8000"/></a:avLst></a:prstGeom>
+    <a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 6000"/></a:avLst></a:prstGeom>
     <a:solidFill><a:srgbClr val="1A2744"/></a:solidFill>
-    <a:ln w="22860"><a:solidFill><a:srgbClr val="${c.border}"/></a:solidFill></a:ln>
+    <a:ln w="19050"><a:solidFill><a:srgbClr val="${c.border}"/></a:solidFill></a:ln>
   </p:spPr>
-  <p:txBody><a:bodyPr wrap="square" anchor="ctr" lIns="91440" rIns="91440" tIns="27432" bIns="27432"/><a:lstStyle/>
+  <p:txBody><a:bodyPr wrap="square" anchor="ctr" lIns="91440" rIns="91440" tIns="18288" bIns="18288"/><a:lstStyle/>
     <a:p><a:pPr algn="ctr"><a:spcAft><a:spcPts val="0"/></a:spcAft></a:pPr>
-      <a:r><a:rPr lang="es-CL" sz="2400" b="1"><a:solidFill><a:srgbClr val="${c.color}"/></a:solidFill><a:latin typeface="Open Sans"/></a:rPr><a:t>${c.num}</a:t></a:r>
-    </a:p>
-    <a:p><a:pPr algn="ctr"><a:spcBef><a:spcPts val="0"/></a:spcBef></a:pPr>
-      <a:r><a:rPr lang="es-CL" sz="900"><a:solidFill><a:srgbClr val="94A3B8"/></a:solidFill><a:latin typeface="Open Sans"/></a:rPr><a:t>${c.label}</a:t></a:r>
+      <a:r><a:rPr lang="es-CL" sz="2000" b="1"><a:solidFill><a:srgbClr val="${c.color}"/></a:solidFill><a:latin typeface="Open Sans"/></a:rPr><a:t>${c.num}</a:t></a:r>
+      <a:r><a:rPr lang="es-CL" sz="1000"><a:solidFill><a:srgbClr val="94A3B8"/></a:solidFill><a:latin typeface="Open Sans"/></a:rPr><a:t>  ${c.label}</a:t></a:r>
     </a:p>
   </p:txBody>
 </p:sp>`).join("");
