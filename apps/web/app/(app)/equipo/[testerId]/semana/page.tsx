@@ -1,11 +1,13 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { startOfWeek, addWeeks, subWeeks, format } from "date-fns";
 import { es } from "date-fns/locale";
-import { apiClient } from "@/lib/api-client";
+import { activitiesApi, apiClient, type Activity } from "@/lib/api-client";
 import { WeeklyGrid } from "@/components/records/WeeklyGrid";
+import { ActivityForm } from "@/components/activities/ActivityForm";
+import { ActivityList } from "@/components/activities/ActivityList";
 
 interface Tester { id: string; projectId: string; name: string }
 
@@ -22,6 +24,12 @@ export default function EquipoSemanaPage({
     startOfWeek(new Date(), { weekStartsOn: 1 })
   );
 
+  // Activities state
+  const [selectedDate, setSelectedDate] = useState<string>(() => format(new Date(), "yyyy-MM-dd"));
+  const [dayActivities, setDayActivities] = useState<Activity[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Activity | null>(null);
+
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -30,6 +38,23 @@ export default function EquipoSemanaPage({
       .catch((e: any) => setError(e?.message ?? "Error al cargar"))
       .finally(() => setLoading(false));
   }, [testerId]);
+
+  const loadActivities = useCallback(async (date: string) => {
+    const from = `${date}T00:00:00.000Z`;
+    const to = `${date}T23:59:59.999Z`;
+    try {
+      const rows = await activitiesApi.list({ testerId, from, to });
+      setDayActivities(rows);
+    } catch {
+      setDayActivities([]);
+    }
+  }, [testerId]);
+
+  useEffect(() => {
+    if (selectedDate) {
+      loadActivities(selectedDate);
+    }
+  }, [selectedDate, loadActivities]);
 
   if (loading) return <div className="p-6">Cargando…</div>;
 
@@ -57,6 +82,44 @@ export default function EquipoSemanaPage({
       </header>
 
       <WeeklyGrid testerId={testerId} weekStart={week} />
+
+      {/* ── Actividades del día ── */}
+      <section className="mt-8">
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          <h2 className="text-lg font-semibold text-[#1F3864]">Actividades del día</h2>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="rounded border px-2 py-1 text-sm"
+          />
+          <button
+            onClick={() => { setEditing(null); setShowForm(true); }}
+            className="ml-auto px-3 py-1 bg-[#1F3864] text-white rounded text-sm hover:bg-[#2E5FA3]"
+          >
+            + Nueva actividad
+          </button>
+        </div>
+
+        <ActivityList
+          activities={dayActivities}
+          onEdit={(a) => { setEditing(a); setShowForm(true); }}
+          onDelete={async (a) => {
+            if (!confirm("¿Eliminar actividad?")) return;
+            await activitiesApi.remove(a.id);
+            loadActivities(selectedDate);
+          }}
+        />
+
+        {showForm && (
+          <ActivityForm
+            testerId={testerId}
+            initial={editing}
+            onClose={() => setShowForm(false)}
+            onSaved={() => { setShowForm(false); loadActivities(selectedDate); }}
+          />
+        )}
+      </section>
     </div>
   );
 }
