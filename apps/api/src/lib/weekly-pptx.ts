@@ -259,7 +259,44 @@ function customizeProjectSlide(
   // 6) Tabla de HUs
   xml = replaceTableRows(xml, p.hus);
 
+  // 7) KPI cards: totales del proyecto inyectados antes de </p:spTree>
+  const totD = p.hus.reduce((s, h) => s + (h.designed ?? 0), 0);
+  const totE = p.hus.reduce((s, h) => s + (h.executed ?? 0), 0);
+  const totB = p.hus.reduce((s, h) => s + (h.defects ?? 0), 0);
+  const kpiCards = buildProjectKpiCards(totD, totE, totB);
+  xml = xml.replace("</p:spTree>", kpiCards + "</p:spTree>");
+
   return xml;
+}
+
+function buildProjectKpiCards(designed: number, executed: number, defects: number): string {
+  const Y = 1920000;
+  const H = 500000;
+  const W = 2050000;
+  const GAP = 150000;
+  const X0 = 509449;
+  const cards = [
+    { x: X0, num: String(designed), label: "Diseñados", color: "2D8DBB", border: "2D8DBB" },
+    { x: X0 + W + GAP, num: String(executed), label: "Ejecutados", color: "06B6D4", border: "06B6D4" },
+    { x: X0 + (W + GAP) * 2, num: String(defects), label: "Defectos", color: "EF4444", border: "EF4444" },
+  ];
+  return cards.map((c, i) => `
+<p:sp><p:nvSpPr><p:cNvPr id="${60 + i}" name="KpiCard${i}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+  <p:spPr>
+    <a:xfrm><a:off x="${c.x}" y="${Y}"/><a:ext cx="${W}" cy="${H}"/></a:xfrm>
+    <a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 8000"/></a:avLst></a:prstGeom>
+    <a:solidFill><a:srgbClr val="1A2744"/></a:solidFill>
+    <a:ln w="25400"><a:solidFill><a:srgbClr val="${c.border}"/></a:solidFill></a:ln>
+  </p:spPr>
+  <p:txBody><a:bodyPr wrap="square" anchor="ctr" lIns="91440" rIns="91440" tIns="45720" bIns="36576"/><a:lstStyle/>
+    <a:p><a:pPr algn="ctr"><a:lnSpc><a:spcPct val="110000"/></a:lnSpc></a:pPr>
+      <a:r><a:rPr lang="es-CL" sz="2800" b="1"><a:solidFill><a:srgbClr val="${c.color}"/></a:solidFill><a:latin typeface="Open Sans"/></a:rPr><a:t>${c.num}</a:t></a:r>
+    </a:p>
+    <a:p><a:pPr algn="ctr"/>
+      <a:r><a:rPr lang="es-CL" sz="1000"><a:solidFill><a:srgbClr val="94A3B8"/></a:solidFill><a:latin typeface="Open Sans"/></a:rPr><a:t>${c.label}</a:t></a:r>
+    </a:p>
+  </p:txBody>
+</p:sp>`).join("");
 }
 
 /**
