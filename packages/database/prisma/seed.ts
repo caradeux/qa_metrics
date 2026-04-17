@@ -64,6 +64,22 @@ async function main() {
   });
   console.log("✓ Feriados CL 2026 asegurados");
 
+  // Categorías de actividad por defecto
+  const defaultCategories = [
+    { name: "Reunión con usuario", color: "#2E5FA3" },
+    { name: "Reunión con desarrollo", color: "#1F3864" },
+    { name: "Capacitación", color: "#6FAB3F" },
+    { name: "Inducción", color: "#D89A1F" },
+  ];
+  for (const c of defaultCategories) {
+    await prisma.activityCategory.upsert({
+      where: { name: c.name },
+      update: { color: c.color, active: true },
+      create: { name: c.name, color: c.color, active: true },
+    });
+  }
+  console.log("✓ Categorías de actividad aseguradas");
+
   // Roles
   const adminRole = await upsertRole("ADMIN", "Administrator with full access");
   const qaLeadRole = await upsertRole("QA_LEAD", "QA Lead with project management access");
@@ -76,6 +92,7 @@ async function main() {
     "stories", "story-status", "cycles", "testers",
     "assignments", "phases",
     "records",
+    "activities",
     "dashboard", "gantt", "reports",
     "audit",
     "holidays",
@@ -95,7 +112,7 @@ async function main() {
   }
 
   // QA_LEAD: todo menos gestionar users/roles (solo lectura)
-  const leadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "reports"];
+  const leadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "reports"];
   for (const resource of leadResources) {
     for (const action of actions) {
       await linkRolePermission(qaLeadRole.id, permissions[`${resource}:${action}`].id);
@@ -122,9 +139,12 @@ async function main() {
     await linkRolePermission(qaAnalystRole.id, permissions[`phases:${action}`].id);
   }
   await linkRolePermission(qaAnalystRole.id, permissions["story-status:update"].id);
+  for (const action of actions) {
+    await linkRolePermission(qaAnalystRole.id, permissions[`activities:${action}`].id);
+  }
 
   // CLIENT_PM: read-only
-  const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "dashboard", "gantt", "reports"];
+  const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "dashboard", "gantt", "reports"];
   for (const resource of clientPmResources) {
     await linkRolePermission(clientPmRole.id, permissions[`${resource}:read`].id);
   }
