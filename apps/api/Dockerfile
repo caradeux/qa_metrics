@@ -1,8 +1,8 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Build deps para native canvas (chartjs-node-canvas): cairo, pango, jpeg, giflib
-RUN apk add --no-cache build-base cairo-dev pango-dev jpeg-dev giflib-dev pixman-dev python3
+# Build deps para native canvas (chartjs-node-canvas): cairo, pango, jpeg, giflib + fuentes
+RUN apk add --no-cache build-base cairo-dev pango-dev jpeg-dev giflib-dev pixman-dev python3 font-noto font-noto-cjk ttf-dejavu fontconfig
 
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
@@ -25,8 +25,8 @@ RUN cd apps/api && npx tsc
 FROM node:20-alpine
 WORKDIR /app
 
-# Runtime libs para canvas (chartjs-node-canvas): cairo, pango, jpeg, giflib
-RUN apk add --no-cache cairo pango jpeg giflib pixman
+# Runtime libs para canvas (chartjs-node-canvas): cairo, pango, jpeg, giflib + fuentes
+RUN apk add --no-cache cairo pango jpeg giflib pixman font-noto ttf-dejavu fontconfig
 
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/

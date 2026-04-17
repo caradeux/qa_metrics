@@ -152,34 +152,43 @@ function replaceMultilineInShape(xml: string, shapeName: string, lines: string[]
  * Reemplaza el contenido de la tabla "Tabla QA Metricas …" manteniendo el
  * header y generando una fila por HU a partir del primer data-row como molde.
  */
+const STATUS_BG_COLOR: Record<string, string> = {
+  "No Iniciado": "64748B",
+  "En Diseño": "CDDC39",
+  "Pdte. Instalación QA": "F59E0B",
+  "En Curso": "06B6D4",
+  "Devuelto a Desarrollo": "EF4444",
+  "Pdte. Aprobación": "8BC34A",
+  "Completado": "22C55E",
+  "Detenido": "F97316",
+};
+
 function replaceTableRows(xml: string, hus: WeeklyHU[]): string {
-  // Tomar el bloque <a:tbl>…</a:tbl>
   const tblRegex = /(<a:tbl>[\s\S]*?<\/a:tbl>)/;
   const mTbl = xml.match(tblRegex);
   if (!mTbl) return xml;
   const tbl = mTbl[1]!;
 
   const rows = Array.from(tbl.matchAll(/<a:tr [^>]*>[\s\S]*?<\/a:tr>/g)).map((m) => m[0]);
-  if (rows.length < 2) return xml; // esperamos header + >=1 data
+  if (rows.length < 2) return xml;
 
   const headerRow = rows[0]!;
   const dataRowTemplate = rows[1]!;
 
-  // Cada celda tiene <a:tc>…</a:tc>. Reemplazamos el texto de cada tc.
-  function buildRow(cells: string[]): string {
+  function buildRow(cells: string[], statusLabel?: string): string {
     const tcMatches = Array.from(dataRowTemplate.matchAll(/<a:tc[\s\S]*?<\/a:tc>/g)).map((m) => m[0]);
-    if (tcMatches.length !== cells.length) {
-      // La plantilla puede traer menos/más columnas; ajustamos por la intersección.
-    }
     const newTcs = tcMatches.map((tc, i) => {
       const val = cells[i] ?? "-";
-      // Reemplazar SOLO el primer <a:t>…</a:t> de la tc (preservando formato)
-      return tc.replace(
+      let newTc = tc.replace(
         /(<a:r>[\s\S]*?<a:t>)([^<]*)(<\/a:t>)([\s\S]*?<\/a:r>)/,
         `$1${xmlEscape(val)}$3$4`,
       );
+      if (i === 1 && statusLabel) {
+        const bg = STATUS_BG_COLOR[statusLabel] ?? "64748B";
+        newTc = newTc.replace(/srgbClr val="[A-F0-9]{6}"/, `srgbClr val="${bg}"`);
+      }
+      return newTc;
     });
-    // Reconstruir fila reemplazando tcs en la plantilla
     let newRow = dataRowTemplate;
     tcMatches.forEach((tc, i) => {
       newRow = newRow.replace(tc, newTcs[i]!);
@@ -189,20 +198,20 @@ function replaceTableRows(xml: string, hus: WeeklyHU[]): string {
 
   const newDataRows = hus.length === 0
     ? [buildRow(["(Sin HU con actividad esta semana)", "-", "-", "-", "-", "-", "-"])]
-    : hus.map((hu) =>
-        buildRow([
+    : hus.map((hu) => {
+        const label = labelFor(hu.status);
+        return buildRow([
           hu.title,
-          labelFor(hu.status),
-          "-",              // Consultas Levantadas
-          "-",              // CA Validados
+          label,
+          "-",
+          "-",
           fmtNum(hu.designed),
           fmtNum(hu.executed),
           fmtNum(hu.defects),
-        ]),
-      );
+        ], label);
+      });
 
   const newRowsBlock = headerRow + newDataRows.join("");
-  // Reemplazar todas las filas dentro de la tabla
   const allRowsRegex = /(<a:tr [^>]*>[\s\S]*?<\/a:tr>)+/;
   const newTbl = tbl.replace(allRowsRegex, newRowsBlock);
 

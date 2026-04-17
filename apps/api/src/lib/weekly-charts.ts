@@ -64,14 +64,14 @@ export async function buildPipelineDonut(data: PipelineDatum[]): Promise<Buffer>
         title: {
           display: true,
           text: "Pipeline por estado (HUs)",
-          font: { size: 28, weight: "bold", family: "Arial" },
+          font: { size: 28, weight: "bold", family: "DejaVu Sans, Arial, sans-serif" },
           color: "#FFFFFF",
           padding: { top: 10, bottom: 20 },
         },
         legend: {
           position: "right",
           labels: {
-            font: { size: 18, family: "Arial" },
+            font: { size: 18, family: "DejaVu Sans, Arial, sans-serif" },
             color: "#E2E8F0",
             padding: 16,
           },
@@ -118,23 +118,23 @@ export async function buildDesignedVsExecutedBars(data: ProjectMetricsDatum[]): 
         title: {
           display: true,
           text: "Casos Diseñados vs Ejecutados por proyecto",
-          font: { size: 28, weight: "bold", family: "Arial" },
+          font: { size: 28, weight: "bold", family: "DejaVu Sans, Arial, sans-serif" },
           color: "#FFFFFF",
           padding: { top: 10, bottom: 20 },
         },
         legend: {
           position: "top",
-          labels: { font: { size: 18, family: "Arial" }, color: "#E2E8F0" },
+          labels: { font: { size: 18, family: "DejaVu Sans, Arial, sans-serif" }, color: "#E2E8F0" },
         },
       },
       scales: {
         x: {
-          ticks: { font: { size: 14, family: "Arial" }, color: "#E2E8F0", maxRotation: 35, minRotation: 0 },
+          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: "#E2E8F0", maxRotation: 35, minRotation: 0 },
           grid: { display: false },
         },
         y: {
           beginAtZero: true,
-          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.textMuted },
+          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.textMuted },
           grid: { color: DARK_GRID },
         },
       },
@@ -163,7 +163,7 @@ export async function buildDefectsBars(data: ProjectMetricsDatum[]): Promise<Buf
         title: {
           display: true,
           text: "Defectos por proyecto",
-          font: { size: 28, weight: "bold", family: "Arial" },
+          font: { size: 28, weight: "bold", family: "DejaVu Sans, Arial, sans-serif" },
           color: "#FFFFFF",
           padding: { top: 10, bottom: 20 },
         },
@@ -171,12 +171,12 @@ export async function buildDefectsBars(data: ProjectMetricsDatum[]): Promise<Buf
       },
       scales: {
         x: {
-          ticks: { font: { size: 14, family: "Arial" }, color: "#E2E8F0", maxRotation: 35 },
+          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: "#E2E8F0", maxRotation: 35 },
           grid: { display: false },
         },
         y: {
           beginAtZero: true,
-          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.textMuted, precision: 0 },
+          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.textMuted, precision: 0 },
           grid: { color: DARK_GRID },
         },
       },
@@ -227,23 +227,23 @@ export async function buildMonthlyCumulativeBars(
         title: {
           display: true,
           text: `Acumulado Mensual — ${monthLabel}`,
-          font: { size: 28, weight: "bold", family: "Arial" },
+          font: { size: 28, weight: "bold", family: "DejaVu Sans, Arial, sans-serif" },
           color: PALETTE.navy,
           padding: { top: 10, bottom: 20 },
         },
         legend: {
           position: "top",
-          labels: { font: { size: 18, family: "Arial" }, color: PALETTE.navy },
+          labels: { font: { size: 18, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.navy },
         },
       },
       scales: {
         x: {
-          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.navy },
+          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.navy },
           grid: { display: false },
         },
         y: {
           beginAtZero: true,
-          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.textMuted, precision: 0 },
+          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.textMuted, precision: 0 },
           grid: { color: "#E2E8F0" },
         },
       },
@@ -294,23 +294,23 @@ export async function buildYearlyCumulativeBars(
         title: {
           display: true,
           text: `Acumulado Anual — ${year}`,
-          font: { size: 28, weight: "bold", family: "Arial" },
+          font: { size: 28, weight: "bold", family: "DejaVu Sans, Arial, sans-serif" },
           color: PALETTE.navy,
           padding: { top: 10, bottom: 20 },
         },
         legend: {
           position: "top",
-          labels: { font: { size: 18, family: "Arial" }, color: PALETTE.navy },
+          labels: { font: { size: 18, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.navy },
         },
       },
       scales: {
         x: {
-          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.navy },
+          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.navy },
           grid: { display: false },
         },
         y: {
           beginAtZero: true,
-          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.textMuted, precision: 0 },
+          ticks: { font: { size: 14, family: "DejaVu Sans, Arial, sans-serif" }, color: PALETTE.textMuted, precision: 0 },
           grid: { color: "#E2E8F0" },
         },
       },
