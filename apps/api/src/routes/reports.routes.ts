@@ -550,18 +550,17 @@ router.get(
       const sortedWeeks = [...weekBuckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
       const monthLabel = format(monday, "MMMM yyyy", { locale: es });
 
-      // Generar gráficos como PNG (puede fallar si el runtime no tiene canvas)
+      // Gráfico acumulado mensual como imagen PNG (los dashboard slides ya están en la plantilla)
       let charts: { pipeline: Buffer; designedVsExecuted: Buffer; defects: Buffer; monthlyCumulative?: Buffer } | undefined;
       try {
-        const [pipeline, dve, defects, monthly] = await Promise.all([
-          buildPipelineDonut(pipelineData),
-          buildDesignedVsExecutedBars(projectMetrics),
-          buildDefectsBars(projectMetrics),
-          sortedWeeks.length > 0 ? buildMonthlyCumulativeBars(sortedWeeks, monthLabel) : Promise.resolve(undefined),
-        ]);
-        charts = { pipeline, designedVsExecuted: dve, defects, monthlyCumulative: monthly };
+        if (sortedWeeks.length > 0) {
+          const monthly = await buildMonthlyCumulativeBars(sortedWeeks, monthLabel);
+          // pipeline/dve/defects ya no se usan como imágenes (los dashboard slides los reemplazan)
+          // pero mantenemos el campo monthlyCumulative para la slide extra
+          charts = { pipeline: Buffer.alloc(0), designedVsExecuted: Buffer.alloc(0), defects: Buffer.alloc(0), monthlyCumulative: monthly };
+        }
       } catch (chartErr) {
-        console.warn("Charts generation failed, omitting summary slide:", chartErr);
+        console.warn("Monthly chart generation failed:", chartErr);
       }
 
       const buffer = await buildWeeklyPptxBuffer({

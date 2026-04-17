@@ -8,7 +8,7 @@ const HEIGHT = 700;
 const canvas = new ChartJSNodeCanvas({
   width: WIDTH,
   height: HEIGHT,
-  backgroundColour: "#FFFFFF",
+  backgroundColour: "#0F172A",
 });
 
 // Paleta alineada con la del PPTX original
@@ -53,7 +53,7 @@ export async function buildPipelineDonut(data: PipelineDatum[]): Promise<Buffer>
         {
           data: filtered.map((d) => d.count),
           backgroundColor: filtered.map((d) => STATUS_COLOR[d.label] ?? PALETTE.gray),
-          borderColor: "#FFFFFF",
+          borderColor: PALETTE.navy,
           borderWidth: 2,
         },
       ],
@@ -65,14 +65,14 @@ export async function buildPipelineDonut(data: PipelineDatum[]): Promise<Buffer>
           display: true,
           text: "Pipeline por estado (HUs)",
           font: { size: 28, weight: "bold", family: "Arial" },
-          color: PALETTE.navy,
+          color: "#FFFFFF",
           padding: { top: 10, bottom: 20 },
         },
         legend: {
           position: "right",
           labels: {
             font: { size: 18, family: "Arial" },
-            color: PALETTE.navy,
+            color: "#E2E8F0",
             padding: 16,
           },
         },
@@ -89,6 +89,8 @@ export interface ProjectMetricsDatum {
   executed: number;
   defects: number;
 }
+
+const DARK_GRID = "rgba(148, 163, 184, 0.2)";
 
 export async function buildDesignedVsExecutedBars(data: ProjectMetricsDatum[]): Promise<Buffer> {
   const config: ChartConfiguration<"bar"> = {
@@ -117,34 +119,23 @@ export async function buildDesignedVsExecutedBars(data: ProjectMetricsDatum[]): 
           display: true,
           text: "Casos Diseñados vs Ejecutados por proyecto",
           font: { size: 28, weight: "bold", family: "Arial" },
-          color: PALETTE.navy,
+          color: "#FFFFFF",
           padding: { top: 10, bottom: 20 },
         },
         legend: {
           position: "top",
-          labels: {
-            font: { size: 18, family: "Arial" },
-            color: PALETTE.navy,
-          },
+          labels: { font: { size: 18, family: "Arial" }, color: "#E2E8F0" },
         },
       },
       scales: {
         x: {
-          ticks: {
-            font: { size: 14, family: "Arial" },
-            color: PALETTE.navy,
-            maxRotation: 35,
-            minRotation: 0,
-          },
+          ticks: { font: { size: 14, family: "Arial" }, color: "#E2E8F0", maxRotation: 35, minRotation: 0 },
           grid: { display: false },
         },
         y: {
           beginAtZero: true,
-          ticks: {
-            font: { size: 14, family: "Arial" },
-            color: PALETTE.textMuted,
-          },
-          grid: { color: "#E2E8F0" },
+          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.textMuted },
+          grid: { color: DARK_GRID },
         },
       },
     },
@@ -173,28 +164,20 @@ export async function buildDefectsBars(data: ProjectMetricsDatum[]): Promise<Buf
           display: true,
           text: "Defectos por proyecto",
           font: { size: 28, weight: "bold", family: "Arial" },
-          color: PALETTE.navy,
+          color: "#FFFFFF",
           padding: { top: 10, bottom: 20 },
         },
         legend: { display: false },
       },
       scales: {
         x: {
-          ticks: {
-            font: { size: 14, family: "Arial" },
-            color: PALETTE.navy,
-            maxRotation: 35,
-          },
+          ticks: { font: { size: 14, family: "Arial" }, color: "#E2E8F0", maxRotation: 35 },
           grid: { display: false },
         },
         y: {
           beginAtZero: true,
-          ticks: {
-            font: { size: 14, family: "Arial" },
-            color: PALETTE.textMuted,
-            precision: 0,
-          },
-          grid: { color: "#E2E8F0" },
+          ticks: { font: { size: 14, family: "Arial" }, color: PALETTE.textMuted, precision: 0 },
+          grid: { color: DARK_GRID },
         },
       },
     },

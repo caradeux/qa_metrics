@@ -317,22 +317,145 @@ function cleanSlideRels(relsXml: string): string {
   return relsXml.replace(/<Relationship [^/]+notesSlide[^/]*\/>/g, "");
 }
 
-/**
- * Construye el XML de un slide con un solo gráfico centrado y un título.
- */
-function buildChartSlideXml(title: string): string {
-  const SLIDE_W = 12192000;
-  const SLIDE_H = 6858000;
-  const IMG = { x: 457200, y: 1143000, cx: 11277600, cy: 5486400 };
+// Ancho máximo de las barras horizontales en los dashboard slides (EMU)
+const BAR_FULL_CX = 4937760;
 
+function scaleBarWidth(xml: string, barName: string, value: number, maxValue: number): string {
+  if (maxValue <= 0) return xml;
+  const newCx = Math.max(Math.round((value / maxValue) * BAR_FULL_CX), value > 0 ? 60000 : 0);
+  const regex = new RegExp(`(name="${barName}"[\\s\\S]*?<a:ext cx=")\\d+`);
+  return xml.replace(regex, `$1${newCx}`);
+}
+
+interface ProjectMetric { name: string; designed: number; executed: number; defects: number }
+
+function computeProjectMetrics(projects: WeeklyProjectSlide[]): ProjectMetric[] {
+  return projects.map((p) => {
+    let d = 0, e = 0, bug = 0;
+    for (const hu of p.hus) {
+      d += hu.designed ?? 0;
+      e += hu.executed ?? 0;
+      bug += hu.defects ?? 0;
+    }
+    return { name: p.projectName, designed: d, executed: e, defects: bug };
+  });
+}
+
+function populateBarsSlide(
+  xml: string,
+  metrics: ProjectMetric[],
+  field: "designed" | "executed",
+  weekLabel: string,
+): string {
+  const values = metrics.map((m) => m[field]);
+  const total = values.reduce((s, v) => s + v, 0);
+  const maxVal = Math.max(...values, 1);
+  const withActivity = values.filter((v) => v > 0).length;
+  const avg = metrics.length > 0 ? (total / metrics.length).toFixed(1) : "0";
+
+  let x = xml;
+  x = replaceTextInShape(x, "Subtitle", `Distribución de casos ${field === "designed" ? "diseñados" : "ejecutados"} — ${metrics.length} iniciativas activas`);
+  x = replaceTextInShape(x, "KPI0big", String(total));
+  x = replaceTextInShape(x, "KPI0lbl", field === "designed" ? "Total Diseñados" : "Total Ejecutados");
+  x = replaceTextInShape(x, "KPI0sub", weekLabel);
+  x = replaceTextInShape(x, "KPI1big", String(withActivity));
+  x = replaceTextInShape(x, "KPI1lbl", "Iniciativas");
+  x = replaceTextInShape(x, "KPI1sub", field === "designed" ? "con diseño" : "con ejecución");
+  x = replaceTextInShape(x, "KPI2big", avg);
+  x = replaceTextInShape(x, "KPI2lbl", "Promedio");
+  x = replaceTextInShape(x, "KPI2sub", "por iniciativa");
+
+  for (let i = 0; i < 7; i++) {
+    const m = metrics[i];
+    x = replaceTextInShape(x, `Lbl${i}`, m?.name ?? "");
+    x = replaceTextInShape(x, `Val${i}`, m ? String(m[field]) : "");
+    x = scaleBarWidth(x, `Bar${i}`, m ? m[field] : 0, maxVal);
+  }
+  return x;
+}
+
+function populateDistributionSlide(xml: string, metrics: ProjectMetric[], field: "designed" | "executed"): string {
+  const total = metrics.reduce((s, m) => s + m[field], 0);
+  let x = xml;
+  x = replaceTextInShape(x, "TotalNum", String(total));
+  const sorted = [...metrics].sort((a, b) => b[field] - a[field]);
+  for (let i = 0; i < 7; i++) {
+    const m = sorted[i];
+    const pct = m && total > 0 ? Math.round((m[field] / total) * 100) : 0;
+    x = replaceTextInShape(x, `N${i}`, m?.name ?? "");
+    x = replaceTextInShape(x, `C${i}`, m ? String(m[field]) : "0");
+    x = replaceTextInShape(x, `P${i}`, m ? `${pct}%` : "0%");
+    x = scaleBarWidth(x, `BV${i}`, m ? m[field] : 0, Math.max(...metrics.map((m) => m[field]), 1));
+  }
+  return x;
+}
+
+function populateAvgSlide(xml: string, metrics: ProjectMetric[], field: "designed" | "executed"): string {
+  const values = metrics.map((m) => m[field]);
+  const total = values.reduce((s, v) => s + v, 0);
+  const maxVal = Math.max(...values, 0);
+  const maxProject = metrics.find((m) => m[field] === maxVal);
+  const withActivity = values.filter((v) => v > 0).length;
+  const without = metrics.length - withActivity;
+  const avg = metrics.length > 0 ? (total / metrics.length).toFixed(1) : "0";
+
+  let x = xml;
+  x = replaceTextInShape(x, "HeroNum", avg);
+  x = replaceTextInShape(x, "HeroSub", `Base: ${total} casos / ${metrics.length} iniciativas`);
+  x = replaceTextInShape(x, "Snum0", String(total));
+  x = replaceTextInShape(x, "Slbl0", field === "designed" ? "Total casos diseñados" : "Total casos ejecutados");
+  x = replaceTextInShape(x, "Snum1", String(maxVal));
+  x = replaceTextInShape(x, "Slbl1", `Máximo (${maxProject?.name ?? "-"})`);
+  x = replaceTextInShape(x, "Snum2", String(withActivity));
+  x = replaceTextInShape(x, "Slbl2", field === "designed" ? "Iniciativas con diseño" : "Iniciativas con ejecución");
+  x = replaceTextInShape(x, "Snum3", String(without));
+  x = replaceTextInShape(x, "Slbl3", field === "designed" ? "Iniciativas sin diseño" : "Iniciativas sin ejecución");
+  return x;
+}
+
+function populateExecByInitiativeSlide(xml: string, metrics: ProjectMetric[]): string {
+  let x = xml;
+  for (let i = 0; i < 7; i++) {
+    const m = metrics[i];
+    x = replaceTextInShape(x, `N${i}`, m?.name ?? "");
+    x = replaceTextInShape(x, `D${i}`, m ? String(m.designed) : "0");
+    x = replaceTextInShape(x, `E${i}`, m ? String(m.executed) : "0");
+  }
+  return x;
+}
+
+function populateHUSlide(xml: string, projects: WeeklyProjectSlide[]): string {
+  const allHUs = projects.flatMap((p) =>
+    p.hus.map((hu) => ({ ...hu, project: p.projectName })),
+  );
+  const total = allHUs.length;
+  const byStatus = new Map<string, number>();
+  for (const hu of allHUs) {
+    const lbl = labelFor(hu.status);
+    byStatus.set(lbl, (byStatus.get(lbl) ?? 0) + 1);
+  }
+
+  let x = xml;
+  x = replaceTextInShape(x, "Kbig0", String(total));
+  x = replaceTextInShape(x, "Kbig1", String(byStatus.get("En Diseño") ?? 0));
+  x = replaceTextInShape(x, "Kbig2", String(byStatus.get("Pdte. Aprobación") ?? 0));
+  x = replaceTextInShape(x, "Kbig3", String((byStatus.get("En Curso") ?? 0) + (byStatus.get("Pdte. Instalación QA") ?? 0)));
+  x = replaceTextInShape(x, "Kbig4", String(byStatus.get("Devuelto a Desarrollo") ?? 0));
+  return x;
+}
+
+function buildChartSlideXml(title: string): string {
+  const SLIDE_H = 6858000;
+  const SLIDE_W = 12192000;
+  const IMG = { x: 457200, y: 1143000, cx: 11277600, cy: 5486400 };
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main">
 <p:cSld name="${xmlEscape(title)}">
-  <p:bg><p:bgPr><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
+  <p:bg><p:bgPr><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>
   <p:spTree>
     <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
     <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>
-    <p:sp><p:nvSpPr><p:cNvPr id="2" name="Side bar"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
+    <p:sp><p:nvSpPr><p:cNvPr id="2" name="GreenBar"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>
       <p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="73152" cy="${SLIDE_H}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="22C55E"/></a:solidFill><a:ln/></p:spPr>
       <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="es-CL"/></a:p></p:txBody>
     </p:sp>
@@ -340,7 +463,7 @@ function buildChartSlideXml(title: string): string {
       <p:spPr><a:xfrm><a:off x="457200" y="320040"/><a:ext cx="${SLIDE_W - 914400}" cy="548640"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln/></p:spPr>
       <p:txBody><a:bodyPr wrap="square" rtlCol="0" anchor="ctr"/><a:lstStyle/>
         <a:p><a:pPr marL="0" indent="0"><a:buNone/></a:pPr>
-          <a:r><a:rPr lang="es-CL" sz="3400" b="1"><a:solidFill><a:srgbClr val="0F172A"/></a:solidFill><a:latin typeface="Arial"/></a:rPr><a:t>${xmlEscape(title)}</a:t></a:r>
+          <a:r><a:rPr lang="es-CL" sz="3400" b="1"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:latin typeface="Arial"/></a:rPr><a:t>${xmlEscape(title)}</a:t></a:r>
         </a:p>
       </p:txBody>
     </p:sp>
@@ -361,98 +484,84 @@ function buildChartSlideRels(chartFileName: string): string {
 </Relationships>`;
 }
 
+async function readSlide(zip: JSZip, num: number) {
+  const f = zip.file(`ppt/slides/slide${num}.xml`);
+  const r = zip.file(`ppt/slides/_rels/slide${num}.xml.rels`);
+  return {
+    xml: f ? await f.async("string") : "",
+    rels: r ? cleanSlideRels(await r.async("string")) : undefined,
+  };
+}
+
 export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buffer> {
   const templateBuf = readFileSync(TEMPLATE_PATH);
   const zip = await JSZip.loadAsync(templateBuf);
 
-  // 1) Leer templates
-  const coverFile = zip.file("ppt/slides/slide1.xml");
-  const projectFile = zip.file("ppt/slides/slide2.xml");
-  const closingFile = zip.file("ppt/slides/slide9.xml");
-  if (!coverFile || !projectFile || !closingFile) {
-    throw new Error("Plantilla PPTX inválida: faltan slides base (1, 2 o 9)");
-  }
-  const coverXml = await coverFile.async("string");
-  const projectXml = await projectFile.async("string");
-  const closingXml = await closingFile.async("string");
-
-  const coverRelsFile = zip.file("ppt/slides/_rels/slide1.xml.rels");
-  const projectRelsFile = zip.file("ppt/slides/_rels/slide2.xml.rels");
-  const closingRelsFile = zip.file("ppt/slides/_rels/slide9.xml.rels");
-  const coverRels = coverRelsFile ? cleanSlideRels(await coverRelsFile.async("string")) : undefined;
-  const projectRels = projectRelsFile ? cleanSlideRels(await projectRelsFile.async("string")) : undefined;
-  const closingRels = closingRelsFile ? cleanSlideRels(await closingRelsFile.async("string")) : undefined;
+  // 1) Leer todas las slides del template
+  const cover = await readSlide(zip, 1);
+  const project = await readSlide(zip, 2);
+  const dashDesigned = await readSlide(zip, 9);
+  const dashDesignedDist = await readSlide(zip, 10);
+  const dashAvgDesigned = await readSlide(zip, 11);
+  const dashExecuted = await readSlide(zip, 12);
+  const dashExecDist = await readSlide(zip, 13);
+  const dashAvgExecuted = await readSlide(zip, 14);
+  const dashAnalysts = await readSlide(zip, 15);
+  const dashHUs = await readSlide(zip, 16);
+  const closing = await readSlide(zip, 17);
 
   const presentationXml = await zip.file("ppt/presentation.xml")!.async("string");
   const presentationRels = await zip.file("ppt/_rels/presentation.xml.rels")!.async("string");
   const contentTypes = await zip.file("[Content_Types].xml")!.async("string");
 
-  // 2) Remover TODOS los slides y sus rels (limpieza total)
-  const allFileNames = Object.keys(zip.files);
-  for (const fn of allFileNames) {
-    if (fn.startsWith("ppt/slides/slide") || fn.startsWith("ppt/slides/_rels/slide")) {
-      zip.remove(fn);
-    }
-    if (fn.startsWith("ppt/notesSlides/")) {
+  // 2) Remover TODOS los slides, rels y notesSlides
+  for (const fn of Object.keys(zip.files)) {
+    if (fn.startsWith("ppt/slides/slide") || fn.startsWith("ppt/slides/_rels/slide") || fn.startsWith("ppt/notesSlides/")) {
       zip.remove(fn);
     }
   }
 
   // 3) Generar nuevos slides
   const generated: Array<{ name: string; content: string; rels?: string }> = [];
+  const add = (content: string, rels?: string) => {
+    generated.push({ name: `slide${generated.length + 1}.xml`, content, rels });
+  };
 
-  generated.push({
-    name: "slide1.xml",
-    content: customizeCover(coverXml, input.weekStart, input.weekEnd),
-    rels: coverRels,
-  });
+  // Portada
+  add(customizeCover(cover.xml, input.weekStart, input.weekEnd), cover.rels);
 
-  input.projects.forEach((p, i) => {
-    generated.push({
-      name: `slide${i + 2}.xml`,
-      content: customizeProjectSlide(projectXml, p, input.weekStart, input.weekEnd),
-      rels: projectRels,
-    });
-  });
-
-  // 1 slide por gráfico (si vienen cargados)
-  if (input.charts) {
-    const charts: Array<{ title: string; file: string; buf: Buffer }> = [
-      { title: "Pipeline por Estado (HUs)", file: "chartPipeline.png", buf: input.charts.pipeline },
-      { title: "Casos Diseñados vs Ejecutados", file: "chartDesignedExecuted.png", buf: input.charts.designedVsExecuted },
-      { title: "Defectos por Proyecto", file: "chartDefects.png", buf: input.charts.defects },
-    ];
-    for (const chart of charts) {
-      zip.file(`ppt/media/${chart.file}`, chart.buf);
-      generated.push({
-        name: `slide${generated.length + 1}.xml`,
-        content: buildChartSlideXml(chart.title),
-        rels: buildChartSlideRels(chart.file),
-      });
-    }
-    if (input.charts.monthlyCumulative) {
-      const file = "chartMonthlyCumulative.png";
-      zip.file(`ppt/media/${file}`, input.charts.monthlyCumulative);
-      generated.push({
-        name: `slide${generated.length + 1}.xml`,
-        content: buildChartSlideXml("Acumulado Mensual"),
-        rels: buildChartSlideRels(file),
-      });
-    }
+  // Slides de proyecto
+  for (const p of input.projects) {
+    add(customizeProjectSlide(project.xml, p, input.weekStart, input.weekEnd), project.rels);
   }
 
-  generated.push({
-    name: `slide${generated.length + 1}.xml`,
-    content: closingXml,
-    rels: closingRels,
-  });
+  // Dashboard slides con datos dinámicos
+  const metrics = computeProjectMetrics(input.projects);
+  const weekLabel = `Semana ${format(input.weekStart, "dd-MM", { locale: es })}`;
+
+  if (dashDesigned.xml) add(populateBarsSlide(dashDesigned.xml, metrics, "designed", weekLabel), dashDesigned.rels);
+  if (dashDesignedDist.xml) add(populateDistributionSlide(dashDesignedDist.xml, metrics, "designed"), dashDesignedDist.rels);
+  if (dashAvgDesigned.xml) add(populateAvgSlide(dashAvgDesigned.xml, metrics, "designed"), dashAvgDesigned.rels);
+  if (dashExecuted.xml) add(populateBarsSlide(dashExecuted.xml, metrics, "executed", weekLabel), dashExecuted.rels);
+  if (dashExecDist.xml) add(populateExecByInitiativeSlide(dashExecDist.xml, metrics), dashExecDist.rels);
+  if (dashAvgExecuted.xml) add(populateAvgSlide(dashAvgExecuted.xml, metrics, "executed"), dashAvgExecuted.rels);
+  if (dashAnalysts.xml) add(dashAnalysts.xml, dashAnalysts.rels);
+  if (dashHUs.xml) add(populateHUSlide(dashHUs.xml, input.projects), dashHUs.rels);
+
+  // Chart de acumulado mensual (imagen) si viene
+  if (input.charts?.monthlyCumulative) {
+    const file = "chartMonthlyCumulative.png";
+    zip.file(`ppt/media/${file}`, input.charts.monthlyCumulative);
+    add(buildChartSlideXml("Acumulado Mensual"), buildChartSlideRels(file));
+  }
+
+  // Cierre
+  add(closing.xml, closing.rels);
 
   // 4) Escribir archivos
   for (const s of generated) {
     zip.file(`ppt/slides/${s.name}`, s.content);
-    if (s.rels) {
-      zip.file(`ppt/slides/_rels/${s.name}.rels`, s.rels);
-    }
+    if (s.rels) zip.file(`ppt/slides/_rels/${s.name}.rels`, s.rels);
   }
 
   // 5) Reconstruir presentation.xml, rels y content types
@@ -460,7 +569,5 @@ export async function buildWeeklyPptxBuffer(input: WeeklyPptxInput): Promise<Buf
   zip.file("ppt/_rels/presentation.xml.rels", buildPresentationRels(presentationRels, generated.length));
   zip.file("[Content_Types].xml", buildContentTypes(contentTypes, generated.length));
 
-  // 6) Generar buffer
-  const out = await zip.generateAsync({ type: "nodebuffer" });
-  return out;
+  return zip.generateAsync({ type: "nodebuffer" });
 }
