@@ -49,8 +49,8 @@ router.get("/", requirePermission("activities", "read"), async (req: AuthRequest
   if (testerId) where.testerId = testerId;
   if (assignmentId) where.assignmentId = assignmentId;
   if (projectId) where.tester = { projectId };
-  if (from) where.startAt = { gte: new Date(from) };
-  if (to) where.endAt = { ...(where.endAt || {}), lte: new Date(to) };
+  if (from) where.endAt = { gt: new Date(from) };
+  if (to) where.startAt = { lt: new Date(to) };
 
   // Scope filtering por rol.
   const role = req.user!.role.name;

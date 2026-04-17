@@ -42,6 +42,11 @@ export function ActivityForm({ testerId, initial, onClose, onSaved }: Props) {
     e.preventDefault();
     setError(null);
     setSaving(true);
+    if (new Date(startAt) >= new Date(endAt)) {
+      setError("La hora de inicio debe ser anterior al fin");
+      setSaving(false);
+      return;
+    }
     try {
       const payload = {
         testerId,

@@ -95,6 +95,32 @@ describe("Activities API", () => {
     expect(r.status).toBe(403);
   });
 
+  it("GET: actividad que empieza antes de 'from' y termina dentro del rango aparece en la lista", async () => {
+  // Crear una actividad cruzando el borde
+  const create = await fetch(`${API_URL}/api/activities`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${adminToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      testerId, categoryId,
+      startAt: "2026-07-01T07:30:00.000Z",
+      endAt:   "2026-07-01T09:00:00.000Z",
+    }),
+  });
+  expect(create.status).toBe(201);
+  const created = await create.json();
+  createdIds.push(created.id);
+
+  const from = "2026-07-01T08:00:00.000Z";
+  const to   = "2026-07-01T10:00:00.000Z";
+  const r = await fetch(`${API_URL}/api/activities?testerId=${testerId}&from=${from}&to=${to}`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  expect(r.status).toBe(200);
+  const list = await r.json();
+  const ids = list.map((a: any) => a.id);
+  expect(ids).toContain(created.id);
+});
+
   it("DELETE: admin borra su creación", async () => {
     const id = createdIds[0];
     const r = await fetch(`${API_URL}/api/activities/${id}`, {
