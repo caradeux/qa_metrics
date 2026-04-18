@@ -108,3 +108,27 @@ export async function findTestersWithMissingRecords(
   }
   return out;
 }
+
+export async function resolveCcRecipients(projectIds: string[]): Promise<string[]> {
+  const [admins, projects] = await Promise.all([
+    prisma.user.findMany({
+      where: { role: { name: "ADMIN" }, active: true, email: { not: undefined } },
+      select: { email: true },
+    }),
+    projectIds.length
+      ? prisma.project.findMany({
+          where: { id: { in: projectIds }, projectManagerId: { not: null } },
+          select: { projectManager: { select: { email: true, active: true } } },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const emails = new Set<string>();
+  for (const a of admins) if (a.email) emails.add(a.email);
+  for (const p of projects) {
+    if (p.projectManager?.active && p.projectManager.email) {
+      emails.add(p.projectManager.email);
+    }
+  }
+  return [...emails];
+}

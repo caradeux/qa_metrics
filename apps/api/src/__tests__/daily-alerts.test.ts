@@ -1,8 +1,10 @@
 import "dotenv/config";
 import { describe, it, expect } from "vitest";
+import { prisma } from "@qa-metrics/database";
 import {
   previousWorkday,
   findTestersWithMissingRecords,
+  resolveCcRecipients,
 } from "../lib/daily-alerts.js";
 
 describe("previousWorkday", () => {
@@ -62,5 +64,27 @@ describe("findTestersWithMissingRecords", () => {
     expect(Array.isArray(results)).toBe(true);
     // No further assertion — open-ended assignments (endDate: null) may legitimately
     // match far-future dates. The first test covers shape of populated results.
+  });
+});
+
+describe("resolveCcRecipients", () => {
+  it("returns distinct emails from admins + PMs of given projects", async () => {
+    // Integration against real seed: expect admin@qametrics.com present
+    const cc = await resolveCcRecipients([]); // no projects — only admins
+    expect(cc).toContain("admin@qametrics.com");
+    // No duplicates
+    expect(new Set(cc).size).toBe(cc.length);
+  });
+
+  it("dedupes when an admin is also PM of one of the projects", async () => {
+    // Rely on seed: find any project with PM, pass that projectId
+    const anyPm = await prisma.project.findFirst({
+      where: { projectManagerId: { not: null } },
+      select: { id: true, projectManager: { select: { email: true } } },
+    });
+    if (!anyPm?.projectManager) return; // skip if no PM in seed
+    const cc = await resolveCcRecipients([anyPm.id]);
+    const count = cc.filter((e) => e === anyPm.projectManager!.email).length;
+    expect(count).toBeLessThanOrEqual(1);
   });
 });
