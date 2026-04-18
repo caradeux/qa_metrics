@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addDays, format, startOfDay, startOfWeek, addWeeks } from "date-fns";
 import { apiClient } from "@/lib/api-client";
 import { useHolidays } from "@/lib/holidays";
@@ -24,6 +24,7 @@ const statusMap = Object.fromEntries(STATUSES.map((s) => [s.value, s]));
 
 interface Client { id: string; name: string }
 interface Project { id: string; name: string; client?: { id: string; name: string } }
+interface StoryOpt { id: string; title: string; externalId?: string | null; projectId: string }
 interface TesterOpt {
   id: string;
   name: string;
@@ -56,6 +57,10 @@ export default function GanttPage() {
   const [filterProject, setFilterProject] = useState("");
   const [filterTester, setFilterTester] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterStories, setFilterStories] = useState<string[]>([]);
+  const [storyOptions, setStoryOptions] = useState<StoryOpt[]>([]);
+  const [storyDropdownOpen, setStoryDropdownOpen] = useState(false);
+  const storyDropdownRef = useRef<HTMLDivElement>(null);
   const [testers, setTesters] = useState<TesterOpt[]>([]);
   const { from: defFrom, to: defTo } = useMemo(() => defaultRange(), []);
   const [dateFrom, setDateFrom] = useState<string>(isoDate(defFrom));
@@ -122,12 +127,16 @@ export default function GanttPage() {
         const ACTIVE = new Set(["REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY", "EXECUTION"]);
         data = data.filter(a => ACTIVE.has(a.status));
       }
+      if (filterStories.length > 0) {
+        const set = new Set(filterStories);
+        data = data.filter(a => set.has(a.story.id));
+      }
       setAssignments(data);
     } catch {
       setAssignments([]);
     }
     setLoading(false);
-  }, [filterClient, filterProject, filterStatus, dateFrom, dateTo, visibleProjects, selectedTesterIds]);
+  }, [filterClient, filterProject, filterStatus, dateFrom, dateTo, visibleProjects, selectedTesterIds, filterStories]);
 
   useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
 
@@ -148,6 +157,31 @@ export default function GanttPage() {
       setFilterTester("");
     }
   }, [filterTester, testerGroups]);
+
+  // Carga de HUs por proyecto + reset del filtro si cambia el proyecto.
+  useEffect(() => {
+    setFilterStories([]);
+    setStoryDropdownOpen(false);
+    if (!filterProject) {
+      setStoryOptions([]);
+      return;
+    }
+    apiClient<StoryOpt[]>(`/api/stories?projectId=${filterProject}`)
+      .then((rows) => setStoryOptions(rows))
+      .catch(() => setStoryOptions([]));
+  }, [filterProject]);
+
+  // Cierra el dropdown al clickear fuera.
+  useEffect(() => {
+    if (!storyDropdownOpen) return;
+    function onDown(e: MouseEvent) {
+      if (storyDropdownRef.current && !storyDropdownRef.current.contains(e.target as Node)) {
+        setStoryDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [storyDropdownOpen]);
 
   const openDetail = async (a: GanttAssignment) => {
     setSelected(a);
@@ -227,6 +261,84 @@ export default function GanttPage() {
               <option disabled value="__SEP__">──────────</option>
               {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
+          </div>
+          <div ref={storyDropdownRef} className="relative">
+            <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">HU</label>
+            <button
+              type="button"
+              onClick={() => filterProject && setStoryDropdownOpen((v) => !v)}
+              disabled={!filterProject}
+              className={`px-3 py-1.5 bg-white border rounded-lg text-xs outline-none min-w-[200px] text-left flex items-center justify-between gap-2 ${
+                filterProject
+                  ? "border-gray-200 focus:border-[#4A90D9] hover:border-gray-300"
+                  : "border-gray-100 text-gray-400 cursor-not-allowed"
+              } ${filterStories.length > 0 ? "border-[#4A90D9] text-[#1F3864] font-medium" : ""}`}
+            >
+              <span className="truncate">
+                {!filterProject
+                  ? "Selecciona un proyecto"
+                  : filterStories.length === 0
+                  ? "Todas"
+                  : filterStories.length === 1
+                  ? (() => {
+                      const s = storyOptions.find((o) => o.id === filterStories[0]);
+                      return s ? `${s.externalId ? s.externalId + " — " : ""}${s.title}` : "1 HU";
+                    })()
+                  : `${filterStories.length} HUs seleccionadas`}
+              </span>
+              <svg className="h-3 w-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {storyDropdownOpen && filterProject && (
+              <div className="absolute left-0 top-full z-30 mt-1 w-[320px] max-h-[320px] overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 bg-white px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => setFilterStories([])}
+                    className="text-[11px] font-semibold text-[#1F3864] hover:underline"
+                  >
+                    Limpiar (ver todas)
+                  </button>
+                  <span className="text-[10px] text-gray-400">
+                    {filterStories.length}/{storyOptions.length}
+                  </span>
+                </div>
+                {storyOptions.length === 0 ? (
+                  <div className="px-3 py-4 text-center text-xs text-gray-400">
+                    El proyecto no tiene HUs.
+                  </div>
+                ) : (
+                  storyOptions.map((s) => {
+                    const checked = filterStories.includes(s.id);
+                    return (
+                      <label
+                        key={s.id}
+                        className="flex cursor-pointer items-start gap-2 px-3 py-1.5 text-xs hover:bg-[#1F3864]/5"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setFilterStories((prev) =>
+                              prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id],
+                            );
+                          }}
+                          className="mt-0.5 shrink-0 accent-[#1F3864]"
+                        />
+                        <span className="min-w-0 flex-1">
+                          {s.externalId && (
+                            <span className="font-mono text-gray-500">{s.externalId}</span>
+                          )}
+                          {s.externalId && <span className="text-gray-300"> — </span>}
+                          <span className="text-gray-800">{s.title}</span>
+                        </span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
           <div>
             <label className="block text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Desde</label>
