@@ -119,4 +119,23 @@ describe("runDailyAlerts", () => {
     });
     expect((result as any).skipped).toBe(true);
   });
+
+  it("redirects all to ALERT_OVERRIDE_TO and prefixes subject when env is set", async () => {
+    const prev = process.env.ALERT_OVERRIDE_TO;
+    process.env.ALERT_OVERRIDE_TO = "override@example.com";
+    try {
+      const result = await runDailyAlerts({
+        today: new Date("2026-04-14T09:00:00Z"),
+        dryRun: true,
+      });
+      for (const p of result.payloads ?? []) {
+        expect(p.to).toBe("override@example.com");
+        expect(p.cc).toEqual([]);
+        expect(p.subject.startsWith("[TEST override → ")).toBe(true);
+      }
+    } finally {
+      if (prev === undefined) delete process.env.ALERT_OVERRIDE_TO;
+      else process.env.ALERT_OVERRIDE_TO = prev;
+    }
+  });
 });

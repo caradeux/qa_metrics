@@ -49,10 +49,10 @@ export async function findTestersWithMissingRecords(
   const dayStart = new Date(day);
   dayStart.setUTCHours(0, 0, 0, 0);
 
-  // Testers with user linked + email; load active assignments and any DailyRecord for the day.
+  // Testers with active user linked; load active assignments and any DailyRecord for the day.
   const testers = await prisma.tester.findMany({
     where: {
-      user: { email: { not: undefined }, active: true },
+      user: { active: true },
     },
     select: {
       id: true,
@@ -120,7 +120,7 @@ export async function findTestersWithMissingRecords(
 export async function resolveCcRecipients(projectIds: string[]): Promise<string[]> {
   const [admins, projects] = await Promise.all([
     prisma.user.findMany({
-      where: { role: { name: "ADMIN" }, active: true, email: { not: undefined } },
+      where: { role: { name: "ADMIN" }, active: true },
       select: { email: true },
     }),
     projectIds.length
@@ -174,6 +174,7 @@ export async function runDailyAlerts(opts: {
   const noCc = opts.noCc ?? false;
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const replyTo = process.env.ALERT_REPLY_TO;
+  const overrideTo = process.env.ALERT_OVERRIDE_TO?.trim() || undefined;
 
   const holidayRows = await prisma.holiday.findMany({ select: { date: true } });
   const holidays = holidayRows.map((h) => h.date);
@@ -213,10 +214,27 @@ export async function runDailyAlerts(opts: {
         appUrl,
       });
 
+      const effectiveTo = overrideTo ?? t.email;
+      const effectiveCc = overrideTo ? [] : cc;
+      const effectiveSubject = overrideTo
+        ? `[TEST override → ${t.email}] ${subject}`
+        : subject;
+
       if (dryRun) {
-        result.payloads!.push({ to: t.email, cc, subject, html });
+        result.payloads!.push({
+          to: effectiveTo,
+          cc: effectiveCc,
+          subject: effectiveSubject,
+          html,
+        });
       } else {
-        await sendMail({ to: t.email, cc, subject, html, replyTo });
+        await sendMail({
+          to: effectiveTo,
+          cc: effectiveCc,
+          subject: effectiveSubject,
+          html,
+          replyTo,
+        });
       }
 
       result.testersNotified += 1;
