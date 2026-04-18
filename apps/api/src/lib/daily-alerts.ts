@@ -132,3 +132,93 @@ export async function resolveCcRecipients(projectIds: string[]): Promise<string[
   }
   return [...emails];
 }
+
+import { sendMail } from "./mailer.js";
+import { renderDailyAlert } from "../templates/daily-alert.js";
+
+export interface RunResult {
+  dayChecked: string;
+  testersNotified: number;
+  assignmentsFlagged: number;
+  errors: Array<{ testerId?: string; email?: string; message: string }>;
+  skipped?: boolean;
+  reason?: string;
+  payloads?: Array<{ to: string; cc: string[]; subject: string; html: string }>;
+}
+
+function dayLabel(d: Date): string {
+  return d.toLocaleDateString("es-CL", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Santiago",
+  });
+}
+
+export async function runDailyAlerts(opts: {
+  today?: Date;
+  dryRun?: boolean;
+}): Promise<RunResult> {
+  const today = opts.today ?? new Date();
+  const dryRun = opts.dryRun ?? false;
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const replyTo = process.env.ALERT_REPLY_TO;
+
+  const holidayRows = await prisma.holiday.findMany({ select: { date: true } });
+  const holidays = holidayRows.map((h) => h.date);
+
+  if (!isWorkday(today, holidays)) {
+    return {
+      dayChecked: "",
+      testersNotified: 0,
+      assignmentsFlagged: 0,
+      errors: [],
+      skipped: true,
+      reason: "non-workday",
+    };
+  }
+
+  const dayToCheck = previousWorkday(today, holidays);
+  const testers = await findTestersWithMissingRecords(dayToCheck);
+
+  const result: RunResult = {
+    dayChecked: dayToCheck.toISOString().slice(0, 10),
+    testersNotified: 0,
+    assignmentsFlagged: 0,
+    errors: [],
+    payloads: dryRun ? [] : undefined,
+  };
+
+  const label = dayLabel(dayToCheck);
+
+  for (const t of testers) {
+    try {
+      const projectIds = [...new Set(t.missingAssignments.map((a) => a.projectId))];
+      const cc = await resolveCcRecipients(projectIds);
+      const { subject, html } = renderDailyAlert({
+        testerName: t.testerName,
+        dayLabel: label,
+        missingAssignments: t.missingAssignments,
+        appUrl,
+      });
+
+      if (dryRun) {
+        result.payloads!.push({ to: t.email, cc, subject, html });
+      } else {
+        await sendMail({ to: t.email, cc, subject, html, replyTo });
+      }
+
+      result.testersNotified += 1;
+      result.assignmentsFlagged += t.missingAssignments.length;
+    } catch (err: any) {
+      result.errors.push({
+        testerId: t.testerId,
+        email: t.email,
+        message: err?.message ?? String(err),
+      });
+    }
+  }
+
+  return result;
+}

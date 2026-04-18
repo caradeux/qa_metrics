@@ -1,11 +1,16 @@
 import "dotenv/config";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { prisma } from "@qa-metrics/database";
 import {
   previousWorkday,
   findTestersWithMissingRecords,
   resolveCcRecipients,
+  runDailyAlerts,
 } from "../lib/daily-alerts.js";
+
+vi.mock("../lib/mailer.js", () => ({
+  sendMail: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe("previousWorkday", () => {
   it("returns Friday when called on Monday with no holidays", () => {
@@ -86,5 +91,32 @@ describe("resolveCcRecipients", () => {
     const cc = await resolveCcRecipients([anyPm.id]);
     const count = cc.filter((e) => e === anyPm.projectManager!.email).length;
     expect(count).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("runDailyAlerts", () => {
+  it("returns summary in dryRun mode without calling mailer", async () => {
+    const { sendMail } = await import("../lib/mailer.js");
+    (sendMail as any).mockClear();
+
+    // Use a fixed "today" in the past to hit seeded data deterministically.
+    const result = await runDailyAlerts({
+      today: new Date("2026-04-14T09:00:00Z"),
+      dryRun: true,
+    });
+
+    expect(result).toHaveProperty("dayChecked");
+    expect(result).toHaveProperty("testersNotified");
+    expect(result).toHaveProperty("assignmentsFlagged");
+    expect(result).toHaveProperty("errors");
+    expect(Array.isArray(result.errors)).toBe(true);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("skips when today is a weekend", async () => {
+    const result = await runDailyAlerts({
+      today: new Date("2026-04-12T09:00:00Z"), // Sunday
+    });
+    expect((result as any).skipped).toBe(true);
   });
 });
