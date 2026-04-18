@@ -26,6 +26,7 @@ import {
 import { addDays, startOfWeek, startOfMonth, endOfMonth, format, getISOWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../lib/access.js";
+import { computeOccupation } from "../lib/occupation.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -827,6 +828,59 @@ router.get(
       res.status(500).json({ error: "Error al generar el PPTX anual" });
     }
   },
+);
+
+// ════════════════════════════════════════════════════════════════════
+// GET /occupation — Reporte de ocupación por tester
+// Query: ?testerIds=id1,id2  OR  ?projectId=X  &from=YYYY-MM-DD&to=YYYY-MM-DD
+// ════════════════════════════════════════════════════════════════════
+router.get(
+  "/occupation",
+  requirePermission("reports", "read") as any,
+  async (req: AuthRequest, res: Response) => {
+    const testerIdsParam = req.query.testerIds as string | undefined;
+    const projectId = req.query.projectId as string | undefined;
+    const fromParam = req.query.from as string | undefined;
+    const toParam = req.query.to as string | undefined;
+
+    if (!fromParam || !toParam) {
+      return res.status(400).json({ error: "from y to son requeridos" });
+    }
+    const from = new Date(fromParam);
+    const to = new Date(toParam);
+
+    let testerIds: string[];
+    if (testerIdsParam) {
+      testerIds = testerIdsParam.split(",").filter(Boolean);
+    } else if (projectId) {
+      const list = await prisma.tester.findMany({ where: { projectId }, select: { id: true } });
+      testerIds = list.map((t) => t.id);
+    } else {
+      return res.status(400).json({ error: "testerIds o projectId son requeridos" });
+    }
+
+    // Scope filtering by role
+    const role = req.user!.role.name;
+    if (role === "QA_ANALYST") {
+      const mine = await prisma.tester.findMany({
+        where: { id: { in: testerIds }, userId: req.user!.id },
+        select: { id: true },
+      });
+      testerIds = mine.map((t) => t.id);
+    } else if (isClientPm(req)) {
+      const pids = await clientPmProjectIds(req.user!.id);
+      const allowed = await prisma.tester.findMany({
+        where: { id: { in: testerIds }, projectId: { in: pids } },
+        select: { id: true },
+      });
+      testerIds = allowed.map((t) => t.id);
+    }
+
+    const results = await Promise.all(
+      testerIds.map((tid) => computeOccupation(tid, from, to))
+    );
+    res.json(results);
+  }
 );
 
 export default router;

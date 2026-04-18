@@ -114,3 +114,77 @@ export async function apiMe() {
 }
 
 export { ApiError };
+
+// ---------- Actividades ----------
+
+export interface ActivityCategory {
+  id: string;
+  name: string;
+  color: string | null;
+  active: boolean;
+}
+
+export interface Activity {
+  id: string;
+  testerId: string;
+  categoryId: string;
+  assignmentId: string | null;
+  startAt: string;
+  endAt: string;
+  notes: string | null;
+  category: ActivityCategory;
+  tester?: { id: string; name: string; projectId: string };
+  assignment?: { id: string; story: { id: string; title: string } } | null;
+}
+
+export const activityCategoriesApi = {
+  list: (activeOnly = false) =>
+    apiClient<ActivityCategory[]>(`/api/activity-categories${activeOnly ? "?activeOnly=true" : ""}`),
+  create: (data: { name: string; color?: string | null; active?: boolean }) =>
+    apiClient<ActivityCategory>("/api/activity-categories", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<{ name: string; color: string | null; active: boolean }>) =>
+    apiClient<ActivityCategory>(`/api/activity-categories/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: string) =>
+    apiClient<void>(`/api/activity-categories/${id}`, { method: "DELETE" }),
+};
+
+export const activitiesApi = {
+  list: (params: { testerId?: string; projectId?: string; assignmentId?: string; from?: string; to?: string }) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => { if (v) qs.set(k, v); });
+    return apiClient<Activity[]>(`/api/activities?${qs.toString()}`);
+  },
+  create: (data: {
+    testerId: string; categoryId: string; assignmentId?: string | null;
+    startAt: string; endAt: string; notes?: string | null;
+  }) => apiClient<Activity>("/api/activities", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<{
+    categoryId: string; assignmentId: string | null; startAt: string; endAt: string; notes: string | null;
+  }>) => apiClient<Activity>(`/api/activities/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  remove: (id: string) => apiClient<void>(`/api/activities/${id}`, { method: "DELETE" }),
+};
+
+export interface OccupationRow {
+  testerId: string;
+  testerName: string;
+  periodDays: number;
+  workdays: number;
+  capacityHours: number;
+  activityHours: number;
+  byCategory: Array<{ categoryId: string; name: string; color: string | null; hours: number }>;
+  byAssignment: Array<{ assignmentId: string; storyTitle: string; hours: number }>;
+  productiveHoursEstimate: number;
+  occupationPct: number;
+  overallocated: boolean;
+}
+
+export const occupationApi = {
+  get: (params: { testerIds?: string[]; projectId?: string; from: string; to: string }) => {
+    const qs = new URLSearchParams();
+    qs.set("from", params.from);
+    qs.set("to", params.to);
+    if (params.testerIds?.length) qs.set("testerIds", params.testerIds.join(","));
+    if (params.projectId) qs.set("projectId", params.projectId);
+    return apiClient<OccupationRow[]>(`/api/reports/occupation?${qs.toString()}`);
+  },
+};

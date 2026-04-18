@@ -47,10 +47,11 @@ model User {
   allowOverallocation Boolean @default(false)
   refreshToken String?
   createdAt    DateTime @default(now())
-  clients      Client[]
-  testers      Tester[]
-  managedProjects Project[] @relation("ProjectManagerOfProject")
-  dateChangeLogs  DateChangeLog[]
+  clients           Client[]
+  testers           Tester[]
+  managedProjects   Project[]  @relation("ProjectManagerOfProject")
+  dateChangeLogs    DateChangeLog[]
+  createdActivities Activity[]
 }
 
 model Client {
@@ -93,6 +94,7 @@ model Tester {
   allocation  Int                @default(100)
   records     DailyRecord[]
   assignments TesterAssignment[]
+  activities  Activity[]
 
   @@index([projectId])
 }
@@ -114,6 +116,7 @@ model TesterAssignment {
   statusLogs     AssignmentStatusLog[]
   dailyRecords   DailyRecord[]
   phases         AssignmentPhase[]
+  activities     Activity[]
 
   @@unique([testerId, storyId, cycleId])
   @@index([testerId])
@@ -245,4 +248,36 @@ enum AssignmentStatus {
   UAT
   PRODUCTION
   ON_HOLD
+}
+
+model ActivityCategory {
+  id         String     @id @default(cuid())
+  name       String     @unique
+  color      String?
+  active     Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  activities Activity[]
+}
+
+model Activity {
+  id           String            @id @default(cuid())
+  testerId     String
+  categoryId   String
+  assignmentId String?
+  startAt      DateTime
+  endAt        DateTime
+  notes        String?
+  createdById  String
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  tester     Tester            @relation(fields: [testerId], references: [id], onDelete: Cascade)
+  category   ActivityCategory  @relation(fields: [categoryId], references: [id])
+  assignment TesterAssignment? @relation(fields: [assignmentId], references: [id])
+  createdBy  User              @relation(fields: [createdById], references: [id])
+
+  @@index([testerId, startAt])
+  @@index([testerId, endAt])
+  @@index([assignmentId])
 }

@@ -74,6 +74,16 @@ const iconClock = (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
+const iconChartBar = (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+  </svg>
+);
+const iconTag = (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+  </svg>
+);
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -138,13 +148,17 @@ export function Sidebar() {
     sections.push({ key: "gestion", title: "Gestión", items: gestion });
 
     if (can("reports", "read")) {
+      const reportItems: NavItem[] = [
+        { label: "Por cliente", href: "/reports/client", icon: iconReport },
+        { label: "Por tester", href: "/reports/testers", icon: iconUsers },
+      ];
+      if (can("activities", "read")) {
+        reportItems.push({ label: "Ocupación", href: "/reports/occupation", icon: iconChartBar });
+      }
       sections.push({
         key: "reportes",
         title: "Reportes",
-        items: [
-          { label: "Por cliente", href: "/reports/client", icon: iconReport },
-          { label: "Por tester", href: "/reports/testers", icon: iconUsers },
-        ],
+        items: reportItems,
       });
     }
 
@@ -152,6 +166,9 @@ export function Sidebar() {
     const config: NavItem[] = [];
     if (can("roles", "read")) {
       config.push({ label: "Roles y Permisos", href: "/settings/roles", icon: iconGear });
+    }
+    if (can("activity-categories", "update")) {
+      config.push({ label: "Categorías de actividad", href: "/settings/activity-categories", icon: iconTag });
     }
     if (can("holidays", "read")) {
       config.push({ label: "Feriados", href: "/settings/holidays", icon: iconCalendar });
