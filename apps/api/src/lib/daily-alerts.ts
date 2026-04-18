@@ -86,27 +86,35 @@ export async function findTestersWithMissingRecords(
     },
   });
 
-  const out: TesterWithMissing[] = [];
+  // Consolida por email: una persona con N filas Tester (N proyectos) recibe
+  // UN solo correo con todas sus HUs faltantes, no N correos duplicados.
+  const byEmail = new Map<string, TesterWithMissing>();
   for (const t of testers) {
     if (!t.user?.email) continue;
     const missing = t.assignments.filter((a) => a.dailyRecords.length === 0);
     if (missing.length === 0) continue;
-    out.push({
-      testerId: t.id,
-      testerName: t.name,
-      email: t.user.email,
-      missingAssignments: missing.map((a) => ({
-        assignmentId: a.id,
-        storyId: a.story.id,
-        storyExternalId: a.story.externalId,
-        storyTitle: a.story.title,
-        projectId: a.story.project.id,
-        projectName: a.story.project.name,
-        status: a.status,
-      })),
-    });
+    const mapped = missing.map((a) => ({
+      assignmentId: a.id,
+      storyId: a.story.id,
+      storyExternalId: a.story.externalId,
+      storyTitle: a.story.title,
+      projectId: a.story.project.id,
+      projectName: a.story.project.name,
+      status: a.status,
+    }));
+    const existing = byEmail.get(t.user.email);
+    if (existing) {
+      existing.missingAssignments.push(...mapped);
+    } else {
+      byEmail.set(t.user.email, {
+        testerId: t.id,
+        testerName: t.name,
+        email: t.user.email,
+        missingAssignments: mapped,
+      });
+    }
   }
-  return out;
+  return [...byEmail.values()];
 }
 
 export async function resolveCcRecipients(projectIds: string[]): Promise<string[]> {
