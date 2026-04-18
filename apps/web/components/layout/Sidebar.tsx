@@ -151,6 +151,7 @@ export function Sidebar() {
       const reportItems: NavItem[] = [
         { label: "Por cliente", href: "/reports/client", icon: iconReport },
         { label: "Por tester", href: "/reports/testers", icon: iconUsers },
+        { label: "Conglomerado por HU", href: "/reports/stories", icon: iconReport },
       ];
       if (can("activities", "read")) {
         reportItems.push({ label: "Ocupación", href: "/reports/occupation", icon: iconChartBar });

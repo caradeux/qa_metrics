@@ -883,4 +883,93 @@ router.get(
   }
 );
 
+// ════════════════════════════════════════════════════════════════════
+// GET /story-breakdown — Conglomerado de métricas por HU y ciclo
+// Query: ?projectId=X (obligatorio) &storyId=Y (opcional)
+// Responde array de stories con cycles + totals D/E/B.
+// ════════════════════════════════════════════════════════════════════
+router.get(
+  "/story-breakdown",
+  requirePermission("reports", "read") as any,
+  async (req: AuthRequest, res: Response) => {
+    const projectId = req.query.projectId as string | undefined;
+    const storyId = req.query.storyId as string | undefined;
+
+    if (!projectId) {
+      return res.status(400).json({ error: "projectId es requerido" });
+    }
+
+    // Scope filtering por rol
+    if (isClientPm(req)) {
+      const pids = await clientPmProjectIds(req.user!.id);
+      if (!pids.includes(projectId)) return res.status(403).json({ error: "Sin acceso" });
+    } else if (isAnalyst(req)) {
+      const pids = await analystProjectIds(req.user!.id);
+      if (!pids.includes(projectId)) return res.status(403).json({ error: "Sin acceso" });
+    }
+
+    const stories = await prisma.userStory.findMany({
+      where: { projectId, ...(storyId ? { id: storyId } : {}) },
+      select: {
+        id: true,
+        externalId: true,
+        title: true,
+        cycles: {
+          select: {
+            id: true,
+            name: true,
+            startDate: true,
+            endDate: true,
+            assignments: {
+              select: {
+                dailyRecords: {
+                  select: { designed: true, executed: true, defects: true },
+                },
+              },
+            },
+          },
+          orderBy: [{ startDate: "asc" }, { name: "asc" }],
+        },
+      },
+      orderBy: [{ externalId: "asc" }, { title: "asc" }],
+    });
+
+    const out = stories.map((s) => {
+      const cycles = s.cycles.map((c) => {
+        const records = c.assignments.flatMap((a) => a.dailyRecords);
+        const designed = records.reduce((sum, r) => sum + r.designed, 0);
+        const executed = records.reduce((sum, r) => sum + r.executed, 0);
+        const defects = records.reduce((sum, r) => sum + r.defects, 0);
+        return {
+          cycleId: c.id,
+          cycleName: c.name,
+          startDate: c.startDate ? c.startDate.toISOString().slice(0, 10) : null,
+          endDate: c.endDate ? c.endDate.toISOString().slice(0, 10) : null,
+          designed,
+          executed,
+          defects,
+          hasRecords: records.length > 0,
+        };
+      });
+      const totals = cycles.reduce(
+        (acc, c) => ({
+          designed: acc.designed + c.designed,
+          executed: acc.executed + c.executed,
+          defects: acc.defects + c.defects,
+        }),
+        { designed: 0, executed: 0, defects: 0 },
+      );
+      return {
+        id: s.id,
+        externalId: s.externalId,
+        title: s.title,
+        cycles,
+        totals,
+      };
+    });
+
+    res.json(out);
+  },
+);
+
 export default router;
