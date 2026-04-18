@@ -19,8 +19,10 @@ function getClient(): Resend {
 }
 
 export async function sendMail(payload: MailPayload): Promise<void> {
-  const from = process.env.ALERT_FROM_EMAIL;
-  if (!from) throw new Error("ALERT_FROM_EMAIL is not set");
+  const email = process.env.ALERT_FROM_EMAIL;
+  if (!email) throw new Error("ALERT_FROM_EMAIL is not set");
+  const fromName = process.env.ALERT_FROM_NAME?.trim() || "QA Metrics";
+  const from = `${fromName} <${email}>`;
 
   const { data, error } = await getClient().emails.send({
     from,
