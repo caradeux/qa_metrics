@@ -159,9 +159,11 @@ function dayLabel(d: Date): string {
 export async function runDailyAlerts(opts: {
   today?: Date;
   dryRun?: boolean;
+  noCc?: boolean;
 }): Promise<RunResult> {
   const today = opts.today ?? new Date();
   const dryRun = opts.dryRun ?? false;
+  const noCc = opts.noCc ?? false;
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const replyTo = process.env.ALERT_REPLY_TO;
 
@@ -195,7 +197,7 @@ export async function runDailyAlerts(opts: {
   for (const t of testers) {
     try {
       const projectIds = [...new Set(t.missingAssignments.map((a) => a.projectId))];
-      const cc = await resolveCcRecipients(projectIds);
+      const cc = noCc ? [] : await resolveCcRecipients(projectIds);
       const { subject, html } = renderDailyAlert({
         testerName: t.testerName,
         dayLabel: label,

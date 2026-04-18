@@ -20,8 +20,11 @@ function requireInternalSecret(req: Request, res: Response): boolean {
 router.post("/run-daily-alerts", async (req: Request, res: Response) => {
   if (!requireInternalSecret(req, res)) return;
   const dryRun = req.query.dryRun === "true";
+  const noCc = req.query.noCc === "true";
+  const dayStr = typeof req.query.day === "string" ? req.query.day : undefined;
+  const today = dayStr ? new Date(`${dayStr}T12:00:00Z`) : undefined;
   try {
-    const result = await runDailyAlerts({ dryRun });
+    const result = await runDailyAlerts({ dryRun, noCc, today });
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? "Internal error" });
