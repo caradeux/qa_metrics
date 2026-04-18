@@ -78,15 +78,15 @@ export function renderDailyAlert(ctx: DailyAlertContext): { subject: string; htm
       <td align="center" style="padding:32px 16px;">
         <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="max-width:640px;width:100%;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(17,24,39,.04),0 12px 32px rgba(17,24,39,.06);">
           <tr>
-            <td style="background:linear-gradient(135deg,#1F3864 0%,#2E5FA3 100%);padding:28px 32px 24px;">
+            <td bgcolor="#1F3864" style="background:#1F3864;background-image:linear-gradient(135deg,#1F3864 0%,#2E5FA3 100%);padding:28px 32px 24px;color:#FFFFFF;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="font-size:12px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#C7D6F2;">QA Metrics</td>
-                  <td align="right" style="font-size:12px;color:#C7D6F2;">${escapeHtml(ctx.dayLabel)}</td>
+                  <td style="font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#FFFFFF;">QA Metrics</td>
+                  <td align="right" style="font-size:12px;font-weight:500;color:#FFFFFF;">${escapeHtml(ctx.dayLabel)}</td>
                 </tr>
               </table>
               <h1 style="margin:14px 0 0;font-size:22px;font-weight:700;color:#FFFFFF;letter-spacing:-.01em;line-height:1.3;">Registro diario pendiente</h1>
-              <p style="margin:6px 0 0;font-size:14px;color:#D3DEEE;line-height:1.5;">Hola ${escapeHtml(ctx.testerName)}, falta confirmar tu avance del día anterior.</p>
+              <p style="margin:6px 0 0;font-size:14px;color:#FFFFFF;line-height:1.5;">Hola ${escapeHtml(ctx.testerName)}, falta confirmar tu avance del día anterior.</p>
             </td>
           </tr>
           <tr>
@@ -97,7 +97,7 @@ export function renderDailyAlert(ctx: DailyAlertContext): { subject: string; htm
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                       <tr>
                         <td style="vertical-align:middle;">
-                          <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#6B7280;">Historias sin registrar</div>
+                          <div style="font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#374151;">Historias sin registrar</div>
                           <div style="font-size:32px;font-weight:700;color:#1F3864;line-height:1.1;margin-top:4px;">${count}</div>
                         </td>
                         <td align="right" style="vertical-align:middle;">
@@ -112,7 +112,7 @@ export function renderDailyAlert(ctx: DailyAlertContext): { subject: string; htm
           </tr>
           <tr>
             <td style="padding:8px 32px 0;">
-              <div style="font-size:13px;color:#4B5563;line-height:1.6;margin:12px 0 8px;">
+              <div style="font-size:14px;color:#1F2937;line-height:1.6;margin:12px 0 8px;">
                 Registra lo trabajado (o 0 si no avanzaste) para mantener las métricas al día.
               </div>
             </td>
@@ -122,9 +122,9 @@ export function renderDailyAlert(ctx: DailyAlertContext): { subject: string; htm
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #E4E8EF;border-radius:12px;overflow:hidden;">
                 <thead>
                   <tr style="background:#F7F9FC;">
-                    <th align="left" style="padding:10px 20px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6B7280;border-bottom:1px solid #E4E8EF;">Historia</th>
-                    <th align="left" style="padding:10px 16px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6B7280;border-bottom:1px solid #E4E8EF;">Proyecto</th>
-                    <th align="right" style="padding:10px 20px 10px 16px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6B7280;border-bottom:1px solid #E4E8EF;">Estado</th>
+                    <th align="left" style="padding:10px 20px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#374151;border-bottom:1px solid #E4E8EF;">Historia</th>
+                    <th align="left" style="padding:10px 16px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#374151;border-bottom:1px solid #E4E8EF;">Proyecto</th>
+                    <th align="right" style="padding:10px 20px 10px 16px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#374151;border-bottom:1px solid #E4E8EF;">Estado</th>
                   </tr>
                 </thead>
                 <tbody>${rows}</tbody>
