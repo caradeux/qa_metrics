@@ -33,7 +33,10 @@ export default function MiSemanaPage() {
     apiClient<TesterProfile[]>("/api/testers/me")
       .then((rows) => {
         setTesters(rows);
-        if (rows.length > 0) setSelectedTesterId(rows[0].id);
+        // Si tiene solo un proyecto, seleccionamos automáticamente (no hay ambigüedad).
+        // Con varios, dejamos vacío para forzar una elección consciente del tester
+        // y evitar cargar datos al proyecto equivocado por accidente.
+        if (rows.length === 1) setSelectedTesterId(rows[0].id);
       })
       .catch((e: any) => setError(e?.message ?? "Error"));
   }, []);
@@ -59,7 +62,6 @@ export default function MiSemanaPage() {
 
   if (error) return <div className="p-6 text-red-600">Error: {error}</div>;
   if (testers.length === 0) return <div className="p-6">Cargando…</div>;
-  if (!tester) return <div className="p-6">Selecciona un proyecto.</div>;
 
   return (
     <div className="p-6">
@@ -68,20 +70,23 @@ export default function MiSemanaPage() {
         {testers.length > 1 ? (
           <select
             value={selectedTesterId ?? ""}
-            onChange={(e) => setSelectedTesterId(e.target.value)}
-            className="rounded border p-1.5 text-sm font-medium"
+            onChange={(e) => setSelectedTesterId(e.target.value || null)}
+            className={`rounded border p-1.5 text-sm font-medium ${
+              selectedTesterId ? "" : "border-amber-400 bg-amber-50 text-amber-900"
+            }`}
           >
+            <option value="">— Seleccionar proyecto —</option>
             {testers.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.project.client.name} · {t.project.name} ({t.allocation}%)
               </option>
             ))}
           </select>
-        ) : (
+        ) : tester ? (
           <span className="text-sm text-gray-600">
             · {tester.project.client.name} · {tester.project.name} ({tester.allocation}%)
           </span>
-        )}
+        ) : null}
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => setWeek((w) => subWeeks(w, 1))} className="rounded border px-3 py-1">←</button>
           <span className="min-w-[180px] text-center font-medium">
@@ -91,9 +96,22 @@ export default function MiSemanaPage() {
         </div>
       </header>
 
-      <WeeklyGrid testerId={tester.id} weekStart={week} />
+      {!tester ? (
+        <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50/50 p-8 text-center">
+          <svg className="mx-auto mb-3 h-10 w-10 text-amber-500" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <p className="text-sm font-semibold text-amber-900">Selecciona un proyecto para comenzar</p>
+          <p className="mt-1 text-xs text-amber-700">
+            Estás asignado a {testers.length} proyectos. Elige el correcto antes de registrar tu semana.
+          </p>
+        </div>
+      ) : (
+        <WeeklyGrid testerId={tester.id} weekStart={week} />
+      )}
 
       {/* ── Actividades del día ── */}
+      {tester && (
       <section className="mt-8 rounded-xl border bg-white p-5 shadow-sm">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[#1F3864]/10 text-[#1F3864]">
@@ -153,6 +171,7 @@ export default function MiSemanaPage() {
           />
         )}
       </section>
+      )}
     </div>
   );
 }
