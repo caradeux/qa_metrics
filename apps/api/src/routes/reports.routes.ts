@@ -837,7 +837,7 @@ router.get(
 // ════════════════════════════════════════════════════════════════════
 router.get(
   "/occupation",
-  requirePermission("reports", "read") as any,
+  requirePermission("reports-occupation", "read") as any,
   async (req: AuthRequest, res: Response) => {
     const testerIdsParam = req.query.testerIds as string | undefined;
     const projectId = req.query.projectId as string | undefined;
@@ -891,7 +891,7 @@ router.get(
 // ════════════════════════════════════════════════════════════════════
 router.get(
   "/story-breakdown",
-  requirePermission("reports", "read") as any,
+  requirePermission("reports-stories", "read") as any,
   async (req: AuthRequest, res: Response) => {
     const projectId = req.query.projectId as string | undefined;
     const storyId = req.query.storyId as string | undefined;

@@ -147,20 +147,25 @@ export function Sidebar() {
     }
     sections.push({ key: "gestion", title: "Gestión", items: gestion });
 
-    if (can("reports", "read")) {
-      const reportItems: NavItem[] = [
-        { label: "Por cliente", href: "/reports/client", icon: iconReport },
-        { label: "Por tester", href: "/reports/testers", icon: iconUsers },
-        { label: "Conglomerado por HU", href: "/reports/stories", icon: iconReport },
-      ];
-      if (can("activities", "read")) {
+    if (can("reports", "read") || can("reports-occupation", "read") || can("reports-stories", "read")) {
+      const reportItems: NavItem[] = [];
+      if (can("reports", "read")) {
+        reportItems.push({ label: "Por cliente", href: "/reports/client", icon: iconReport });
+        reportItems.push({ label: "Por tester", href: "/reports/testers", icon: iconUsers });
+      }
+      if (can("reports-stories", "read")) {
+        reportItems.push({ label: "Conglomerado por HU", href: "/reports/stories", icon: iconReport });
+      }
+      if (can("reports-occupation", "read")) {
         reportItems.push({ label: "Ocupación", href: "/reports/occupation", icon: iconChartBar });
       }
-      sections.push({
-        key: "reportes",
-        title: "Reportes",
-        items: reportItems,
-      });
+      if (reportItems.length > 0) {
+        sections.push({
+          key: "reportes",
+          title: "Reportes",
+          items: reportItems,
+        });
+      }
     }
 
     // Configuración (última)
