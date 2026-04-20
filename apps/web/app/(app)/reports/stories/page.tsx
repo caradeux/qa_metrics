@@ -16,6 +16,8 @@ interface BreakdownCycle {
   executed: number;
   defects: number;
   hasRecords: boolean;
+  missingDays: string[];
+  missingDaysCount: number;
 }
 interface BreakdownStory {
   id: string;
@@ -29,6 +31,13 @@ function formatDate(iso: string | null): string {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-");
   return `${d}-${m}-${y}`;
+}
+
+const MISSING_DAYS_VISIBLE = 6;
+
+function formatShortDate(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${d}-${m}`;
 }
 
 function Metric({ label, value, accent }: { label: string; value: number; accent: string }) {
@@ -238,19 +247,38 @@ export default function StoryBreakdownPage() {
                   <p className="px-5 py-4 text-xs italic text-gray-400">La HU no tiene ciclos registrados.</p>
                 ) : (
                   s.cycles.map((c) => (
-                    <div key={c.cycleId} className="flex flex-wrap items-center gap-4 px-5 py-3 text-sm">
-                      <span className="min-w-[140px] font-semibold text-gray-800">{c.cycleName}</span>
-                      <span className="text-xs text-gray-500">
-                        semana <span className="font-mono">{formatDate(c.startDate)}</span>
-                        {c.endDate && c.endDate !== c.startDate && (
-                          <> → <span className="font-mono">{formatDate(c.endDate)}</span></>
-                        )}
-                      </span>
-                      <div className="ml-auto flex items-center gap-4">
-                        <Metric label="D" value={c.designed} accent="#2E5FA3" />
-                        <Metric label="E" value={c.executed} accent="#0891b2" />
-                        <Metric label="B" value={c.defects} accent="#dc2626" />
+                    <div key={c.cycleId} className="px-5 py-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <span className="min-w-[140px] font-semibold text-gray-800">{c.cycleName}</span>
+                        <span className="text-xs text-gray-500">
+                          semana <span className="font-mono">{formatDate(c.startDate)}</span>
+                          {c.endDate && c.endDate !== c.startDate && (
+                            <> → <span className="font-mono">{formatDate(c.endDate)}</span></>
+                          )}
+                        </span>
+                        <div className="ml-auto flex items-center gap-4">
+                          <Metric label="D" value={c.designed} accent="#2E5FA3" />
+                          <Metric label="E" value={c.executed} accent="#0891b2" />
+                          <Metric label="B" value={c.defects} accent="#dc2626" />
+                        </div>
                       </div>
+                      {c.missingDaysCount > 0 && (
+                        <p
+                          className="mt-1 text-xs text-amber-700"
+                          title={c.missingDays.map((d) => formatDate(d)).join(", ")}
+                        >
+                          <span aria-hidden="true">⚠</span>{" "}
+                          <span className="font-semibold">Sin registro:</span>{" "}
+                          <span className="font-mono">
+                            {c.missingDays.slice(0, MISSING_DAYS_VISIBLE).map(formatShortDate).join(", ")}
+                          </span>
+                          {c.missingDaysCount > MISSING_DAYS_VISIBLE && (
+                            <span className="text-amber-600">
+                              {" "}… y {c.missingDaysCount - MISSING_DAYS_VISIBLE} más
+                            </span>
+                          )}
+                        </p>
+                      )}
                     </div>
                   ))
                 )}
