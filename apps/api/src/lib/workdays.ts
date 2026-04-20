@@ -89,38 +89,16 @@ export async function computeMissingWorkdays(
 ): Promise<string[]> {
   if (!args.startDate) return [];
 
-  const todayUtc = new Date(
-    Date.UTC(
-      args.today.getUTCFullYear(),
-      args.today.getUTCMonth(),
-      args.today.getUTCDate(),
-    ),
-  );
-
-  const startUtc =
-    args.startDate instanceof Date
-      ? new Date(Date.UTC(args.startDate.getUTCFullYear(), args.startDate.getUTCMonth(), args.startDate.getUTCDate()))
-      : (() => {
-          const [y, m, d] = args.startDate!.slice(0, 10).split("-").map(Number);
-          return new Date(Date.UTC(y!, m! - 1, d!));
-        })();
+  const todayUtc = toUtcDateOnly(args.today);
+  const startUtc = toUtcDateOnly(args.startDate!);
 
   if (startUtc.getTime() > todayUtc.getTime()) return [];
 
   const rawEnd = args.endDate ?? todayUtc;
-  const endUtc =
-    rawEnd instanceof Date
-      ? new Date(Date.UTC(rawEnd.getUTCFullYear(), rawEnd.getUTCMonth(), rawEnd.getUTCDate()))
-      : (() => {
-          const [y, m, d] = rawEnd.slice(0, 10).split("-").map(Number);
-          return new Date(Date.UTC(y!, m! - 1, d!));
-        })();
+  const endUtc = toUtcDateOnly(rawEnd);
 
   const cappedEnd = endUtc.getTime() > todayUtc.getTime() ? todayUtc : endUtc;
 
   const workdays = await workdaysInRange(startUtc, cappedEnd);
-  const missing = workdays
-    .map(toIsoDate)
-    .filter((iso) => !args.registeredIso.has(iso));
-  return missing;
+  return workdays.map(toIsoDate).filter((iso) => !args.registeredIso.has(iso));
 }

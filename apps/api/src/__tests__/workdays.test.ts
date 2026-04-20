@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { workdaysInRange } from "../lib/workdays.js";
+import { workdaysInRange, computeMissingWorkdays } from "../lib/workdays.js";
 import { prisma } from "@qa-metrics/database";
 
 describe("workdaysInRange", () => {
@@ -35,8 +35,6 @@ describe("workdaysInRange", () => {
     expect(result.length).toBe(0);
   });
 });
-
-import { computeMissingWorkdays } from "../lib/workdays.js";
 
 describe("computeMissingWorkdays", () => {
   beforeAll(async () => {
