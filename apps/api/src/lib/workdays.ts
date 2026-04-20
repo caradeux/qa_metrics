@@ -55,3 +55,72 @@ export async function workdaysInRange(
   }
   return result;
 }
+
+/**
+ * Convierte un Date (UTC) a string ISO `YYYY-MM-DD`.
+ */
+function toIsoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+export interface MissingWorkdaysArgs {
+  /** Inicio del rango. Si es null, se retorna lista vacía. */
+  startDate: Date | string | null;
+  /** Fin del rango. Si es null, se usa `today` como tope. */
+  endDate: Date | string | null;
+  /** Set de fechas ISO `YYYY-MM-DD` que SÍ tienen al menos un registro. */
+  registeredIso: Set<string>;
+  /** Fecha de referencia para "hoy". Facilita el testeo. */
+  today: Date;
+}
+
+/**
+ * Devuelve los días hábiles del rango `[startDate, min(endDate ?? today, today)]`
+ * que NO están presentes en `registeredIso`. Resultado ordenado asc como ISO `YYYY-MM-DD`.
+ *
+ * Reglas:
+ * - Si `startDate` es null → lista vacía.
+ * - Si `startDate` es posterior a `today` (ciclo no iniciado) → lista vacía.
+ * - Nunca se incluyen fechas futuras respecto de `today`.
+ * - Fines de semana y feriados (tabla `Holiday`) no se consideran días hábiles.
+ */
+export async function computeMissingWorkdays(
+  args: MissingWorkdaysArgs,
+): Promise<string[]> {
+  if (!args.startDate) return [];
+
+  const todayUtc = new Date(
+    Date.UTC(
+      args.today.getUTCFullYear(),
+      args.today.getUTCMonth(),
+      args.today.getUTCDate(),
+    ),
+  );
+
+  const startUtc =
+    args.startDate instanceof Date
+      ? new Date(Date.UTC(args.startDate.getUTCFullYear(), args.startDate.getUTCMonth(), args.startDate.getUTCDate()))
+      : (() => {
+          const [y, m, d] = args.startDate!.slice(0, 10).split("-").map(Number);
+          return new Date(Date.UTC(y!, m! - 1, d!));
+        })();
+
+  if (startUtc.getTime() > todayUtc.getTime()) return [];
+
+  const rawEnd = args.endDate ?? todayUtc;
+  const endUtc =
+    rawEnd instanceof Date
+      ? new Date(Date.UTC(rawEnd.getUTCFullYear(), rawEnd.getUTCMonth(), rawEnd.getUTCDate()))
+      : (() => {
+          const [y, m, d] = rawEnd.slice(0, 10).split("-").map(Number);
+          return new Date(Date.UTC(y!, m! - 1, d!));
+        })();
+
+  const cappedEnd = endUtc.getTime() > todayUtc.getTime() ? todayUtc : endUtc;
+
+  const workdays = await workdaysInRange(startUtc, cappedEnd);
+  const missing = workdays
+    .map(toIsoDate)
+    .filter((iso) => !args.registeredIso.has(iso));
+  return missing;
+}
