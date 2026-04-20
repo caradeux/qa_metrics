@@ -27,6 +27,7 @@ import { addDays, startOfWeek, startOfMonth, endOfMonth, format, getISOWeek } fr
 import { es } from "date-fns/locale";
 import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../lib/access.js";
 import { computeOccupation } from "../lib/occupation.js";
+import { computeMissingWorkdays } from "../lib/workdays.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -923,7 +924,7 @@ router.get(
             assignments: {
               select: {
                 dailyRecords: {
-                  select: { designed: true, executed: true, defects: true },
+                  select: { date: true, designed: true, executed: true, defects: true },
                 },
               },
             },
@@ -934,39 +935,58 @@ router.get(
       orderBy: [{ externalId: "asc" }, { title: "asc" }],
     });
 
-    const out = stories.map((s) => {
-      const cycles = s.cycles.map((c) => {
-        const records = c.assignments.flatMap((a) => a.dailyRecords);
-        const designed = records.reduce((sum, r) => sum + r.designed, 0);
-        const executed = records.reduce((sum, r) => sum + r.executed, 0);
-        const defects = records.reduce((sum, r) => sum + r.defects, 0);
+    const today = new Date();
+
+    const out = await Promise.all(
+      stories.map(async (s) => {
+        const cycles = await Promise.all(
+          s.cycles.map(async (c) => {
+            const records = c.assignments.flatMap((a) => a.dailyRecords);
+            const designed = records.reduce((sum, r) => sum + r.designed, 0);
+            const executed = records.reduce((sum, r) => sum + r.executed, 0);
+            const defects = records.reduce((sum, r) => sum + r.defects, 0);
+
+            const registeredIso = new Set(
+              records.map((r) => r.date.toISOString().slice(0, 10)),
+            );
+            const missingDays = await computeMissingWorkdays({
+              startDate: c.startDate,
+              endDate: c.endDate,
+              registeredIso,
+              today,
+            });
+
+            return {
+              cycleId: c.id,
+              cycleName: c.name,
+              startDate: c.startDate ? c.startDate.toISOString().slice(0, 10) : null,
+              endDate: c.endDate ? c.endDate.toISOString().slice(0, 10) : null,
+              designed,
+              executed,
+              defects,
+              hasRecords: records.length > 0,
+              missingDays,
+              missingDaysCount: missingDays.length,
+            };
+          }),
+        );
+        const totals = cycles.reduce(
+          (acc, c) => ({
+            designed: acc.designed + c.designed,
+            executed: acc.executed + c.executed,
+            defects: acc.defects + c.defects,
+          }),
+          { designed: 0, executed: 0, defects: 0 },
+        );
         return {
-          cycleId: c.id,
-          cycleName: c.name,
-          startDate: c.startDate ? c.startDate.toISOString().slice(0, 10) : null,
-          endDate: c.endDate ? c.endDate.toISOString().slice(0, 10) : null,
-          designed,
-          executed,
-          defects,
-          hasRecords: records.length > 0,
+          id: s.id,
+          externalId: s.externalId,
+          title: s.title,
+          cycles,
+          totals,
         };
-      });
-      const totals = cycles.reduce(
-        (acc, c) => ({
-          designed: acc.designed + c.designed,
-          executed: acc.executed + c.executed,
-          defects: acc.defects + c.defects,
-        }),
-        { designed: 0, executed: 0, defects: 0 },
-      );
-      return {
-        id: s.id,
-        externalId: s.externalId,
-        title: s.title,
-        cycles,
-        totals,
-      };
-    });
+      }),
+    );
 
     res.json(out);
   },
