@@ -94,7 +94,8 @@ async function main() {
     "records",
     "activities",
     "activity-categories",
-    "dashboard", "gantt", "reports",
+    "dashboard", "gantt",
+    "reports", "reports-occupation", "reports-stories",
     "audit",
     "holidays",
   ];
@@ -113,7 +114,7 @@ async function main() {
   }
 
   // QA_LEAD: todo menos gestionar users/roles (solo lectura)
-  const leadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "activity-categories", "reports"];
+  const leadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "activity-categories", "reports", "reports-occupation", "reports-stories"];
   for (const resource of leadResources) {
     for (const action of actions) {
       await linkRolePermission(qaLeadRole.id, permissions[`${resource}:${action}`].id);
@@ -130,7 +131,7 @@ async function main() {
   }
 
   // QA_ANALYST
-  const analystReadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "dashboard", "gantt", "reports", "audit", "holidays"];
+  const analystReadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "dashboard", "gantt", "reports", "reports-occupation", "reports-stories", "audit", "holidays"];
   for (const resource of analystReadResources) {
     await linkRolePermission(qaAnalystRole.id, permissions[`${resource}:read`].id);
   }
@@ -148,7 +149,7 @@ async function main() {
   await linkRolePermission(qaAnalystRole.id, permissions["activity-categories:read"].id);
 
   // CLIENT_PM: read-only
-  const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "activity-categories", "dashboard", "gantt", "reports"];
+  const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "activity-categories", "dashboard", "gantt", "reports", "reports-occupation", "reports-stories"];
   for (const resource of clientPmResources) {
     await linkRolePermission(clientPmRole.id, permissions[`${resource}:read`].id);
   }
