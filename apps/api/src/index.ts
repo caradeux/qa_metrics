@@ -26,6 +26,7 @@ import auditRoutes from "./routes/audit.routes.js";
 import internalRoutes from "./routes/internal.routes.js";
 import activityCategoriesRoutes from "./routes/activity-categories.routes.js";
 import activitiesRoutes from "./routes/activities.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 
 const app = express();
 
@@ -78,6 +79,7 @@ app.use("/api", storiesRoutes);
 app.use("/api/date-change-logs", auditRoutes);
 app.use("/api/activity-categories", activityCategoriesRoutes);
 app.use("/api/activities", activitiesRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
