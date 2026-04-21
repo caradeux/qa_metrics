@@ -53,13 +53,67 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
     orderBy: { name: "asc" },
   });
 
-  const rows = users.map((u) => ({
-    userId: u.id,
-    userName: u.name,
-    userEmail: u.email,
-    daily: { loaded: false, storiesCount: 0, designed: 0, executed: 0, defects: 0, lastAt: null as string | null },
-    activities: { loaded: false, hours: 0, lastAt: null as string | null },
-  }));
+  const testerIds = users.flatMap((u) => u.testers.map((t) => t.id));
+  const userByTesterId = new Map<string, string>();
+  for (const u of users) for (const t of u.testers) userByTesterId.set(t.id, u.id);
+
+  const dailyRecords = testerIds.length
+    ? await prisma.dailyRecord.findMany({
+        where: { testerId: { in: testerIds }, date: dayUtc },
+        select: {
+          testerId: true,
+          assignmentId: true,
+          designed: true,
+          executed: true,
+          defects: true,
+          updatedAt: true,
+          createdAt: true,
+        },
+      })
+    : [];
+
+  type DailyAgg = { loaded: boolean; storiesCount: number; designed: number; executed: number; defects: number; lastAt: Date | null };
+  const dailyByUser = new Map<string, DailyAgg>();
+  const assignmentsByUser = new Map<string, Set<string>>();
+  for (const r of dailyRecords) {
+    const userId = userByTesterId.get(r.testerId);
+    if (!userId) continue;
+    let agg = dailyByUser.get(userId);
+    if (!agg) {
+      agg = { loaded: true, storiesCount: 0, designed: 0, executed: 0, defects: 0, lastAt: null };
+      dailyByUser.set(userId, agg);
+      assignmentsByUser.set(userId, new Set());
+    }
+    assignmentsByUser.get(userId)!.add(r.assignmentId);
+    agg.designed += r.designed;
+    agg.executed += r.executed;
+    agg.defects += r.defects;
+    const at = r.updatedAt ?? r.createdAt;
+    if (!agg.lastAt || at > agg.lastAt) agg.lastAt = at;
+  }
+  for (const [userId, agg] of dailyByUser) {
+    agg.storiesCount = assignmentsByUser.get(userId)?.size ?? 0;
+  }
+
+  const rows = users.map((u) => {
+    const d = dailyByUser.get(u.id);
+    return {
+      userId: u.id,
+      userName: u.name,
+      userEmail: u.email,
+      daily: d
+        ? {
+            loaded: true,
+            storiesCount: d.storiesCount,
+            designed: d.designed,
+            executed: d.executed,
+            defects: d.defects,
+            lastAt: d.lastAt ? d.lastAt.toISOString() : null,
+          }
+        : { loaded: false, storiesCount: 0, designed: 0, executed: 0, defects: 0, lastAt: null },
+      activities: { loaded: false, hours: 0, lastAt: null as string | null },
+    };
+  });
 
   res.json({ date: dateStr, isNonBusinessDay, rows });
 });
