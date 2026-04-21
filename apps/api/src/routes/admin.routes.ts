@@ -29,12 +29,39 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
   const dateStr = (req.query.date as string | undefined) ??
     new Date().toISOString().slice(0, 10);
   const dayUtc = toUtcDateOnly(dateStr);
-  const dow = dayUtc.getUTCDay(); // 0=Dom, 6=Sáb
+  const nextDayUtc = new Date(dayUtc);
+  nextDayUtc.setUTCDate(nextDayUtc.getUTCDate() + 1);
+
+  const dow = dayUtc.getUTCDay();
   const isWeekend = dow === 0 || dow === 6;
   const holiday = await prisma.holiday.findUnique({ where: { date: dayUtc } });
   const isNonBusinessDay = isWeekend || !!holiday;
 
-  res.json({ date: dateStr, isNonBusinessDay, rows: [] });
+  // Analistas activos con al menos un Tester vinculado (testers.some).
+  const users = await prisma.user.findMany({
+    where: {
+      active: true,
+      role: { name: "QA_ANALYST" },
+      testers: { some: {} },
+    },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      testers: { select: { id: true } },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const rows = users.map((u) => ({
+    userId: u.id,
+    userName: u.name,
+    userEmail: u.email,
+    daily: { loaded: false, storiesCount: 0, designed: 0, executed: 0, defects: 0, lastAt: null as string | null },
+    activities: { loaded: false, hours: 0, lastAt: null as string | null },
+  }));
+
+  res.json({ date: dateStr, isNonBusinessDay, rows });
 });
 
 export default router;

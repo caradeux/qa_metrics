@@ -87,3 +87,47 @@ describe("GET /api/admin/daily-load — día no laborable", () => {
     expect(r.status).toBe(400);
   });
 });
+
+describe("GET /api/admin/daily-load — rows", () => {
+  let adminToken: string;
+  beforeAll(async () => {
+    adminToken = await loginAs("admin@qametrics.com");
+  });
+
+  it("incluye analistas con Tester vinculado y excluye al resto", async () => {
+    const r = await fetch(`${API_URL}/api/admin/daily-load?date=2026-04-21`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const body = await r.json();
+    expect(Array.isArray(body.rows)).toBe(true);
+
+    // Seed incluye tester1@qametrics.com vinculado a Tester.
+    const tester1 = body.rows.find((r: any) => r.userEmail === "tester1@qametrics.com");
+    expect(tester1).toBeTruthy();
+    expect(tester1).toMatchObject({
+      userId: expect.any(String),
+      userName: expect.any(String),
+      userEmail: "tester1@qametrics.com",
+      daily: expect.objectContaining({ loaded: expect.any(Boolean) }),
+      activities: expect.objectContaining({ loaded: expect.any(Boolean) }),
+    });
+
+    // Admin NO debe aparecer (no es QA_ANALYST).
+    const admin = body.rows.find((r: any) => r.userEmail === "admin@qametrics.com");
+    expect(admin).toBeUndefined();
+
+    // ana.garcia es QA_ANALYST pero NO está vinculada a Tester — no debe aparecer.
+    const ana = body.rows.find((r: any) => r.userEmail === "ana.garcia@qametrics.com");
+    expect(ana).toBeUndefined();
+  });
+
+  it("rows vienen ordenados asc por userName", async () => {
+    const r = await fetch(`${API_URL}/api/admin/daily-load?date=2026-04-21`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const body = await r.json();
+    const names = body.rows.map((r: any) => r.userName);
+    const sorted = [...names].sort((a, b) => a.localeCompare(b, "es"));
+    expect(names).toEqual(sorted);
+  });
+});
