@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { API_URL, loginAs } from "./helpers/auth.js";
+import { prisma } from "@qa-metrics/database";
 
 describe("GET /api/admin/daily-load — auth", () => {
   let adminToken: string;
@@ -40,5 +41,49 @@ describe("GET /api/admin/daily-load — auth", () => {
     expect(body).toHaveProperty("date");
     expect(body).toHaveProperty("isNonBusinessDay");
     expect(Array.isArray(body.rows)).toBe(true);
+  });
+});
+
+describe("GET /api/admin/daily-load — día no laborable", () => {
+  let adminToken: string;
+  beforeAll(async () => {
+    adminToken = await loginAs("admin@qametrics.com");
+  });
+
+  it("marca isNonBusinessDay=true en feriado (1ro de mayo 2026)", async () => {
+    const date = "2026-05-01";
+    const r = await fetch(`${API_URL}/api/admin/daily-load?date=${date}`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.date).toBe(date);
+    expect(body.isNonBusinessDay).toBe(true);
+  });
+
+  it("marca isNonBusinessDay=true en sábado", async () => {
+    // 2026-04-18 es sábado
+    const r = await fetch(`${API_URL}/api/admin/daily-load?date=2026-04-18`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.isNonBusinessDay).toBe(true);
+  });
+
+  it("isNonBusinessDay=false en martes hábil (2026-04-21)", async () => {
+    const r = await fetch(`${API_URL}/api/admin/daily-load?date=2026-04-21`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.isNonBusinessDay).toBe(false);
+  });
+
+  it("400 si date tiene formato inválido", async () => {
+    const r = await fetch(`${API_URL}/api/admin/daily-load?date=21-04-2026`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(r.status).toBe(400);
   });
 });

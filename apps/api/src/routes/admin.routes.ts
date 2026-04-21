@@ -28,8 +28,13 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
 
   const dateStr = (req.query.date as string | undefined) ??
     new Date().toISOString().slice(0, 10);
+  const dayUtc = toUtcDateOnly(dateStr);
+  const dow = dayUtc.getUTCDay(); // 0=Dom, 6=Sáb
+  const isWeekend = dow === 0 || dow === 6;
+  const holiday = await prisma.holiday.findUnique({ where: { date: dayUtc } });
+  const isNonBusinessDay = isWeekend || !!holiday;
 
-  res.json({ date: dateStr, isNonBusinessDay: false, rows: [] });
+  res.json({ date: dateStr, isNonBusinessDay, rows: [] });
 });
 
 export default router;
