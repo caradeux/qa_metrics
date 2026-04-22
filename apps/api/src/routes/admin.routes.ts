@@ -95,6 +95,31 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
     agg.storiesCount = assignmentsByUser.get(userId)?.size ?? 0;
   }
 
+  const activities = testerIds.length
+    ? await prisma.activity.findMany({
+        where: {
+          testerId: { in: testerIds },
+          startAt: { gte: dayUtc, lt: nextDayUtc },
+        },
+        select: { testerId: true, startAt: true, endAt: true, createdAt: true },
+      })
+    : [];
+
+  type ActAgg = { hours: number; lastAt: Date | null };
+  const actByUser = new Map<string, ActAgg>();
+  for (const a of activities) {
+    const userId = userByTesterId.get(a.testerId);
+    if (!userId) continue;
+    const hours = (a.endAt.getTime() - a.startAt.getTime()) / 3_600_000;
+    let agg = actByUser.get(userId);
+    if (!agg) {
+      agg = { hours: 0, lastAt: null };
+      actByUser.set(userId, agg);
+    }
+    agg.hours += hours;
+    if (!agg.lastAt || a.createdAt > agg.lastAt) agg.lastAt = a.createdAt;
+  }
+
   const rows = users.map((u) => {
     const d = dailyByUser.get(u.id);
     return {
@@ -111,7 +136,12 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
             lastAt: d.lastAt ? d.lastAt.toISOString() : null,
           }
         : { loaded: false, storiesCount: 0, designed: 0, executed: 0, defects: 0, lastAt: null },
-      activities: { loaded: false, hours: 0, lastAt: null as string | null },
+      activities: (() => {
+        const a = actByUser.get(u.id);
+        return a
+          ? { loaded: true, hours: Math.round(a.hours * 100) / 100, lastAt: a.lastAt!.toISOString() }
+          : { loaded: false, hours: 0, lastAt: null };
+      })(),
     };
   });
 

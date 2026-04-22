@@ -195,3 +195,46 @@ describe("GET /api/admin/daily-load — DailyRecord", () => {
     expect(row.daily.storiesCount).toBe(0);
   });
 });
+
+describe("GET /api/admin/daily-load — Activity", () => {
+  let adminToken: string;
+  let testerId: string;
+  let categoryId: string;
+  let createdActivityId: string | null = null;
+
+  beforeAll(async () => {
+    adminToken = await loginAs("admin@qametrics.com");
+    const tester = await prisma.tester.findFirst({ where: { user: { email: "tester1@qametrics.com" } } });
+    testerId = tester!.id;
+    const cat = await prisma.activityCategory.findFirst({ where: { name: "Capacitación" } });
+    categoryId = cat!.id;
+
+    const act = await prisma.activity.create({
+      data: {
+        testerId,
+        categoryId,
+        startAt: new Date(Date.UTC(2026, 3, 24, 13, 0, 0)),
+        endAt:   new Date(Date.UTC(2026, 3, 24, 14, 30, 0)),
+        createdById: (await prisma.user.findUnique({ where: { email: "admin@qametrics.com" } }))!.id,
+      },
+    });
+    createdActivityId = act.id;
+  });
+
+  afterAll(async () => {
+    if (createdActivityId) {
+      await prisma.activity.delete({ where: { id: createdActivityId } }).catch(() => {});
+    }
+  });
+
+  it("tester1 aparece con activities.loaded=true y 1.5h", async () => {
+    const r = await fetch(`${API_URL}/api/admin/daily-load?date=2026-04-24`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const body = await r.json();
+    const row = body.rows.find((r: any) => r.userEmail === "tester1@qametrics.com");
+    expect(row.activities.loaded).toBe(true);
+    expect(row.activities.hours).toBeCloseTo(1.5, 2);
+    expect(row.activities.lastAt).not.toBeNull();
+  });
+});
