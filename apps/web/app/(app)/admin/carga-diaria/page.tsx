@@ -33,6 +33,12 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function shiftIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function formatTime(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -92,15 +98,42 @@ export default function AdminCargaDiariaPage() {
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-[#1F3864]">Carga diaria por usuario</h1>
-        <label className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm">
           <span className="text-slate-600">Fecha:</span>
+          <button
+            type="button"
+            onClick={() => setDate((d) => shiftIso(d, -1))}
+            aria-label="Día anterior"
+            className="w-8 h-8 flex items-center justify-center border rounded hover:bg-slate-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
             className="border rounded px-2 py-1"
           />
-        </label>
+          <button
+            type="button"
+            onClick={() => setDate((d) => shiftIso(d, 1))}
+            aria-label="Día siguiente"
+            className="w-8 h-8 flex items-center justify-center border rounded hover:bg-slate-50"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => setDate(todayIso())}
+            className="px-3 h-8 border rounded text-slate-700 hover:bg-slate-50"
+          >
+            Hoy
+          </button>
+        </div>
       </div>
 
       {data?.isNonBusinessDay && (
