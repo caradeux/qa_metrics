@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState, useCallback } from "react";
+import { use, useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { apiClient } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -113,6 +113,12 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
   const [testers, setTesters] = useState<TesterLite[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Filters
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [testerFilter, setTesterFilter] = useState<string>("ALL");
+  const [complexityFilter, setComplexityFilter] = useState<string>("ALL");
+
   // Modals
   const [editStory, setEditStory] = useState<Story | null>(null);
   const [newStoryOpen, setNewStoryOpen] = useState(false);
@@ -138,6 +144,41 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
     apiClient<ProjectDetail>(`/api/projects/${projectId}`).then(setProject).catch(() => setProject(null));
     apiClient<TesterLite[]>(`/api/testers?projectId=${projectId}`).then(setTesters).catch(() => setTesters([]));
   }, [projectId]);
+
+  const allStories = data?.stories ?? [];
+  const hasAnyFilter = query.trim() !== "" || statusFilter !== "ALL" || testerFilter !== "ALL" || complexityFilter !== "ALL";
+
+  const visibleStories = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return allStories.filter((s) => {
+      if (q) {
+        const inTitle = s.title.toLowerCase().includes(q);
+        const inExternal = (s.externalId ?? "").toLowerCase().includes(q);
+        if (!inTitle && !inExternal) return false;
+      }
+      if (statusFilter !== "ALL") {
+        const has = s.cycles.some((c) => c.assignments.some((a) => a.status === statusFilter));
+        if (!has) return false;
+      }
+      if (testerFilter !== "ALL") {
+        const has = s.cycles.some((c) => c.assignments.some((a) => a.tester?.id === testerFilter));
+        if (!has) return false;
+      }
+      if (complexityFilter !== "ALL") {
+        if (s.designComplexity !== complexityFilter && s.executionComplexity !== complexityFilter) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [allStories, query, statusFilter, testerFilter, complexityFilter]);
+
+  function clearFilters() {
+    setQuery("");
+    setStatusFilter("ALL");
+    setTesterFilter("ALL");
+    setComplexityFilter("ALL");
+  }
 
   async function changeStatus(assignmentId: string, status: string) {
     const body: Record<string, unknown> = { status };
@@ -192,15 +233,94 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
         )}
       </div>
 
+      {/* Filter bar — only when there are stories to filter */}
+      {!loading && data && data.stories.length > 0 && (
+        <div className="mb-3 flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35m1.85-5.4a7.25 7.25 0 11-14.5 0 7.25 7.25 0 0114.5 0z" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar por título o ID…"
+              className="w-full h-8 pl-8 pr-3 text-xs rounded-md border border-gray-200 bg-white focus:border-[#2E5FA3] focus:outline-none placeholder:text-gray-400"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="h-8 px-2 text-xs rounded-md border border-gray-200 bg-white focus:border-[#2E5FA3] focus:outline-none"
+          >
+            <option value="ALL">Estado: todos</option>
+            {STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={testerFilter}
+            onChange={(e) => setTesterFilter(e.target.value)}
+            className="h-8 px-2 text-xs rounded-md border border-gray-200 bg-white focus:border-[#2E5FA3] focus:outline-none"
+          >
+            <option value="ALL">Tester: todos</option>
+            {testers.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={complexityFilter}
+            onChange={(e) => setComplexityFilter(e.target.value)}
+            className="h-8 px-2 text-xs rounded-md border border-gray-200 bg-white focus:border-[#2E5FA3] focus:outline-none"
+          >
+            <option value="ALL">Complejidad: todas</option>
+            {COMPLEXITIES.map((c) => (
+              <option key={c} value={c}>
+                {complexityLabels[c]}
+              </option>
+            ))}
+          </select>
+          {hasAnyFilter && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="h-8 px-3 text-[11px] font-medium rounded-md text-gray-600 hover:bg-gray-100 transition"
+            >
+              Limpiar
+            </button>
+          )}
+          <div className="ml-auto text-[11px] text-gray-400 tabular-nums">
+            {visibleStories.length} de {allStories.length} HU{allStories.length !== 1 ? "s" : ""}
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="space-y-3">{[1, 2].map(i => <div key={i} className="h-40 bg-gray-100 rounded-xl animate-pulse" />)}</div>
       ) : !data || data.stories.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
           <p className="text-sm text-gray-500">No hay historias de usuario aun.</p>
         </div>
+      ) : visibleStories.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-200">
+          <p className="text-sm text-gray-500">Ninguna HU coincide con los filtros.</p>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="mt-2 text-xs text-[#2E5FA3] hover:underline"
+          >
+            Limpiar filtros
+          </button>
+        </div>
       ) : (
         <div className="space-y-3">
-          {data.stories.map(story => (
+          {visibleStories.map(story => (
             <StoryCard
               key={story.id}
               story={story}
