@@ -230,58 +230,83 @@ router.get(
         return;
       }
 
-      const projectMetrics = await Promise.all(
-        projects.map(async (project) => {
-          const records = (await prisma.dailyRecord.findMany({
-            where: { tester: { projectId: project.id } },
-            select: {
-              designed: true,
-              executed: true,
-              defects: true,
-              date: true,
-            },
-          })) as Array<{
-            designed: number;
-            executed: number;
-            defects: number;
-            date: Date;
-          }>;
+      const projectIdsForMetrics = projects.map((p) => p.id);
 
-          const totalDesigned = records.reduce((s, r) => s + r.designed, 0);
-          const totalExecuted = records.reduce((s, r) => s + r.executed, 0);
-          const totalDefects = records.reduce((s, r) => s + r.defects, 0);
-          const ratio =
-            totalDesigned > 0
-              ? Math.round((totalExecuted / totalDesigned) * 100)
-              : 0;
+      // Batch: 3 queries totales en vez de 3 × N proyectos (N+1 fix).
+      const [allRecords, testerGroups, allCycles] = await Promise.all([
+        prisma.dailyRecord.findMany({
+          where: { tester: { projectId: { in: projectIdsForMetrics } } },
+          select: {
+            designed: true,
+            executed: true,
+            defects: true,
+            date: true,
+            tester: { select: { projectId: true } },
+          },
+        }),
+        prisma.tester.groupBy({
+          by: ["projectId"],
+          where: { projectId: { in: projectIdsForMetrics } },
+          _count: { _all: true },
+        }),
+        prisma.testCycle.findMany({
+          where: { story: { projectId: { in: projectIdsForMetrics } } },
+          select: { story: { select: { projectId: true } } },
+        }),
+      ]);
 
-          const testerCount = await prisma.tester.count({
-            where: { projectId: project.id },
-          });
-          const cycleCount = await prisma.testCycle.count({
-            where: { story: { projectId: project.id } },
-          });
+      const recordsByProject = new Map<string, Array<{ designed: number; executed: number; defects: number; date: Date }>>();
+      for (const r of allRecords) {
+        const pid = r.tester.projectId;
+        const arr = recordsByProject.get(pid) ?? [];
+        arr.push({ designed: r.designed, executed: r.executed, defects: r.defects, date: r.date });
+        if (!recordsByProject.has(pid)) recordsByProject.set(pid, arr);
+      }
 
-          // TODO: severity breakdown pendiente de redisenarlo sin CycleBreakdown
-          const defectsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
+      const testerCountByProject = new Map<string, number>();
+      for (const g of testerGroups) {
+        testerCountByProject.set(g.projectId, g._count._all);
+      }
 
-          const weekBuckets = aggregateDailyToWeekly(records);
+      const cycleCountByProject = new Map<string, number>();
+      for (const c of allCycles) {
+        const pid = c.story.projectId;
+        cycleCountByProject.set(pid, (cycleCountByProject.get(pid) ?? 0) + 1);
+      }
 
-          return {
-            id: project.id,
-            name: project.name,
-            modality: project.modality,
-            totalDesigned,
-            totalExecuted,
-            totalDefects,
-            ratio,
-            testerCount,
-            cycleCount,
-            defectsBySeverity,
-            weekCount: weekBuckets.length,
-          };
-        })
-      );
+      const projectMetrics = projects.map((project) => {
+        const records = recordsByProject.get(project.id) ?? [];
+
+        const totalDesigned = records.reduce((s, r) => s + r.designed, 0);
+        const totalExecuted = records.reduce((s, r) => s + r.executed, 0);
+        const totalDefects = records.reduce((s, r) => s + r.defects, 0);
+        const ratio =
+          totalDesigned > 0
+            ? Math.round((totalExecuted / totalDesigned) * 100)
+            : 0;
+
+        const testerCount = testerCountByProject.get(project.id) ?? 0;
+        const cycleCount = cycleCountByProject.get(project.id) ?? 0;
+
+        // TODO: severity breakdown pendiente de redisenarlo sin CycleBreakdown
+        const defectsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
+
+        const weekBuckets = aggregateDailyToWeekly(records);
+
+        return {
+          id: project.id,
+          name: project.name,
+          modality: project.modality,
+          totalDesigned,
+          totalExecuted,
+          totalDefects,
+          ratio,
+          testerCount,
+          cycleCount,
+          defectsBySeverity,
+          weekCount: weekBuckets.length,
+        };
+      });
 
       // Tasa de rechazo + Lead time entre ciclos (tiempo que Dev tarda en entregar correcciones)
       const projectIds = projects.map((p) => p.id);

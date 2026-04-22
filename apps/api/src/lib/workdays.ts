@@ -102,3 +102,72 @@ export async function computeMissingWorkdays(
   const workdays = await workdaysInRange(startUtc, cappedEnd);
   return workdays.map(toIsoDate).filter((iso) => !args.registeredIso.has(iso));
 }
+
+/**
+ * Variante síncrona de workdaysInRange que recibe el Set de holidays ya
+ * pre-cargado (un timestamp UTC 00:00 por feriado). Úsala cuando procesas
+ * muchos rangos en un mismo request para evitar N queries a holiday.
+ */
+export function workdaysInRangeSync(
+  from: Date | string,
+  to: Date | string,
+  holidaySet: Set<number>,
+): Date[] {
+  const start = toUtcDateOnly(from);
+  const end = toUtcDateOnly(to);
+  if (start.getTime() > end.getTime()) return [];
+
+  const result: Date[] = [];
+  const cursor = new Date(start);
+  while (cursor.getTime() <= end.getTime()) {
+    const dow = cursor.getUTCDay();
+    const isWeekend = dow === 0 || dow === 6;
+    if (!isWeekend && !holidaySet.has(cursor.getTime())) {
+      result.push(new Date(cursor));
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return result;
+}
+
+/**
+ * Carga todos los holidays relevantes una sola vez (para usar con
+ * workdaysInRangeSync / computeMissingWorkdaysSync en batch).
+ */
+export async function loadHolidaySet(
+  from: Date | string,
+  to: Date | string,
+): Promise<Set<number>> {
+  const start = toUtcDateOnly(from);
+  const end = toUtcDateOnly(to);
+  if (start.getTime() > end.getTime()) return new Set();
+  const holidays = await prisma.holiday.findMany({
+    where: { date: { gte: start, lte: end } },
+    select: { date: true },
+  });
+  return new Set(holidays.map((h) => h.date.getTime()));
+}
+
+/**
+ * Variante síncrona de computeMissingWorkdays que usa un holidaySet
+ * pre-cargado. Útil para iterar sobre muchos rangos sin queries por rango.
+ */
+export function computeMissingWorkdaysSync(
+  args: MissingWorkdaysArgs,
+  holidaySet: Set<number>,
+): string[] {
+  if (!args.startDate) return [];
+
+  const todayUtc = toUtcDateOnly(args.today);
+  const startUtc = toUtcDateOnly(args.startDate!);
+
+  if (startUtc.getTime() > todayUtc.getTime()) return [];
+
+  const rawEnd = args.endDate ?? todayUtc;
+  const endUtc = toUtcDateOnly(rawEnd);
+
+  const cappedEnd = endUtc.getTime() > todayUtc.getTime() ? todayUtc : endUtc;
+
+  const workdays = workdaysInRangeSync(startUtc, cappedEnd, holidaySet);
+  return workdays.map(toIsoDate).filter((iso) => !args.registeredIso.has(iso));
+}

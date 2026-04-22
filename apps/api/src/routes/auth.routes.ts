@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { loginSchema } from "../validators/auth.validator.js";
 import * as authService from "../services/auth.service.js";
-import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, AuthRequest, invalidateAuthCache } from "../middleware/auth.js";
 import { setAuthCookies, clearAuthCookies, REFRESH_COOKIE } from "../lib/cookies.js";
 
 const router = Router();
@@ -52,6 +52,8 @@ router.post(
         return;
       }
       await authService.logout(req.user.id);
+      const cookieToken = (req as any).cookies?.qa_access as string | undefined;
+      if (cookieToken) invalidateAuthCache(cookieToken);
       clearAuthCookies(res);
       res.json({ message: "Sesion cerrada" });
     } catch (error) {

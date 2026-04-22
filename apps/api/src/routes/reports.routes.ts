@@ -26,8 +26,8 @@ import {
 import { addDays, startOfWeek, startOfMonth, endOfMonth, format, getISOWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../lib/access.js";
-import { computeOccupation } from "../lib/occupation.js";
-import { computeMissingWorkdays } from "../lib/workdays.js";
+import { computeOccupationBatch } from "../lib/occupation.js";
+import { loadHolidaySet, computeMissingWorkdaysSync } from "../lib/workdays.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -877,9 +877,7 @@ router.get(
       testerIds = allowed.map((t) => t.id);
     }
 
-    const results = await Promise.all(
-      testerIds.map((tid) => computeOccupation(tid, from, to))
-    );
+    const results = await computeOccupationBatch(testerIds, from, to);
     res.json(results);
   }
 );
@@ -937,56 +935,66 @@ router.get(
 
     const today = new Date();
 
-    const out = await Promise.all(
-      stories.map(async (s) => {
-        const cycles = await Promise.all(
-          s.cycles.map(async (c) => {
-            const records = c.assignments.flatMap((a) => a.dailyRecords);
-            const designed = records.reduce((sum, r) => sum + r.designed, 0);
-            const executed = records.reduce((sum, r) => sum + r.executed, 0);
-            const defects = records.reduce((sum, r) => sum + r.defects, 0);
+    // Pre-cargar holidays una sola vez en el rango cubierto por los cycles.
+    let minStart: Date | null = null;
+    let maxEnd: Date = today;
+    for (const s of stories) {
+      for (const c of s.cycles) {
+        if (c.startDate && (!minStart || c.startDate < minStart)) minStart = c.startDate;
+        if (c.endDate && c.endDate > maxEnd) maxEnd = c.endDate;
+      }
+    }
+    const holidaySet = minStart ? await loadHolidaySet(minStart, maxEnd) : new Set<number>();
 
-            const registeredIso = new Set(
-              records.map((r) => r.date.toISOString().slice(0, 10)),
-            );
-            const missingDays = await computeMissingWorkdays({
-              startDate: c.startDate,
-              endDate: c.endDate,
-              registeredIso,
-              today,
-            });
+    const out = stories.map((s) => {
+      const cycles = s.cycles.map((c) => {
+        const records = c.assignments.flatMap((a) => a.dailyRecords);
+        const designed = records.reduce((sum, r) => sum + r.designed, 0);
+        const executed = records.reduce((sum, r) => sum + r.executed, 0);
+        const defects = records.reduce((sum, r) => sum + r.defects, 0);
 
-            return {
-              cycleId: c.id,
-              cycleName: c.name,
-              startDate: c.startDate ? c.startDate.toISOString().slice(0, 10) : null,
-              endDate: c.endDate ? c.endDate.toISOString().slice(0, 10) : null,
-              designed,
-              executed,
-              defects,
-              hasRecords: records.length > 0,
-              missingDays,
-              missingDaysCount: missingDays.length,
-            };
-          }),
+        const registeredIso = new Set(
+          records.map((r) => r.date.toISOString().slice(0, 10)),
         );
-        const totals = cycles.reduce(
-          (acc, c) => ({
-            designed: acc.designed + c.designed,
-            executed: acc.executed + c.executed,
-            defects: acc.defects + c.defects,
-          }),
-          { designed: 0, executed: 0, defects: 0 },
+        const missingDays = computeMissingWorkdaysSync(
+          {
+            startDate: c.startDate,
+            endDate: c.endDate,
+            registeredIso,
+            today,
+          },
+          holidaySet,
         );
+
         return {
-          id: s.id,
-          externalId: s.externalId,
-          title: s.title,
-          cycles,
-          totals,
+          cycleId: c.id,
+          cycleName: c.name,
+          startDate: c.startDate ? c.startDate.toISOString().slice(0, 10) : null,
+          endDate: c.endDate ? c.endDate.toISOString().slice(0, 10) : null,
+          designed,
+          executed,
+          defects,
+          hasRecords: records.length > 0,
+          missingDays,
+          missingDaysCount: missingDays.length,
         };
-      }),
-    );
+      });
+      const totals = cycles.reduce(
+        (acc, c) => ({
+          designed: acc.designed + c.designed,
+          executed: acc.executed + c.executed,
+          defects: acc.defects + c.defects,
+        }),
+        { designed: 0, executed: 0, defects: 0 },
+      );
+      return {
+        id: s.id,
+        externalId: s.externalId,
+        title: s.title,
+        cycles,
+        totals,
+      };
+    });
 
     res.json(out);
   },

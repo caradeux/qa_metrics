@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { prisma } from "@qa-metrics/database";
-import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, requirePermission, invalidateAuthCache, type AuthRequest } from "../middleware/auth.js";
 import { createRoleSchema, updateRoleSchema } from "../validators/role.validator.js";
 import { ZodError } from "zod";
 
@@ -160,6 +160,7 @@ router.put("/:id", requirePermission("roles", "update") as any, async (req: Auth
     });
 
     if (role) {
+      invalidateAuthCache();
       res.json({
         id: role.id,
         name: role.name,
@@ -202,6 +203,7 @@ router.delete("/:id", requirePermission("roles", "delete") as any, async (req: A
     }
 
     await prisma.role.delete({ where: { id } });
+    invalidateAuthCache();
     res.json({ message: "Rol eliminado" });
   } catch (err) {
     res.status(500).json({ error: "Error al eliminar rol" });

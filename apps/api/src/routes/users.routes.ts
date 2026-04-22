@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { prisma } from "@qa-metrics/database";
 import bcrypt from "bcryptjs";
-import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, requirePermission, invalidateAuthCache, type AuthRequest } from "../middleware/auth.js";
 import { createUserSchema, updateUserSchema } from "../validators/user.validator.js";
 import { ACTIVE_STATUSES } from "../lib/assignment-states.js";
 import { ZodError } from "zod";
@@ -151,6 +151,7 @@ router.put("/:id", requirePermission("users", "update") as any, async (req: Auth
         role: { select: { id: true, name: true } },
       },
     });
+    invalidateAuthCache();
     res.json(user);
   } catch (err) {
     if (err instanceof ZodError) {
@@ -178,6 +179,7 @@ router.delete("/:id", requirePermission("users", "delete") as any, async (req: A
     }
 
     await prisma.user.delete({ where: { id } });
+    invalidateAuthCache();
     res.json({ message: "Usuario eliminado" });
   } catch (err) {
     res.status(500).json({ error: "Error al eliminar usuario" });
@@ -212,6 +214,7 @@ router.put("/:id/toggle-active", requirePermission("users", "update") as any, as
         role: { select: { id: true, name: true } },
       },
     });
+    invalidateAuthCache();
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: "Error al cambiar estado del usuario" });
