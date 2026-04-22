@@ -181,28 +181,66 @@ function storyLabel(title: string, externalId: string | null): string {
   return externalId ? `${externalId} — ${title}` : title;
 }
 
-function buildReminderWithContext(row: DailyLoadRow, dateIso: string): string {
+const STATUS_LABEL: Record<string, string> = {
+  REGISTERED: "Registrada",
+  ANALYSIS: "Análisis",
+  TEST_DESIGN: "Diseño de pruebas",
+  WAITING_QA_DEPLOY: "Esperando despliegue QA",
+  EXECUTION: "En ejecución",
+  RETURNED_TO_DEV: "Devuelta a desarrollo",
+  WAITING_UAT: "Esperando UAT",
+  UAT: "UAT",
+  PRODUCTION: "En producción",
+  ON_HOLD: "En pausa",
+};
+
+function statusLabel(s: string): string {
+  return STATUS_LABEL[s] ?? s.replace(/_/g, " ").toLowerCase();
+}
+
+function buildMissingBullets(row: DailyLoadRow): string {
+  const items: string[] = [];
+  if (!row.daily.loaded) items.push("Registro diario (HU diseñadas, ejecutadas y defectos detectados)");
+  if (!row.activities.loaded) items.push("Actividades del día");
+  return items.map((i) => `• ${i}`).join("\n");
+}
+
+function buildReminderWithContext(
+  row: DailyLoadRow,
+  dateIso: string,
+  signerName?: string | null,
+): string {
   const pretty = formatLongDate(dateIso);
   const firstName = row.userName.split(/\s+/)[0] ?? row.userName;
-  const missing = missingLabel(row);
-  const expectedLines = row.expectedAssignments.length
-    ? row.expectedAssignments
-        .map((e) => `  • ${e.projectName} — ${storyLabel(e.storyTitle, e.storyExternalId)} (${e.status})`)
-        .join("\n")
-    : null;
+  const missing = buildMissingBullets(row);
+  const signature = signerName ? `${signerName}\nLíder QA` : "Equipo QA";
 
   if (!missing) {
-    return `Hola ${firstName}, gracias por tener tu carga del ${pretty} al día.`;
+    return (
+      `Hola ${firstName},\n\n` +
+      `Gracias por mantener tu carga al día. Tus registros del ${pretty} ya están completos en QA Metrics.\n\n` +
+      `Saludos,\n${signature}`
+    );
   }
+
+  const expectedBlock = row.expectedAssignments.length
+    ? `Según la planificación vigente, para esa fecha tenías asignadas las siguientes historias de usuario:\n\n` +
+      row.expectedAssignments
+        .map(
+          (e) =>
+            `• ${e.projectName} — ${storyLabel(e.storyTitle, e.storyExternalId)} (${statusLabel(e.status)})`,
+        )
+        .join("\n") +
+      `\n\n`
+    : "";
 
   return (
     `Hola ${firstName},\n\n` +
-    `Notamos que no registraste ${missing} correspondiente al ${pretty}.\n\n` +
-    (expectedLines
-      ? `Según la planificación, ese día tenías activas las siguientes HU:\n${expectedLines}\n\n`
-      : ``) +
-    `¿Puedes ponerte al día en QA Metrics lo antes posible? Si tuviste algún inconveniente, por favor avísame.\n\n` +
-    `Gracias,\nEquipo QA`
+    `Al revisar QA Metrics noté que aún no se registra tu carga correspondiente al ${pretty}. Específicamente, falta:\n\n` +
+    `${missing}\n\n` +
+    expectedBlock +
+    `Te pido regularizar la información a la brevedad. Si hubo algún motivo que impidió la carga (licencia, permiso, bloqueo técnico u otro), por favor respóndeme este correo para ajustarlo.\n\n` +
+    `Saludos,\n${signature}`
   );
 }
 
@@ -436,15 +474,17 @@ export default function AdminCargaDiariaPage() {
               dateIso={data.date}
               onCopyMessage={() =>
                 copyToClipboard(
-                  buildReminderWithContext(r, data.date),
+                  buildReminderWithContext(r, data.date, user?.name),
                   `Mensaje para ${r.userName.split(/\s+/)[0]} copiado`
                 )
               }
               onMailTo={() => {
                 const subject = encodeURIComponent(
-                  `Carga QA pendiente — ${formatLongDate(data.date)}`
+                  `Recordatorio de carga QA — ${formatLongDate(data.date)}`
                 );
-                const body = encodeURIComponent(buildReminderWithContext(r, data.date));
+                const body = encodeURIComponent(
+                  buildReminderWithContext(r, data.date, user?.name),
+                );
                 window.location.href = `mailto:${r.userEmail}?subject=${subject}&body=${body}`;
               }}
             />
@@ -650,7 +690,7 @@ function BreakdownStrip({ row }: { row: DailyLoadRow }) {
         projectName: e.projectName,
         storyTitle: e.storyTitle,
         storyExternalId: e.storyExternalId,
-        subtitle: e.status.replace(/_/g, " ").toLowerCase(),
+        subtitle: statusLabel(e.status),
       }));
 
   if (entries.length === 0 && row.activities.entries.length === 0) return null;
