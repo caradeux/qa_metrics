@@ -15,13 +15,24 @@ interface AssignmentOption {
   status: string;
 }
 
+// Convierte un ISO UTC (ej: "2026-04-22T13:00:00.000Z") a la cadena que
+// espera un <input type="datetime-local"> ("YYYY-MM-DDTHH:MM"), pero en
+// la hora LOCAL del browser — que es como el input la va a interpretar.
+// Sin esto, editar una actividad sin tocar los tiempos la desplazaba
+// por el offset de zona horaria (Chile es UTC-3/-4) y provocaba solapes.
+function isoUtcToLocalInput(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function ActivityForm({ testerId, initial, onClose, onSaved }: Props) {
   const [categories, setCategories] = useState<ActivityCategory[]>([]);
   const [assignments, setAssignments] = useState<AssignmentOption[]>([]);
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
   const [assignmentId, setAssignmentId] = useState<string>(initial?.assignmentId ?? "");
-  const [startAt, setStartAt] = useState(initial?.startAt.slice(0, 16) ?? "");
-  const [endAt, setEndAt] = useState(initial?.endAt.slice(0, 16) ?? "");
+  const [startAt, setStartAt] = useState(initial ? isoUtcToLocalInput(initial.startAt) : "");
+  const [endAt, setEndAt] = useState(initial ? isoUtcToLocalInput(initial.endAt) : "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
