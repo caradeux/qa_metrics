@@ -118,12 +118,26 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     ? [...baseStatuses, "PRODUCTION"]
     : baseStatuses;
 
+  // Incluye asignaciones que: (a) tienen estado activo Y traslapan la semana,
+  // O (b) ya tienen DailyRecords en la semana (para permitir editar registros
+  // pasados aunque la HU haya cerrado en UAT / PRODUCTION / ON_HOLD).
   const rawAssignments = await prisma.testerAssignment.findMany({
     where: {
       testerId: parsed.data.testerId,
-      startDate: { lte: friday },
-      OR: [{ endDate: null }, { endDate: { gte: monday } }],
-      ...(includeIdle ? {} : { status: { in: defaultStatuses } }),
+      AND: [
+        { startDate: { lte: friday } },
+        { OR: [{ endDate: null }, { endDate: { gte: monday } }] },
+        ...(includeIdle
+          ? []
+          : [
+              {
+                OR: [
+                  { status: { in: defaultStatuses } },
+                  { dailyRecords: { some: { date: { gte: monday, lte: friday } } } },
+                ],
+              },
+            ]),
+      ],
     },
     include: {
       story: { select: { id: true, title: true, externalId: true } },
@@ -131,10 +145,6 @@ router.get("/", async (req: AuthRequest, res: Response) => {
       dailyRecords: {
         where: { date: { gte: monday, lte: friday } },
       },
-      // Para analistas: buscamos el último log de transición a PRODUCTION
-      // para aplicar la regla "ocultar al día siguiente". Para otros roles
-      // el filtro where status=PRODUCTION no hace match (no hay PRODUCTION en
-      // defaultStatuses), así que el array viene vacío y el costo es nulo.
       statusLogs: {
         where: { status: "PRODUCTION" },
         orderBy: { changedAt: "desc" },
@@ -144,11 +154,14 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     orderBy: { createdAt: "asc" },
   });
 
+  // Regla "ocultar PRODUCTION al día siguiente" para QA_ANALYST, pero
+  // preserva la HU si ya tiene registros en la semana (para poder editarlos).
   const startOfTodayMs = today.getTime();
   const assignments = isAnalyst
-    ? rawAssignments.filter((a: any) => {
+    ? rawAssignments.filter((a) => {
         if (a.status !== "PRODUCTION") return true;
-        const last = a.statusLogs?.[0];
+        if (a.dailyRecords.length > 0) return true;
+        const last = a.statusLogs[0];
         if (!last) return false;
         return new Date(last.changedAt).getTime() >= startOfTodayMs;
       })

@@ -14,6 +14,8 @@ import { OccupationBarHorizontal } from "@/components/activities/OccupationBarHo
 import { OccupationTable } from "@/components/activities/OccupationTable";
 import { StoryActivityBreakdown } from "@/components/activities/StoryActivityBreakdown";
 import { ActivityList } from "@/components/activities/ActivityList";
+import { ActivityForm } from "@/components/activities/ActivityForm";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface TesterOption {
   id: string;
@@ -133,7 +135,12 @@ export default function OccupationReportPage() {
   const [rows, setRows] = useState<OccupationRow[]>([]);
   const [allActivities, setAllActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(false);
-  const [drill, setDrill] = useState<{ tester: OccupationRow; activities: Activity[] } | null>(null);
+  const [drill, setDrill] = useState<{ tester: OccupationRow; activities: Activity[]; testerIds: string[] } | null>(null);
+  const [editingActivity, setEditingActivity] = useState<Activity | null>(null);
+  const [formTesterId, setFormTesterId] = useState<string | null>(null);
+  const { can } = usePermissions();
+  const canEditActivities = can("activities", "update");
+  const canDeleteActivities = can("activities", "delete");
 
   // Carga inicial de clientes + proyectos + testers
   useEffect(() => {
@@ -178,6 +185,25 @@ export default function OccupationReportPage() {
     }
     return list;
   }, [allTesters, projectId, clientId, filteredProjects]);
+
+  // Agrupa las filas de Tester por persona (nombre). Una persona puede tener
+  // varios Tester rows (uno por proyecto); en el filtro debe aparecer una sola
+  // vez, y al seleccionarla se incluyen todos sus testerIds.
+  const filteredPersons = useMemo(() => {
+    const byName = new Map<string, { name: string; testerIds: string[] }>();
+    for (const t of filteredTesters) {
+      const entry = byName.get(t.name);
+      if (entry) entry.testerIds.push(t.id);
+      else byName.set(t.name, { name: t.name, testerIds: [t.id] });
+    }
+    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }, [filteredTesters]);
+
+  // Derivado: nombres seleccionados a partir de testerIds marcados.
+  const selectedPersonNames = useMemo(() => {
+    const sel = new Set(selected);
+    return filteredPersons.filter((p) => p.testerIds.some((id) => sel.has(id))).map((p) => p.name);
+  }, [filteredPersons, selected]);
 
   // Cuando cambia HU, resolver sus testers y ajustar selección
   useEffect(() => {
@@ -291,7 +317,31 @@ export default function OccupationReportPage() {
     const lists = await Promise.all(
       ids.map((tid) => activitiesApi.list({ testerId: tid, from, to: toIso })),
     );
-    setDrill({ tester: row, activities: lists.flat() });
+    setDrill({ tester: row, activities: lists.flat(), testerIds: ids });
+  }
+
+  async function refreshDrillActivities() {
+    if (!drill) return;
+    const toIso = `${to}T23:59:59.999Z`;
+    const lists = await Promise.all(
+      drill.testerIds.map((tid) => activitiesApi.list({ testerId: tid, from, to: toIso })),
+    );
+    setDrill({ ...drill, activities: lists.flat() });
+  }
+
+  async function handleDeleteActivity(a: Activity) {
+    if (!confirm(`¿Eliminar esta actividad (${a.category.name})?`)) return;
+    try {
+      await activitiesApi.remove(a.id);
+      await refreshDrillActivities();
+    } catch (e: any) {
+      alert(e?.message ?? "No se pudo eliminar");
+    }
+  }
+
+  function handleEditActivity(a: Activity) {
+    setFormTesterId(a.testerId);
+    setEditingActivity(a);
   }
 
   const rangeLabel = `${from} a ${to}`;
@@ -390,19 +440,24 @@ export default function OccupationReportPage() {
           </label>
           <label className="block">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-              Testers ({selected.length}/{filteredTesters.length})
+              Testers ({selectedPersonNames.length}/{filteredPersons.length})
             </span>
             <select
               multiple
-              value={selected}
-              onChange={(e) =>
-                setSelected(Array.from(e.target.selectedOptions).map((o) => o.value))
-              }
+              value={selectedPersonNames}
+              onChange={(e) => {
+                const chosen = new Set(Array.from(e.target.selectedOptions).map((o) => o.value));
+                const next = filteredPersons
+                  .filter((p) => chosen.has(p.name))
+                  .flatMap((p) => p.testerIds);
+                setSelected(next);
+              }}
               className="mt-1 block h-[84px] w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-[#1F3864] focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
             >
-              {filteredTesters.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {testerLabel(t)}
+              {filteredPersons.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name}
+                  {p.testerIds.length > 1 ? ` (${p.testerIds.length} proyectos)` : ""}
                 </option>
               ))}
             </select>
@@ -496,7 +551,11 @@ export default function OccupationReportPage() {
               </div>
             </div>
             <div className="p-6">
-              <ActivityList activities={drill.activities} />
+              <ActivityList
+                activities={drill.activities}
+                onEdit={canEditActivities ? handleEditActivity : undefined}
+                onDelete={canDeleteActivities ? handleDeleteActivity : undefined}
+              />
               <div className="mt-5 text-right">
                 <button
                   onClick={() => setDrill(null)}
@@ -508,6 +567,22 @@ export default function OccupationReportPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {editingActivity && formTesterId && (
+        <ActivityForm
+          testerId={formTesterId}
+          initial={editingActivity}
+          onClose={() => {
+            setEditingActivity(null);
+            setFormTesterId(null);
+          }}
+          onSaved={async () => {
+            setEditingActivity(null);
+            setFormTesterId(null);
+            await refreshDrillActivities();
+          }}
+        />
       )}
     </div>
   );
