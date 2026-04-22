@@ -30,6 +30,10 @@ import adminRoutes from "./routes/admin.routes.js";
 
 const app = express();
 
+// Trust the first proxy (Coolify/Traefik) so express-rate-limit y req.ip
+// usen la IP real del cliente (X-Forwarded-For), no la del reverse proxy.
+app.set("trust proxy", 1);
+
 // CORS must be BEFORE helmet to handle preflight correctly
 app.use(
   cors({
