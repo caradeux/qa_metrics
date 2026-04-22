@@ -1,16 +1,36 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { activityCategoriesApi, type ActivityCategory } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/usePermissions";
+
+const CATEGORY_PALETTE = [
+  "#EF4444", "#F97316", "#F59E0B", "#EAB308",
+  "#84CC16", "#22C55E", "#10B981", "#14B8A6",
+  "#06B6D4", "#0EA5E9", "#3B82F6", "#6366F1",
+  "#8B5CF6", "#A855F7", "#D946EF", "#EC4899",
+];
+
+function pickUnusedColor(used: Set<string>): string {
+  for (const c of CATEGORY_PALETTE) {
+    if (!used.has(c.toUpperCase())) return c;
+  }
+  return CATEGORY_PALETTE[Math.floor(Math.random() * CATEGORY_PALETTE.length)]!;
+}
 
 export default function ActivityCategoriesPage() {
   const { can } = usePermissions();
   const [items, setItems] = useState<ActivityCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState("#1F3864");
+  const [newColor, setNewColor] = useState("#EF4444");
+  const [userPickedColor, setUserPickedColor] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const usedColors = useMemo(
+    () => new Set(items.map((i) => (i.color ?? "").toUpperCase()).filter(Boolean)),
+    [items]
+  );
 
   const load = useCallback(async () => {
     try {
@@ -22,11 +42,20 @@ export default function ActivityCategoriesPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Cuando cargan items (o se crea una nueva), si el usuario no ha tocado
+  // manualmente el picker, sugerimos el próximo color libre de la paleta.
+  useEffect(() => {
+    if (!userPickedColor) {
+      setNewColor(pickUnusedColor(usedColors));
+    }
+  }, [usedColors, userPickedColor]);
+
   async function create() {
     setError(null);
     try {
       await activityCategoriesApi.create({ name: newName.trim(), color: newColor });
       setNewName("");
+      setUserPickedColor(false); // vuelve al modo "auto" para la siguiente
       await load();
     } catch (e: any) {
       setError(e.message ?? "Error al crear la categoría");
@@ -86,13 +115,25 @@ export default function ActivityCategoriesPage() {
               onKeyDown={(e) => { if (e.key === "Enter" && newName.trim()) create(); }}
             />
             <div className="flex items-center gap-1.5">
-              <label className="text-[11px] text-gray-500">Color</label>
+              <label className="text-[11px] text-gray-500" title={userPickedColor ? "Color manual" : "Auto: próximo color libre de la paleta"}>
+                Color {userPickedColor ? "" : "(auto)"}
+              </label>
               <input
                 type="color"
                 value={newColor}
-                onChange={(e) => setNewColor(e.target.value)}
+                onChange={(e) => { setNewColor(e.target.value); setUserPickedColor(true); }}
                 className="w-8 h-8 rounded cursor-pointer border border-gray-300 p-0.5"
               />
+              {userPickedColor && (
+                <button
+                  type="button"
+                  onClick={() => { setUserPickedColor(false); setNewColor(pickUnusedColor(usedColors)); }}
+                  title="Volver al color automático"
+                  className="text-[10px] text-[#2E5FA3] hover:underline"
+                >
+                  auto
+                </button>
+              )}
             </div>
             <button
               onClick={create}

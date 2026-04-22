@@ -62,6 +62,9 @@ yarn-error.log*
 *.pem
 next-env.d.ts
 
+# Scripts locales de seed de datos de prueba (no para prod)
+packages/database/scripts/local-*.ts
+
 # Vercel
 .vercel
 

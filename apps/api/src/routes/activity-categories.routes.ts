@@ -6,6 +6,7 @@ import {
   createActivityCategorySchema,
   updateActivityCategorySchema,
 } from "../validators/activity-category.validator.js";
+import { pickUnusedCategoryColor } from "../lib/category-palette.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -23,7 +24,8 @@ router.get("/", requirePermission("activity-categories", "read"), async (req: Au
 router.post("/", requirePermission("activity-categories", "create"), async (req: AuthRequest, res: Response) => {
   try {
     const data = createActivityCategorySchema.parse(req.body);
-    const created = await prisma.activityCategory.create({ data });
+    const color = data.color ?? (await pickUnusedCategoryColor());
+    const created = await prisma.activityCategory.create({ data: { ...data, color } });
     res.status(201).json(created);
   } catch (e) {
     if (e instanceof ZodError) return res.status(400).json({ errors: e.errors });
