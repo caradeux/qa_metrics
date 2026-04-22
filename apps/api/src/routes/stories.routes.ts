@@ -19,6 +19,39 @@ function daysSince(date: Date): number {
   return Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
 }
 
+function startOfTodayMs(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * QA_ANALYST no debe ver HUs cuya asignación actual está en PRODUCTION
+ * y transicionó a ese estado antes de hoy (le damos el día de gracia).
+ * Para otros roles devuelve la lista sin cambios.
+ */
+function hideOldProductionForAnalyst<T extends { id: string; currentAssignment: any }>(
+  enriched: T[],
+  storiesRaw: any[],
+  roleName: string | undefined,
+): T[] {
+  if (roleName !== "QA_ANALYST") return enriched;
+  const todayMs = startOfTodayMs();
+  const rawById = new Map<string, any>(storiesRaw.map((s) => [s.id, s]));
+
+  return enriched.filter((s) => {
+    const curr = s.currentAssignment;
+    if (!curr || curr.status !== "PRODUCTION") return true;
+    const raw = rawById.get(s.id);
+    const rawAssignment = raw?.assignments?.find((a: any) => a.id === curr.id);
+    const lastLog = rawAssignment?.statusLogs?.[0];
+    const changedAt = lastLog
+      ? new Date(lastLog.changedAt).getTime()
+      : new Date(rawAssignment?.updatedAt ?? 0).getTime();
+    return changedAt >= todayMs;
+  });
+}
+
 async function canAccessProject(req: AuthRequest, projectId: string): Promise<boolean> {
   if (isClientPm(req)) {
     const ids = await clientPmProjectIds(req.user!.id);
@@ -159,6 +192,8 @@ router.get(
       if (cycleId) result = result.filter((s) => s.currentAssignment?.cycleId === cycleId);
       if (status) result = result.filter((s) => s.currentAssignment?.status === status);
       if (testerId) result = result.filter((s) => s.currentAssignment?.tester?.id === testerId);
+
+      result = hideOldProductionForAnalyst(result, stories, req.user?.role?.name);
 
       res.json(result);
     } catch (err) {
@@ -318,7 +353,8 @@ router.get(
       });
 
       const enriched = await Promise.all(stories.map(enrichStory));
-      res.json({ projectId, stories: enriched });
+      const visible = hideOldProductionForAnalyst(enriched, stories, req.user?.role?.name);
+      res.json({ projectId, stories: visible });
     } catch (err) {
       res.status(500).json({ error: "Error al obtener historias del proyecto" });
     }

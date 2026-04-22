@@ -107,26 +107,52 @@ router.get("/", async (req: AuthRequest, res: Response) => {
   }
 
   const includeIdle = req.query.includeIdle === "true";
+  const isAnalyst = req.user?.role?.name === "QA_ANALYST";
 
   // Get assignments overlapping the week. By default ACTIVE statuses + RETURNED_TO_DEV
   // (returned HUs can still receive bug reports / late executions during the week).
-  const defaultStatuses: AssignmentStatus[] = [...ACTIVE_STATUSES, "RETURNED_TO_DEV"];
-  const assignments = await prisma.testerAssignment.findMany({
+  // QA_ANALYST además incluye PRODUCTION para permitir cargar datos el mismo día
+  // que la HU pasa a producción; al día siguiente se oculta (post-filter abajo).
+  const baseStatuses: AssignmentStatus[] = [...ACTIVE_STATUSES, "RETURNED_TO_DEV"];
+  const defaultStatuses: AssignmentStatus[] = isAnalyst
+    ? [...baseStatuses, "PRODUCTION"]
+    : baseStatuses;
+
+  const includeBlock: any = {
+    story: { select: { id: true, title: true, externalId: true } },
+    cycle: { select: { id: true, name: true } },
+    dailyRecords: {
+      where: { date: { gte: monday, lte: friday } },
+    },
+  };
+  if (isAnalyst) {
+    includeBlock.statusLogs = {
+      where: { status: "PRODUCTION" },
+      orderBy: { changedAt: "desc" },
+      take: 1,
+    };
+  }
+
+  const rawAssignments = await prisma.testerAssignment.findMany({
     where: {
       testerId: parsed.data.testerId,
       startDate: { lte: friday },
       OR: [{ endDate: null }, { endDate: { gte: monday } }],
       ...(includeIdle ? {} : { status: { in: defaultStatuses } }),
     },
-    include: {
-      story: { select: { id: true, title: true, externalId: true } },
-      cycle: { select: { id: true, name: true } },
-      dailyRecords: {
-        where: { date: { gte: monday, lte: friday } },
-      },
-    },
+    include: includeBlock,
     orderBy: { createdAt: "asc" },
   });
+
+  const startOfTodayMs = today.getTime();
+  const assignments = isAnalyst
+    ? rawAssignments.filter((a: any) => {
+        if (a.status !== "PRODUCTION") return true;
+        const last = a.statusLogs?.[0];
+        if (!last) return false;
+        return new Date(last.changedAt).getTime() >= startOfTodayMs;
+      })
+    : rawAssignments;
 
   const result = assignments.map((a) => {
     const rangeEnd = a.endDate ?? today;
