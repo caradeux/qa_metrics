@@ -4,7 +4,7 @@ import { ZodError } from "zod";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { dailyLoadQuerySchema } from "../validators/admin.validator.js";
 import { toUtcDateOnly } from "../lib/workdays.js";
-import { ACTIVE_STATUSES } from "../lib/assignment-states.js";
+import { ACTIVE_STATUSES, type AssignmentStatus } from "../lib/assignment-states.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -208,7 +208,7 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
     ? await prisma.testerAssignment.findMany({
         where: {
           testerId: { in: testerIds },
-          status: { in: ACTIVE_STATUSES as unknown as string[] },
+          status: { in: [...ACTIVE_STATUSES] as AssignmentStatus[] },
           startDate: { lte: dayUtc },
           OR: [{ endDate: null }, { endDate: { gte: dayUtc } }],
         },

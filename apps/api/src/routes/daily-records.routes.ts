@@ -118,21 +118,6 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     ? [...baseStatuses, "PRODUCTION"]
     : baseStatuses;
 
-  const includeBlock: any = {
-    story: { select: { id: true, title: true, externalId: true } },
-    cycle: { select: { id: true, name: true } },
-    dailyRecords: {
-      where: { date: { gte: monday, lte: friday } },
-    },
-  };
-  if (isAnalyst) {
-    includeBlock.statusLogs = {
-      where: { status: "PRODUCTION" },
-      orderBy: { changedAt: "desc" },
-      take: 1,
-    };
-  }
-
   const rawAssignments = await prisma.testerAssignment.findMany({
     where: {
       testerId: parsed.data.testerId,
@@ -140,7 +125,22 @@ router.get("/", async (req: AuthRequest, res: Response) => {
       OR: [{ endDate: null }, { endDate: { gte: monday } }],
       ...(includeIdle ? {} : { status: { in: defaultStatuses } }),
     },
-    include: includeBlock,
+    include: {
+      story: { select: { id: true, title: true, externalId: true } },
+      cycle: { select: { id: true, name: true } },
+      dailyRecords: {
+        where: { date: { gte: monday, lte: friday } },
+      },
+      // Para analistas: buscamos el último log de transición a PRODUCTION
+      // para aplicar la regla "ocultar al día siguiente". Para otros roles
+      // el filtro where status=PRODUCTION no hace match (no hay PRODUCTION en
+      // defaultStatuses), así que el array viene vacío y el costo es nulo.
+      statusLogs: {
+        where: { status: "PRODUCTION" },
+        orderBy: { changedAt: "desc" },
+        take: 1,
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
 
