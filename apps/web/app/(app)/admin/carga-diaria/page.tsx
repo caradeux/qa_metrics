@@ -4,6 +4,34 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiClient } from "@/lib/api-client";
 import { useAuth } from "@/hooks/useAuth";
 
+interface DailyEntry {
+  projectId: string;
+  projectName: string;
+  storyId: string;
+  storyTitle: string;
+  storyExternalId: string | null;
+  designed: number;
+  executed: number;
+  defects: number;
+}
+
+interface ActivityEntry {
+  categoryName: string;
+  hours: number;
+  projectName: string | null;
+  storyTitle: string | null;
+  storyExternalId: string | null;
+}
+
+interface ExpectedAssignment {
+  projectId: string;
+  projectName: string;
+  storyId: string;
+  storyTitle: string;
+  storyExternalId: string | null;
+  status: string;
+}
+
 interface DailyLoadRow {
   userId: string;
   userName: string;
@@ -15,12 +43,15 @@ interface DailyLoadRow {
     executed: number;
     defects: number;
     lastAt: string | null;
+    entries: DailyEntry[];
   };
   activities: {
     loaded: boolean;
     hours: number;
     lastAt: string | null;
+    entries: ActivityEntry[];
   };
+  expectedAssignments: ExpectedAssignment[];
 }
 
 interface DailyLoadResponse {
@@ -146,30 +177,32 @@ function missingLabel(r: DailyLoadRow): string {
   return missing.join(" y ");
 }
 
-function buildReminderMessage(row: DailyLoadRow, dateIso: string): string {
+function storyLabel(title: string, externalId: string | null): string {
+  return externalId ? `${externalId} — ${title}` : title;
+}
+
+function buildReminderWithContext(row: DailyLoadRow, dateIso: string): string {
   const pretty = formatLongDate(dateIso);
   const firstName = row.userName.split(/\s+/)[0] ?? row.userName;
   const missing = missingLabel(row);
+  const expectedLines = row.expectedAssignments.length
+    ? row.expectedAssignments
+        .map((e) => `  • ${e.projectName} — ${storyLabel(e.storyTitle, e.storyExternalId)} (${e.status})`)
+        .join("\n")
+    : null;
+
   if (!missing) {
     return `Hola ${firstName}, gracias por tener tu carga del ${pretty} al día.`;
   }
+
   return (
     `Hola ${firstName},\n\n` +
     `Notamos que no registraste ${missing} correspondiente al ${pretty}.\n\n` +
+    (expectedLines
+      ? `Según la planificación, ese día tenías activas las siguientes HU:\n${expectedLines}\n\n`
+      : ``) +
     `¿Puedes ponerte al día en QA Metrics lo antes posible? Si tuviste algún inconveniente, por favor avísame.\n\n` +
     `Gracias,\nEquipo QA`
-  );
-}
-
-function buildAllPendingMessage(rows: DailyLoadRow[], dateIso: string): string {
-  const pretty = formatLongDate(dateIso);
-  const pending = rows.filter((r) => rowStatus(r) !== "complete");
-  if (pending.length === 0) return `Todo el equipo cargó su día del ${pretty}. ¡Sin pendientes!`;
-  const lines = pending.map((r) => `  • ${r.userName} (${r.userEmail}) — falta ${missingLabel(r)}`);
-  return (
-    `Pendientes de carga del ${pretty}:\n\n` +
-    lines.join("\n") +
-    `\n\nPor favor, pónganse al día en QA Metrics hoy. Gracias.`
   );
 }
 
@@ -371,25 +404,8 @@ export default function AdminCargaDiariaPage() {
               Completos <span className="ml-1 text-gray-400">{summary.complete}</span>
             </FilterTab>
           </div>
-          <div className="flex items-center gap-2">
-            {summary.total - summary.complete > 0 && (
-              <button
-                type="button"
-                onClick={() =>
-                  copyToClipboard(
-                    buildAllPendingMessage(data.rows, data.date),
-                    `Lista de ${summary.total - summary.complete} pendientes copiada`
-                  )
-                }
-                className="inline-flex items-center gap-1.5 px-2.5 h-7 text-[11px] font-medium rounded border border-gray-200 bg-white text-gray-700 hover:border-[#2E5FA3] hover:text-[#2E5FA3] transition"
-              >
-                {iconCopy}
-                Copiar lista de pendientes
-              </button>
-            )}
-            <div className="text-[11px] text-gray-400">
-              {visibleRows.length} de {summary.total} analista{summary.total !== 1 ? "s" : ""}
-            </div>
+          <div className="text-[11px] text-gray-400">
+            {visibleRows.length} de {summary.total} analista{summary.total !== 1 ? "s" : ""}
           </div>
         </div>
       )}
@@ -420,7 +436,7 @@ export default function AdminCargaDiariaPage() {
               dateIso={data.date}
               onCopyMessage={() =>
                 copyToClipboard(
-                  buildReminderMessage(r, data.date),
+                  buildReminderWithContext(r, data.date),
                   `Mensaje para ${r.userName.split(/\s+/)[0]} copiado`
                 )
               }
@@ -428,7 +444,7 @@ export default function AdminCargaDiariaPage() {
                 const subject = encodeURIComponent(
                   `Carga QA pendiente — ${formatLongDate(data.date)}`
                 );
-                const body = encodeURIComponent(buildReminderMessage(r, data.date));
+                const body = encodeURIComponent(buildReminderWithContext(r, data.date));
                 window.location.href = `mailto:${r.userEmail}?subject=${subject}&body=${body}`;
               }}
             />
@@ -524,7 +540,7 @@ function FilterTab({
 }
 
 function UserRow({
-  row, dateIso, onCopyMessage, onMailTo,
+  row, onCopyMessage, onMailTo,
 }: {
   row: DailyLoadRow;
   dateIso: string;
@@ -607,6 +623,106 @@ function UserRow({
             >
               {iconMail}
             </button>
+          </div>
+        )}
+      </div>
+
+      <BreakdownStrip row={row} />
+    </div>
+  );
+}
+
+function BreakdownStrip({ row }: { row: DailyLoadRow }) {
+  const hasLoaded = row.daily.entries.length > 0 || row.activities.entries.length > 0;
+  const hasExpected = row.expectedAssignments.length > 0;
+  if (!hasLoaded && !hasExpected) return null;
+
+  const entries = row.daily.loaded
+    ? row.daily.entries.map((e) => ({
+        kind: "loaded" as const,
+        projectName: e.projectName,
+        storyTitle: e.storyTitle,
+        storyExternalId: e.storyExternalId,
+        subtitle: `${e.designed}D · ${e.executed}E · ${e.defects}B`,
+      }))
+    : row.expectedAssignments.map((e) => ({
+        kind: "expected" as const,
+        projectName: e.projectName,
+        storyTitle: e.storyTitle,
+        storyExternalId: e.storyExternalId,
+        subtitle: e.status.replace(/_/g, " ").toLowerCase(),
+      }));
+
+  if (entries.length === 0 && row.activities.entries.length === 0) return null;
+
+  const activityChips = row.activities.entries.map((a, i) => ({
+    kind: "activity" as const,
+    key: `act-${i}`,
+    categoryName: a.categoryName,
+    hours: a.hours,
+    projectName: a.projectName,
+    storyTitle: a.storyTitle,
+    storyExternalId: a.storyExternalId,
+  }));
+
+  return (
+    <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
+      <div className="flex items-start gap-4 flex-wrap">
+        {/* HU list (loaded or expected) */}
+        {entries.length > 0 && (
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-[0.15em] text-gray-400 mb-1.5 flex items-center gap-1.5">
+              {row.daily.loaded ? "Registrado en" : "Planificado para este día"}
+              {!row.daily.loaded && (
+                <span className="text-[9px] px-1.5 py-px rounded bg-amber-50 text-amber-700 border border-amber-200 normal-case tracking-normal">
+                  sin carga
+                </span>
+              )}
+            </div>
+            <ul className="space-y-1">
+              {entries.map((e, i) => (
+                <li key={i} className="flex items-start gap-2 text-[12px]">
+                  <span
+                    className={`mt-1 w-1 h-1 rounded-full shrink-0 ${
+                      e.kind === "loaded" ? "bg-emerald-500" : "bg-amber-400"
+                    }`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[10px] uppercase tracking-wider text-gray-400 mr-1.5">
+                      {e.projectName}
+                    </span>
+                    <span className="text-gray-800">{storyLabel(e.storyTitle, e.storyExternalId)}</span>
+                    <span className="ml-2 text-[11px] text-gray-400 font-mono">{e.subtitle}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Activity list (when loaded) */}
+        {activityChips.length > 0 && (
+          <div className="min-w-[220px] md:max-w-sm">
+            <div className="text-[10px] uppercase tracking-[0.15em] text-gray-400 mb-1.5">
+              Actividades del día
+            </div>
+            <ul className="space-y-1">
+              {activityChips.map((a) => (
+                <li key={a.key} className="flex items-start gap-2 text-[12px]">
+                  <span className="mt-1 w-1 h-1 rounded-full shrink-0 bg-sky-500" />
+                  <div className="min-w-0 flex-1">
+                    <span className="text-gray-800">{a.categoryName}</span>
+                    <span className="ml-1.5 text-[11px] text-sky-700 font-mono">{a.hours}h</span>
+                    {a.storyTitle && (
+                      <div className="text-[10px] text-gray-400 truncate">
+                        {a.projectName ? `${a.projectName} — ` : ""}
+                        {storyLabel(a.storyTitle, a.storyExternalId)}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>

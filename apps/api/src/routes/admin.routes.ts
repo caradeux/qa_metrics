@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { dailyLoadQuerySchema } from "../validators/admin.validator.js";
 import { toUtcDateOnly } from "../lib/workdays.js";
+import { ACTIVE_STATUSES } from "../lib/assignment-states.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -68,31 +69,82 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
           defects: true,
           updatedAt: true,
           createdAt: true,
+          assignment: {
+            select: {
+              id: true,
+              story: {
+                select: {
+                  id: true,
+                  title: true,
+                  externalId: true,
+                  project: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
         },
       })
     : [];
 
-  type DailyAgg = { loaded: boolean; storiesCount: number; designed: number; executed: number; defects: number; lastAt: Date | null };
+  type DailyEntry = {
+    projectId: string;
+    projectName: string;
+    storyId: string;
+    storyTitle: string;
+    storyExternalId: string | null;
+    designed: number;
+    executed: number;
+    defects: number;
+  };
+  type DailyAgg = {
+    loaded: boolean;
+    storiesCount: number;
+    designed: number;
+    executed: number;
+    defects: number;
+    lastAt: Date | null;
+    entriesByAssignment: Map<string, DailyEntry>;
+  };
   const dailyByUser = new Map<string, DailyAgg>();
-  const assignmentsByUser = new Map<string, Set<string>>();
   for (const r of dailyRecords) {
     const userId = userByTesterId.get(r.testerId);
     if (!userId) continue;
     let agg = dailyByUser.get(userId);
     if (!agg) {
-      agg = { loaded: true, storiesCount: 0, designed: 0, executed: 0, defects: 0, lastAt: null };
+      agg = {
+        loaded: true, storiesCount: 0,
+        designed: 0, executed: 0, defects: 0,
+        lastAt: null,
+        entriesByAssignment: new Map(),
+      };
       dailyByUser.set(userId, agg);
-      assignmentsByUser.set(userId, new Set());
     }
-    assignmentsByUser.get(userId)!.add(r.assignmentId);
     agg.designed += r.designed;
     agg.executed += r.executed;
     agg.defects += r.defects;
     const at = r.updatedAt ?? r.createdAt;
     if (!agg.lastAt || at > agg.lastAt) agg.lastAt = at;
+
+    const story = r.assignment.story;
+    const project = story.project;
+    let entry = agg.entriesByAssignment.get(r.assignmentId);
+    if (!entry) {
+      entry = {
+        projectId: project.id,
+        projectName: project.name,
+        storyId: story.id,
+        storyTitle: story.title,
+        storyExternalId: story.externalId ?? null,
+        designed: 0, executed: 0, defects: 0,
+      };
+      agg.entriesByAssignment.set(r.assignmentId, entry);
+    }
+    entry.designed += r.designed;
+    entry.executed += r.executed;
+    entry.defects += r.defects;
   }
-  for (const [userId, agg] of dailyByUser) {
-    agg.storiesCount = assignmentsByUser.get(userId)?.size ?? 0;
+  for (const agg of dailyByUser.values()) {
+    agg.storiesCount = agg.entriesByAssignment.size;
   }
 
   const activities = testerIds.length
@@ -101,11 +153,35 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
           testerId: { in: testerIds },
           startAt: { gte: dayUtc, lt: nextDayUtc },
         },
-        select: { testerId: true, startAt: true, endAt: true, createdAt: true },
+        select: {
+          testerId: true,
+          startAt: true,
+          endAt: true,
+          createdAt: true,
+          category: { select: { name: true } },
+          assignment: {
+            select: {
+              story: {
+                select: {
+                  title: true,
+                  externalId: true,
+                  project: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
+        },
       })
     : [];
 
-  type ActAgg = { hours: number; lastAt: Date | null };
+  type ActEntry = {
+    categoryName: string;
+    hours: number;
+    projectName: string | null;
+    storyTitle: string | null;
+    storyExternalId: string | null;
+  };
+  type ActAgg = { hours: number; lastAt: Date | null; entries: ActEntry[] };
   const actByUser = new Map<string, ActAgg>();
   for (const a of activities) {
     const userId = userByTesterId.get(a.testerId);
@@ -113,15 +189,72 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
     const hours = (a.endAt.getTime() - a.startAt.getTime()) / 3_600_000;
     let agg = actByUser.get(userId);
     if (!agg) {
-      agg = { hours: 0, lastAt: null };
+      agg = { hours: 0, lastAt: null, entries: [] };
       actByUser.set(userId, agg);
     }
     agg.hours += hours;
     if (!agg.lastAt || a.createdAt > agg.lastAt) agg.lastAt = a.createdAt;
+    agg.entries.push({
+      categoryName: a.category.name,
+      hours: Math.round(hours * 100) / 100,
+      projectName: a.assignment?.story?.project.name ?? null,
+      storyTitle: a.assignment?.story?.title ?? null,
+      storyExternalId: a.assignment?.story?.externalId ?? null,
+    });
+  }
+
+  // Asignaciones activas esperadas en el día (para filas sin carga)
+  const expected = testerIds.length
+    ? await prisma.testerAssignment.findMany({
+        where: {
+          testerId: { in: testerIds },
+          status: { in: ACTIVE_STATUSES as unknown as string[] },
+          startDate: { lte: dayUtc },
+          OR: [{ endDate: null }, { endDate: { gte: dayUtc } }],
+        },
+        select: {
+          testerId: true,
+          status: true,
+          story: {
+            select: {
+              id: true,
+              title: true,
+              externalId: true,
+              project: { select: { id: true, name: true } },
+            },
+          },
+        },
+      })
+    : [];
+
+  type ExpectedEntry = {
+    projectId: string;
+    projectName: string;
+    storyId: string;
+    storyTitle: string;
+    storyExternalId: string | null;
+    status: string;
+  };
+  const expectedByUser = new Map<string, ExpectedEntry[]>();
+  for (const e of expected) {
+    const userId = userByTesterId.get(e.testerId);
+    if (!userId) continue;
+    let arr = expectedByUser.get(userId);
+    if (!arr) { arr = []; expectedByUser.set(userId, arr); }
+    arr.push({
+      projectId: e.story.project.id,
+      projectName: e.story.project.name,
+      storyId: e.story.id,
+      storyTitle: e.story.title,
+      storyExternalId: e.story.externalId ?? null,
+      status: e.status,
+    });
   }
 
   const rows = users.map((u) => {
     const d = dailyByUser.get(u.id);
+    const a = actByUser.get(u.id);
+    const exp = expectedByUser.get(u.id) ?? [];
     return {
       userId: u.id,
       userName: u.name,
@@ -134,14 +267,18 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
             executed: d.executed,
             defects: d.defects,
             lastAt: d.lastAt ? d.lastAt.toISOString() : null,
+            entries: Array.from(d.entriesByAssignment.values()),
           }
-        : { loaded: false, storiesCount: 0, designed: 0, executed: 0, defects: 0, lastAt: null },
-      activities: (() => {
-        const a = actByUser.get(u.id);
-        return a
-          ? { loaded: true, hours: Math.round(a.hours * 100) / 100, lastAt: a.lastAt!.toISOString() }
-          : { loaded: false, hours: 0, lastAt: null };
-      })(),
+        : { loaded: false, storiesCount: 0, designed: 0, executed: 0, defects: 0, lastAt: null, entries: [] },
+      activities: a
+        ? {
+            loaded: true,
+            hours: Math.round(a.hours * 100) / 100,
+            lastAt: a.lastAt!.toISOString(),
+            entries: a.entries,
+          }
+        : { loaded: false, hours: 0, lastAt: null, entries: [] },
+      expectedAssignments: exp,
     };
   });
 
