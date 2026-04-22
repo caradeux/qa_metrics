@@ -307,13 +307,16 @@ export default function AdminCargaDiariaPage() {
         </div>
       </div>
 
-      {/* Non-business-day banner */}
-      {data?.isNonBusinessDay && (
-        <div className="mb-4 rounded-md border-l-[3px] border-l-amber-400 border border-amber-200 bg-amber-50/70 px-4 py-2.5 text-[12px] text-amber-900 flex items-center gap-2">
-          <span className="text-amber-500">{iconAlert}</span>
-          <span>
-            <strong className="font-semibold">Día no laborable</strong> — feriado o fin de semana. No se espera carga del equipo.
-          </span>
+      {/* Non-business-day full-state (suplanta KPIs, filtros y filas) */}
+      {data?.isNonBusinessDay && !loading && (
+        <div className="rounded-md border border-dashed border-amber-200 bg-amber-50/50 px-6 py-16 text-center">
+          <div className="w-12 h-12 mx-auto rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
+            {iconAlert}
+          </div>
+          <h2 className="mt-4 text-base font-semibold text-amber-900">Día no laborable</h2>
+          <p className="mt-1 text-xs text-amber-800/80 max-w-sm mx-auto">
+            {formatLongDate(data.date)} es feriado o fin de semana. No se espera carga del equipo, por lo que no se muestran registros.
+          </p>
         </div>
       )}
 
@@ -325,7 +328,7 @@ export default function AdminCargaDiariaPage() {
       )}
 
       {/* KPI cards */}
-      {!loading && data && summary.total > 0 && (
+      {!loading && data && !data.isNonBusinessDay && summary.total > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
           <KpiCard
             label="Registros diarios"
@@ -355,7 +358,7 @@ export default function AdminCargaDiariaPage() {
       )}
 
       {/* Filter chips + bulk actions */}
-      {!loading && data && summary.total > 0 && (
+      {!loading && data && !data.isNonBusinessDay && summary.total > 0 && (
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex bg-gray-100 rounded-md p-0.5">
             <FilterTab active={filter === "all"} onClick={() => setFilter("all")}>
@@ -401,14 +404,14 @@ export default function AdminCargaDiariaPage() {
       )}
 
       {/* Empty */}
-      {!loading && data && data.rows.length === 0 && (
+      {!loading && data && !data.isNonBusinessDay && data.rows.length === 0 && (
         <div className="rounded-md border border-dashed border-gray-200 bg-white px-6 py-16 text-center">
           <p className="text-sm text-gray-500">No hay analistas con Tester vinculado.</p>
         </div>
       )}
 
       {/* Rows */}
-      {!loading && data && visibleRows.length > 0 && (
+      {!loading && data && !data.isNonBusinessDay && visibleRows.length > 0 && (
         <div className="space-y-1.5">
           {visibleRows.map((r) => (
             <UserRow
@@ -434,7 +437,7 @@ export default function AdminCargaDiariaPage() {
       )}
 
       {/* No rows under current filter */}
-      {!loading && data && data.rows.length > 0 && visibleRows.length === 0 && (
+      {!loading && data && !data.isNonBusinessDay && data.rows.length > 0 && visibleRows.length === 0 && (
         <div className="rounded-md border border-dashed border-gray-200 bg-white px-6 py-10 text-center">
           <p className="text-sm text-gray-500">
             {filter === "pending"
