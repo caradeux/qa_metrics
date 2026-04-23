@@ -21,13 +21,32 @@ export interface OccupationResult {
   testerName: string;
   periodDays: number;
   workdays: number;
-  capacityHours: number;
-  activityHours: number;
-  byCategory: CategoryBreakdown[];
+  nominalCapacityHours: number;      // capacidad antes de descontar ausencias
+  absenceHours: number;              // vacaciones, licencias, permisos, etc.
+  capacityHours: number;             // nominal - absence (lo que aparece en cards)
+  activityHours: number;             // reuniones + actividades NO absence
+  byCategory: CategoryBreakdown[];   // sin categorías de ausencia
+  byAbsence: CategoryBreakdown[];    // solo categorías de ausencia
   byAssignment: AssignmentBreakdown[];
-  productiveHoursEstimate: number;
+  productiveHoursEstimate: number;   // capacityHours - activityHours
   occupationPct: number;
   overallocated: boolean;
+}
+
+const ABSENCE_CATEGORY_NAMES = new Set([
+  "vacaciones",
+  "ausencia",
+  "licencia",
+  "licencia médica",
+  "licencia medica",
+  "permiso",
+  "feriado",
+  "día administrativo",
+  "dia administrativo",
+]);
+
+function isAbsence(name: string): boolean {
+  return ABSENCE_CATEGORY_NAMES.has(name.trim().toLowerCase());
 }
 
 function hoursBetween(a: Date, b: Date): number {
@@ -46,7 +65,7 @@ export async function computeOccupation(
 
   const workdays = (await workdaysInRange(from, to)).length;
   const allocationPct = tester.allocation / 100;
-  const capacityHours = workdays * 8 * allocationPct;
+  const nominalCapacityHours = workdays * 8 * allocationPct;
 
   // Actividades que se traslapan con el rango.
   const activities = await prisma.activity.findMany({
@@ -62,35 +81,51 @@ export async function computeOccupation(
   });
 
   let activityHours = 0;
+  let absenceHours = 0;
   const perCategory = new Map<string, CategoryBreakdown>();
+  const perAbsence = new Map<string, CategoryBreakdown>();
   const perAssignment = new Map<string, AssignmentBreakdown>();
 
   for (const a of activities) {
     const start = a.startAt > from ? a.startAt : from;
     const end = a.endAt < to ? a.endAt : to;
     const hours = hoursBetween(start, end);
-    activityHours += hours;
+    const absence = isAbsence(a.category.name);
 
-    const cat = perCategory.get(a.categoryId) ?? {
-      categoryId: a.categoryId,
-      name: a.category.name,
-      color: a.category.color,
-      hours: 0,
-    };
-    cat.hours += hours;
-    perCategory.set(a.categoryId, cat);
-
-    if (a.assignmentId && a.assignment) {
-      const asg = perAssignment.get(a.assignmentId) ?? {
-        assignmentId: a.assignmentId,
-        storyTitle: a.assignment.story?.title ?? "(sin historia)",
+    if (absence) {
+      absenceHours += hours;
+      const cat = perAbsence.get(a.categoryId) ?? {
+        categoryId: a.categoryId,
+        name: a.category.name,
+        color: a.category.color,
         hours: 0,
       };
-      asg.hours += hours;
-      perAssignment.set(a.assignmentId, asg);
+      cat.hours += hours;
+      perAbsence.set(a.categoryId, cat);
+    } else {
+      activityHours += hours;
+      const cat = perCategory.get(a.categoryId) ?? {
+        categoryId: a.categoryId,
+        name: a.category.name,
+        color: a.category.color,
+        hours: 0,
+      };
+      cat.hours += hours;
+      perCategory.set(a.categoryId, cat);
+
+      if (a.assignmentId && a.assignment) {
+        const asg = perAssignment.get(a.assignmentId) ?? {
+          assignmentId: a.assignmentId,
+          storyTitle: a.assignment.story?.title ?? "(sin historia)",
+          hours: 0,
+        };
+        asg.hours += hours;
+        perAssignment.set(a.assignmentId, asg);
+      }
     }
   }
 
+  const capacityHours = Math.max(0, nominalCapacityHours - absenceHours);
   const overallocated = activityHours > capacityHours;
   const productiveHoursEstimate = Math.max(0, capacityHours - activityHours);
   const occupationPct =
@@ -105,9 +140,12 @@ export async function computeOccupation(
     testerName: tester.name,
     periodDays,
     workdays,
-    capacityHours,
+    nominalCapacityHours: Math.round(nominalCapacityHours * 100) / 100,
+    absenceHours: Math.round(absenceHours * 100) / 100,
+    capacityHours: Math.round(capacityHours * 100) / 100,
     activityHours: Math.round(activityHours * 100) / 100,
     byCategory: [...perCategory.values()],
+    byAbsence: [...perAbsence.values()],
     byAssignment: [...perAssignment.values()],
     productiveHoursEstimate: Math.round(productiveHoursEstimate * 100) / 100,
     occupationPct: Math.round(occupationPct * 100) / 100,
@@ -161,38 +199,54 @@ export async function computeOccupationBatch(
       if (!tester) return null;
 
       const allocationPct = tester.allocation / 100;
-      const capacityHours = workdays * 8 * allocationPct;
+      const nominalCapacityHours = workdays * 8 * allocationPct;
 
       let activityHours = 0;
+      let absenceHours = 0;
       const perCategory = new Map<string, CategoryBreakdown>();
+      const perAbsence = new Map<string, CategoryBreakdown>();
       const perAssignment = new Map<string, AssignmentBreakdown>();
 
       for (const a of activitiesByTester.get(tid) ?? []) {
         const start = a.startAt > from ? a.startAt : from;
         const end = a.endAt < to ? a.endAt : to;
         const hours = hoursBetween(start, end);
-        activityHours += hours;
+        const absence = isAbsence(a.category.name);
 
-        const cat = perCategory.get(a.categoryId) ?? {
-          categoryId: a.categoryId,
-          name: a.category.name,
-          color: a.category.color,
-          hours: 0,
-        };
-        cat.hours += hours;
-        perCategory.set(a.categoryId, cat);
-
-        if (a.assignmentId && a.assignment) {
-          const asg = perAssignment.get(a.assignmentId) ?? {
-            assignmentId: a.assignmentId,
-            storyTitle: a.assignment.story?.title ?? "(sin historia)",
+        if (absence) {
+          absenceHours += hours;
+          const cat = perAbsence.get(a.categoryId) ?? {
+            categoryId: a.categoryId,
+            name: a.category.name,
+            color: a.category.color,
             hours: 0,
           };
-          asg.hours += hours;
-          perAssignment.set(a.assignmentId, asg);
+          cat.hours += hours;
+          perAbsence.set(a.categoryId, cat);
+        } else {
+          activityHours += hours;
+          const cat = perCategory.get(a.categoryId) ?? {
+            categoryId: a.categoryId,
+            name: a.category.name,
+            color: a.category.color,
+            hours: 0,
+          };
+          cat.hours += hours;
+          perCategory.set(a.categoryId, cat);
+
+          if (a.assignmentId && a.assignment) {
+            const asg = perAssignment.get(a.assignmentId) ?? {
+              assignmentId: a.assignmentId,
+              storyTitle: a.assignment.story?.title ?? "(sin historia)",
+              hours: 0,
+            };
+            asg.hours += hours;
+            perAssignment.set(a.assignmentId, asg);
+          }
         }
       }
 
+      const capacityHours = Math.max(0, nominalCapacityHours - absenceHours);
       const overallocated = activityHours > capacityHours;
       const productiveHoursEstimate = Math.max(0, capacityHours - activityHours);
       const occupationPct =
@@ -205,9 +259,12 @@ export async function computeOccupationBatch(
         testerName: tester.name,
         periodDays,
         workdays,
-        capacityHours,
+        nominalCapacityHours: Math.round(nominalCapacityHours * 100) / 100,
+        absenceHours: Math.round(absenceHours * 100) / 100,
+        capacityHours: Math.round(capacityHours * 100) / 100,
         activityHours: Math.round(activityHours * 100) / 100,
         byCategory: [...perCategory.values()],
+        byAbsence: [...perAbsence.values()],
         byAssignment: [...perAssignment.values()],
         productiveHoursEstimate: Math.round(productiveHoursEstimate * 100) / 100,
         occupationPct: Math.round(occupationPct * 100) / 100,
