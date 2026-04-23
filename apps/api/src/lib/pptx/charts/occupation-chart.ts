@@ -54,7 +54,7 @@ export async function buildOccupationChart(
       plugins: {
         title: {
           display: true,
-          text: [`Capacidad ocupada — ${projectName}`, "El equipo permanece siempre productivo"],
+          text: `Capacidad ocupada — ${projectName}`,
           font: { size: 22, weight: "bold", family: FONT_FAMILY },
           color: `#${PALETTE.textPrimary}`,
           padding: { top: 12, bottom: 18 },

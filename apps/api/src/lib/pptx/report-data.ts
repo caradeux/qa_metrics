@@ -257,10 +257,16 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       projectIdsActive: testerToProjects.get(t.id) ?? [p.id],
     }));
 
-    // Phase segments de este proyecto.
+    // Phase segments de este proyecto. SOLO incluimos phases de assignments en
+    // estados activos de QA (ANALYSIS/TEST_DESIGN/EXECUTION). Assignments en
+    // REGISTERED, WAITING_*, RETURNED_TO_DEV, UAT, ON_HOLD y PRODUCTION
+    // pueden tener phases pre-creadas por planificación, pero no representan
+    // trabajo actual — su clasificación debe venir del estado, no de la phase.
+    const ACTIVE_QA_STATUSES = new Set(["ANALYSIS", "TEST_DESIGN", "EXECUTION"]);
     const phaseSegments: PhaseSegment[] = [];
     for (const story of p.stories) {
       for (const a of story.assignments) {
+        if (!ACTIVE_QA_STATUSES.has(a.status)) continue;
         for (const ph of a.phases) {
           phaseSegments.push({
             testerId: a.testerId,
@@ -272,7 +278,8 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
         }
       }
     }
-    // Añadir phases de otros proyectos para los testers compartidos.
+    // Añadir phases de otros proyectos para los testers compartidos, con el
+    // mismo filtro por estado activo.
     for (const t of p.testers) {
       const otherProjects = (testerToProjects.get(t.id) ?? []).filter((pid) => pid !== p.id);
       for (const other of otherProjects) {
@@ -281,6 +288,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
         for (const story of otherProj.stories) {
           for (const a of story.assignments) {
             if (a.testerId !== t.id) continue;
+            if (!ACTIVE_QA_STATUSES.has(a.status)) continue;
             for (const ph of a.phases) {
               phaseSegments.push({
                 testerId: t.id,
