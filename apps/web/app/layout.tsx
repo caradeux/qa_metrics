@@ -29,8 +29,27 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "QA Metrics",
-  description: "Sistema de Métricas y Seguimiento QA",
+  metadataBase: new URL("https://qametrics.cl"),
+  title: {
+    default: "QA Metrics · Plataforma de métricas QA de Inovabiz",
+    template: "%s · QA Metrics",
+  },
+  description:
+    "Centraliza la operación QA de todos tus proyectos. Dashboards, reportes y visibilidad del equipo en una sola plataforma.",
+  applicationName: "QA Metrics",
+  authors: [{ name: "Inovabiz", url: "https://inovabiz.com" }],
+  generator: "Next.js",
+  keywords: [
+    "QA",
+    "métricas QA",
+    "dashboards QA",
+    "testing",
+    "Azure DevOps",
+    "plataforma QA",
+    "Inovabiz",
+    "aseguramiento de calidad",
+    "reportes QA",
+  ],
 };
 
 export default function RootLayout({

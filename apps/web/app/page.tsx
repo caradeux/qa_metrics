@@ -1,12 +1,86 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { Metadata } from "next";
 import { InovabizLogo } from "@/components/InovabizLogo";
 import { Reveal } from "@/components/Reveal";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "QA Metrics · Plataforma de métricas QA de Inovabiz",
   description:
-    "Centraliza la operación QA de todos tus proyectos. Dashboards, reportes y visibilidad del trabajo real de cada analista. Azure DevOps o carga manual, un solo panel.",
+    "Centraliza tu operación QA: dashboards, Gantt, ocupación y reportes automáticos por cliente. Azure DevOps o carga manual.",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    locale: "es_CL",
+    url: "https://qametrics.cl/",
+    siteName: "QA Metrics",
+    title: "QA Metrics · Plataforma de métricas QA de Inovabiz",
+    description:
+      "Centraliza tu operación QA: dashboards, Gantt, ocupación y reportes automáticos por cliente. Azure DevOps o carga manual.",
+    images: [
+      {
+        url: "/landing/dashboard-cliente.png",
+        width: 1536,
+        height: 820,
+        alt: "Dashboard de QA Metrics mostrando KPIs, lead time por estado y defectos por severidad",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "QA Metrics · Plataforma de métricas QA de Inovabiz",
+    description:
+      "Métricas de QA que hablan por tu equipo. Dashboards, Gantt y reportes automáticos por cliente.",
+    images: ["/landing/dashboard-cliente.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-snippet": -1,
+      "max-image-preview": "large",
+      "max-video-preview": -1,
+    },
+  },
+};
+
+// Structured data (JSON-LD) — SoftwareApplication
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "QA Metrics",
+  applicationCategory: "BusinessApplication",
+  applicationSubCategory: "Quality Assurance",
+  operatingSystem: "Web",
+  url: "https://qametrics.cl/",
+  description:
+    "Plataforma de métricas y seguimiento QA para consultoras y equipos de calidad. Dashboards en tiempo real, Gantt de asignaciones, ocupación del equipo y reportes automáticos por cliente.",
+  inLanguage: "es",
+  image: "https://qametrics.cl/landing/dashboard-cliente.png",
+  featureList: [
+    "Dashboards por cliente con KPIs en tiempo real",
+    "Gantt de asignaciones con 9 estados por HU",
+    "Ocupación del equipo y matriz de complejidad",
+    "Reportes PPTX y Excel automáticos",
+    "Integración Azure DevOps (API v7) o carga manual",
+    "RBAC granular · Admin, Líder QA, Analista, PM Cliente",
+    "Auditoría completa de cambios",
+  ],
+  offers: {
+    "@type": "Offer",
+    price: "0",
+    priceCurrency: "USD",
+    availability: "https://schema.org/OnlineOnly",
+  },
+  provider: {
+    "@type": "Organization",
+    name: "Inovabiz",
+    url: "https://inovabiz.com/",
+  },
 };
 
 export default function LandingPage() {
@@ -18,6 +92,11 @@ export default function LandingPage() {
         background: "#0A0F1A",
       }}
     >
+      {/* JSON-LD structured data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* ── Aurora blobs (decorative) ──────────────────────────── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
