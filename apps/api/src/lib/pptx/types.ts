@@ -16,6 +16,9 @@ export interface HuRow {
   designed: number;
   executed: number;
   defects: number;
+  trainingHours: number;           // horas de Inducción/Capacitación imputadas a esta HU
+  userMeetingHours: number;        // horas de "Reunión con usuario" imputadas
+  devMeetingHours: number;         // horas de "Reunión con desarrollo" imputadas
 }
 
 export interface ComplexityBubble {

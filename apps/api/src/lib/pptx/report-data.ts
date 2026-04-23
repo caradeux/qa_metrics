@@ -176,11 +176,13 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
     },
     include: {
       category: { select: { name: true } },
-      assignment: { select: { story: { select: { projectId: true } } } },
+      assignment: { select: { id: true, story: { select: { projectId: true } } } },
     },
   });
 
   const activitiesByTester = new Map<string, ActivityRef[]>();
+  const activitiesByAssignment = new Map<string, Array<{ categoryName: string; hours: number }>>();
+  const MS_PER_HOUR = 3600000;
   for (const a of activitiesRaw) {
     const list = activitiesByTester.get(a.testerId) ?? [];
     list.push({
@@ -191,6 +193,17 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       end: a.endAt,
     });
     activitiesByTester.set(a.testerId, list);
+
+    if (a.assignment?.id) {
+      const start = a.startAt.getTime() < periodStart.getTime() ? periodStart.getTime() : a.startAt.getTime();
+      const end = a.endAt.getTime() > periodEnd.getTime() ? periodEnd.getTime() : a.endAt.getTime();
+      const hours = Math.max(0, (end - start) / MS_PER_HOUR);
+      if (hours > 0) {
+        const arr = activitiesByAssignment.get(a.assignment.id) ?? [];
+        arr.push({ categoryName: a.category.name, hours });
+        activitiesByAssignment.set(a.assignment.id, arr);
+      }
+    }
   }
 
   const projects: ProjectReportData[] = loaded.map((p) => {
@@ -268,6 +281,21 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       const sb = flat.reduce((acc, r) => acc + r.defects, 0);
       designed += sd; executed += se; defects += sb;
 
+      let trainingHours = 0;
+      let userMeetingHours = 0;
+      let devMeetingHours = 0;
+      for (const a of s.assignments) {
+        for (const act of activitiesByAssignment.get(a.id) ?? []) {
+          if (act.categoryName === "Inducción" || act.categoryName === "Capacitación") {
+            trainingHours += act.hours;
+          } else if (act.categoryName === "Reunión con usuario") {
+            userMeetingHours += act.hours;
+          } else if (act.categoryName === "Reunión con desarrollo") {
+            devMeetingHours += act.hours;
+          }
+        }
+      }
+
       const statusInternal = s.assignments[0]?.status ?? "REGISTERED";
       const statusLbl = STATUS_LABEL[statusInternal] ?? statusInternal;
       pipelineMap.set(statusLbl, (pipelineMap.get(statusLbl) ?? 0) + 1);
@@ -284,6 +312,9 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
         designed: sd,
         executed: se,
         defects: sb,
+        trainingHours: Math.round(trainingHours * 10) / 10,
+        userMeetingHours: Math.round(userMeetingHours * 10) / 10,
+        devMeetingHours: Math.round(devMeetingHours * 10) / 10,
       });
 
       bubbles.push({

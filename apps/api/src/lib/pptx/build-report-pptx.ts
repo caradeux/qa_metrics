@@ -38,7 +38,7 @@ export async function buildReportPptx(spec: ReportSpec): Promise<Buffer> {
     addProjectCoverSlide(pres, p);
     addProjectHuTableSlide(pres, p);
     await addProjectOccupationCurveSlide(pres, p);
-    await addProjectComplexityMatrixSlide(pres, p);
+    addProjectComplexityMatrixSlide(pres, p);
   }
 
   // Bloque C — portfolio
