@@ -62,13 +62,14 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex">
-      {/* ── Left Panel: Dark branding ──────────────────────────── */}
+      {/* ── Left Panel: Dark hero (landing pitch) ───────────────────── */}
       <div
         className="hidden lg:flex lg:w-[52%] relative overflow-hidden flex-col justify-between p-12"
         style={{
           background: "linear-gradient(160deg, #0D1B2A 0%, #1F3864 60%, #2E5FA3 100%)",
         }}
       >
+        {/* Decorative: dot grid */}
         <div
           className="absolute inset-0 opacity-[0.07]"
           style={{
@@ -77,7 +78,8 @@ export default function LoginPage() {
             backgroundSize: "24px 24px",
           }}
         />
-        <div className="absolute bottom-0 left-0 right-0 h-[60%] overflow-hidden">
+        {/* Decorative: bar chart + line */}
+        <div className="absolute bottom-0 left-0 right-0 h-[60%] overflow-hidden pointer-events-none">
           <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center gap-[2px] px-16 opacity-[0.06]">
             {[28, 35, 22, 45, 38, 55, 42, 60, 50, 72, 58, 78, 65, 85, 70, 90, 75, 92, 80, 95].map(
               (h, i) => (
@@ -93,29 +95,61 @@ export default function LoginPage() {
             <polyline fill="none" stroke="white" strokeWidth="2" points="0,380 80,340 160,350 240,280 320,300 400,220 480,240 560,160 640,140 720,80 800,40" />
           </svg>
         </div>
+
+        {/* Top: kicker */}
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-8 h-[2px] bg-[#4A90D9]" />
-            <span className="text-[11px] uppercase tracking-[0.2em] text-[#4A90D9] font-medium">Command Center</span>
+            <span className="text-[11px] uppercase tracking-[0.2em] text-[#4A90D9] font-medium">
+              La plataforma QA de Inovabiz
+            </span>
           </div>
         </div>
-        <div className="relative z-10 -mt-16">
-          <h1 className="text-white text-5xl font-bold tracking-[0.3em] uppercase leading-tight" style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}>
-            QA<br />METRICS
+
+        {/* Middle: headline + lead */}
+        <div className="relative z-10">
+          <h1
+            className="text-white text-5xl font-bold tracking-tight leading-[1.05]"
+            style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
+          >
+            QA Metrics
           </h1>
-          <div className="mt-4 h-[2px] w-20 origin-left" style={{ background: "linear-gradient(90deg, #4A90D9 0%, transparent 100%)", animation: "slideIn 0.8s ease-out 0.3s both" }} />
-          <p className="mt-6 text-[#8BA4C4] text-sm font-light tracking-wide max-w-xs leading-relaxed">
-            Sistema de Metricas y Seguimiento QA
+          <p className="mt-3 text-xl text-[#8BA4C4] font-light leading-snug max-w-md">
+            Métricas de calidad que hablan por tu equipo.
+          </p>
+          <div
+            className="mt-6 h-[2px] w-20 origin-left"
+            style={{
+              background: "linear-gradient(90deg, #4A90D9 0%, transparent 100%)",
+              animation: "slideIn 0.8s ease-out 0.3s both",
+            }}
+          />
+          <p className="mt-6 text-[#8BA4C4] text-sm font-light leading-relaxed max-w-md">
+            Centraliza la operación QA de todos tus proyectos en una sola plataforma. Dashboards en
+            tiempo real, reportes automáticos por cliente y visibilidad del trabajo real de cada
+            analista.
           </p>
         </div>
-        <div className="relative z-10 flex items-center gap-4">
-          <div className="grid grid-cols-4 gap-[3px]">
-            {Array.from({ length: 16 }).map((_, i) => (
-              <div key={i} className="w-[6px] h-[6px] rounded-[1px]" style={{ backgroundColor: i % 3 === 0 ? "rgba(74, 144, 217, 0.5)" : "rgba(255, 255, 255, 0.12)", animation: `pulse-glow 3s ease-in-out ${i * 0.15}s infinite` }} />
-            ))}
-          </div>
-          <div className="h-[1px] flex-1 bg-gradient-to-r from-[rgba(255,255,255,0.15)] to-transparent" />
-          <span className="text-[10px] text-[rgba(255,255,255,0.25)] tracking-widest uppercase">v2.0</span>
+
+        {/* Bottom: stats trio */}
+        <div className="relative z-10 grid grid-cols-3 gap-3">
+          {[
+            { n: "4", u: "roles", label: "RBAC granular" },
+            { n: "2", u: "modalidades", label: "Azure DevOps o Manual" },
+            { n: "∞", u: "clientes", label: "Multi-tenant real" },
+          ].map((s) => (
+            <div
+              key={s.u}
+              className="rounded-md border border-white/10 bg-white/[0.03] px-4 py-3 backdrop-blur-sm"
+            >
+              <div className="text-white text-2xl font-bold leading-none">
+                {s.n} <span className="text-[#4A90D9] text-sm font-semibold align-middle">{s.u}</span>
+              </div>
+              <div className="mt-2 text-[10px] uppercase tracking-[0.12em] text-[#8BA4C4]">
+                {s.label}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
