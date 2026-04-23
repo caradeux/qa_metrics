@@ -372,215 +372,34 @@ router.get(
   requirePermission("reports", "read") as any,
   async (req: AuthRequest, res: Response) => {
     try {
+      const { buildReportSpec, buildProjectScope } = await import("../lib/pptx/report-data.js");
+      const { buildReportPptx } = await import("../lib/pptx/build-report-pptx.js");
+
       const weekStartParam = (req.query.weekStart as string | undefined)?.slice(0, 10);
       const clientIdFilter = req.query.clientId as string | undefined;
-      const monday = weekStartParam
-        ? new Date(weekStartParam)
-        : startOfWeek(new Date(), { weekStartsOn: 1 });
+      const monday = weekStartParam ? new Date(`${weekStartParam}T00:00:00Z`) : startOfWeek(new Date(), { weekStartsOn: 1 });
       const friday = addDays(monday, 4);
+      const periodEnd = new Date(friday.getTime() + 24 * 3600 * 1000 - 1);
 
-      // Scope de proyectos accesibles
-      const projectScope: any = {};
-      if (isClientPm(req)) {
-        const ids = await clientPmProjectIds(req.user!.id);
-        projectScope.id = { in: ids };
-      } else if (isAnalyst(req)) {
-        const ids = await analystProjectIds(req.user!.id);
-        projectScope.id = { in: ids };
-      } else {
-        projectScope.client = { userId: req.user!.id };
-      }
-      // Filtro adicional por cliente (opcional)
-      if (clientIdFilter) {
-        projectScope.clientId = clientIdFilter;
-      }
+      const scope = await buildProjectScope(req, clientIdFilter);
+      const clientRecord = clientIdFilter
+        ? await prisma.client.findUnique({ where: { id: clientIdFilter }, select: { id: true, name: true } })
+        : null;
 
-      // Proyectos con al menos una asignación en los estados incluidos cuyo rango
-      // toque la semana (startDate <= friday y endDate >= monday o null)
-      const projects = await prisma.project.findMany({
-        where: {
-          ...projectScope,
-          stories: {
-            some: {
-              assignments: {
-                some: {
-                  status: { in: [...ACTIVE_OR_UAT] },
-                },
-              },
-            },
-          },
-        },
-        select: {
-          id: true,
-          name: true,
-          client: { select: { name: true } },
-          projectManager: { select: { name: true } },
-          testers: {
-            select: { id: true, name: true, allocation: true },
-            orderBy: { allocation: "desc" },
-          },
-          stories: {
-            select: {
-              id: true,
-              title: true,
-              externalId: true,
-              assignments: {
-                where: {
-                  status: { in: [...ACTIVE_OR_UAT] },
-                },
-                select: {
-                  id: true,
-                  status: true,
-                  testerId: true,
-                  dailyRecords: {
-                    where: { date: { gte: monday, lte: friday } },
-                    select: { designed: true, executed: true, defects: true },
-                  },
-                },
-              },
-            },
-          },
-        },
-        orderBy: { name: "asc" },
+      const spec = await buildReportSpec({
+        period: "weekly",
+        periodStart: monday,
+        periodEnd,
+        scope,
+        clientFilter: clientRecord ? { id: clientRecord.id, name: clientRecord.name } : null,
+        userRole: req.user!.role.name,
+        userId: req.user!.id,
       });
 
-      const projectSlides: WeeklyProjectSlide[] = projects.map((p) => {
-        // Tester dominante del proyecto: el que aparece en más assignments de la semana
-        const testerHits = new Map<string, number>();
-        for (const story of p.stories) {
-          for (const a of story.assignments) {
-            testerHits.set(a.testerId, (testerHits.get(a.testerId) ?? 0) + 1);
-          }
-        }
-        let dominantTesterId: string | null = null;
-        let maxHits = 0;
-        for (const [tid, hits] of testerHits) {
-          if (hits > maxHits) { maxHits = hits; dominantTesterId = tid; }
-        }
-        const dominantTester = p.testers.find((t) => t.id === dominantTesterId) ?? p.testers[0] ?? null;
-
-        // HUs: cada story con al menos 1 assignment en la semana
-        const hus = p.stories
-          .filter((s) => s.assignments.length > 0)
-          .map((s) => {
-            // Agregar métricas de todos los assignments de esta story en la semana
-            const flatRecords = s.assignments.flatMap((a) => a.dailyRecords);
-            const designed = flatRecords.reduce((sum, r) => sum + r.designed, 0);
-            const executed = flatRecords.reduce((sum, r) => sum + r.executed, 0);
-            const defects = flatRecords.reduce((sum, r) => sum + r.defects, 0);
-            const hasAnyRecord = flatRecords.length > 0;
-
-            // Estado: el más "avanzado" entre los assignments (o cualquiera; tomamos el primero)
-            const status = s.assignments[0]?.status ?? "REGISTERED";
-
-            const title = s.externalId ? `${s.externalId} — ${s.title}` : s.title;
-            return {
-              title,
-              status,
-              designed: hasAnyRecord ? designed : null,
-              executed: hasAnyRecord ? executed : null,
-              defects: hasAnyRecord ? defects : null,
-            };
-          });
-
-        return {
-          projectName: p.name,
-          clientName: p.client.name,
-          projectManagerName: p.projectManager?.name ?? null,
-          testerName: dominantTester?.name ?? null,
-          testerAllocation: dominantTester?.allocation ?? null,
-          hus,
-        };
-      });
-
-      // ── Agregar dataset para los 3 gráficos ──
-      // Pipeline: agrupa por label del estado mapeado
-      const STATUS_LABEL_INLINE: Record<string, string> = {
-        REGISTERED: "No Iniciado",
-        ANALYSIS: "En Diseño",
-        TEST_DESIGN: "En Diseño",
-        WAITING_QA_DEPLOY: "Pdte. Instalación QA",
-        EXECUTION: "En Curso",
-        RETURNED_TO_DEV: "Devuelto a Desarrollo",
-        WAITING_UAT: "Pdte. Aprobación",
-        UAT: "Pdte. Aprobación",
-        PRODUCTION: "Completado",
-        ON_HOLD: "Detenido",
-      };
-      const pipelineMap = new Map<string, number>();
-      const projectMetrics: ProjectMetricsDatum[] = [];
-      for (const p of projects) {
-        let d = 0, e = 0, bug = 0;
-        for (const s of p.stories) {
-          for (const a of s.assignments) {
-            const label = STATUS_LABEL_INLINE[a.status] ?? a.status;
-            pipelineMap.set(label, (pipelineMap.get(label) ?? 0) + 1);
-            for (const r of a.dailyRecords) {
-              d += r.designed;
-              e += r.executed;
-              bug += r.defects;
-            }
-          }
-        }
-        projectMetrics.push({ projectName: p.name, designed: d, executed: e, defects: bug });
-      }
-      const pipelineData: PipelineDatum[] = Array.from(pipelineMap.entries()).map(
-        ([label, count]) => ({ label, count }),
-      );
-
-      // ── Acumulado mensual: DailyRecords desde el 1° del mes hasta friday ──
-      const monthStart = startOfMonth(monday);
-      const monthlyRecords = await prisma.dailyRecord.findMany({
-        where: {
-          date: { gte: monthStart, lte: friday },
-          tester: { project: projectScope },
-          ...(clientIdFilter ? { tester: { project: { ...projectScope, clientId: clientIdFilter } } } : {}),
-        },
-        select: { date: true, designed: true, executed: true, defects: true },
-      });
-      const weekBuckets = new Map<string, WeekBucket>();
-      for (const r of monthlyRecords) {
-        const ws = startOfWeek(r.date, { weekStartsOn: 1 });
-        const key = ws.toISOString().slice(0, 10);
-        const label = `Sem ${getISOWeek(ws)}`;
-        const b = weekBuckets.get(key) ?? { label, designed: 0, executed: 0, defects: 0 };
-        b.designed += r.designed;
-        b.executed += r.executed;
-        b.defects += r.defects;
-        weekBuckets.set(key, b);
-      }
-      const sortedWeeks = [...weekBuckets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
-      const monthLabel = format(monday, "MMMM yyyy", { locale: es });
-
-      // Gráfico acumulado mensual como imagen PNG (los dashboard slides ya están en la plantilla)
-      let charts: { pipeline: Buffer; designedVsExecuted: Buffer; defects: Buffer; monthlyCumulative?: Buffer } | undefined;
-      try {
-        if (sortedWeeks.length > 0) {
-          const monthly = await buildMonthlyCumulativeBars(sortedWeeks, monthLabel);
-          // pipeline/dve/defects ya no se usan como imágenes (los dashboard slides los reemplazan)
-          // pero mantenemos el campo monthlyCumulative para la slide extra
-          charts = { pipeline: Buffer.alloc(0), designedVsExecuted: Buffer.alloc(0), defects: Buffer.alloc(0), monthlyCumulative: monthly };
-        }
-      } catch (chartErr) {
-        console.warn("Monthly chart generation failed:", chartErr);
-      }
-
-      const buffer = await buildWeeklyPptxBuffer({
-        weekStart: monday,
-        weekEnd: friday,
-        projects: projectSlides,
-        charts,
-      });
-
-      const isoWeek = monday.toISOString().slice(0, 10);
-      res.setHeader(
-        "Content-Type",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      );
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="Avance_Semanal_QA_${isoWeek}.pptx"`,
-      );
+      const buffer = await buildReportPptx(spec);
+      const iso = monday.toISOString().slice(0, 10);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+      res.setHeader("Content-Disposition", `attachment; filename="Informe_QA_Semanal_${iso}.pptx"`);
       res.send(buffer);
     } catch (err) {
       console.error("weekly-pptx error:", err);
