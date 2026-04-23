@@ -1,0 +1,15 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="qm-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#04E5F3"/>
+      <stop offset="45%" stop-color="#08ACF4"/>
+      <stop offset="100%" stop-color="#25CF6C"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#qm-bg)"/>
+  <rect x="14" y="38" width="8" height="14" rx="2" fill="white" opacity="0.75"/>
+  <rect x="28" y="28" width="8" height="24" rx="2" fill="white" opacity="0.9"/>
+  <rect x="42" y="18" width="8" height="34" rx="2" fill="white"/>
+  <path d="M16 30 L24 22 L34 28 L50 14" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  <circle cx="50" cy="14" r="2.5" fill="white"/>
+</svg>

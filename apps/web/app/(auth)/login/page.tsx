@@ -17,7 +17,8 @@ export default function LoginPage() {
 
   // Prefill remembered email on mount
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? localStorage.getItem("rememberedEmail") : null;
+    const saved =
+      typeof window !== "undefined" ? localStorage.getItem("rememberedEmail") : null;
     if (saved) {
       setEmail(saved);
       setRemember(true);
@@ -35,7 +36,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
       await login(email, password);
       if (remember) localStorage.setItem("rememberedEmail", email);
@@ -43,11 +43,8 @@ export default function LoginPage() {
       window.location.href = "/dashboard";
       return;
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Credenciales incorrectas");
-      }
+      if (err instanceof ApiError) setError(err.message);
+      else setError("Credenciales incorrectas");
     } finally {
       setLoading(false);
     }
@@ -55,205 +52,236 @@ export default function LoginPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-500">Cargando...</p>
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "#0A0F1A", fontFamily: "var(--font-inter), system-ui, sans-serif" }}
+      >
+        <p className="text-white/50 text-sm">Cargando...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-white">
-      {/* ── Top navbar ─────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 backdrop-blur-md bg-[rgba(13,27,42,0.7)] border-b border-white/10">
-        <div className="mx-auto max-w-[1400px] flex items-center justify-between px-6 lg:px-10 h-16">
-          <a href="#top" className="flex items-center" aria-label="Inicio">
-            <InovabizLogo className="h-7 w-auto" variant="white" />
-          </a>
-          <nav className="flex items-center gap-1 lg:gap-2">
-            <a
-              href="#funcionalidades"
-              className="hidden lg:inline-block px-3 py-2 text-[13px] font-medium uppercase tracking-[0.12em] text-[#8BA4C4] hover:text-white transition-colors"
-            >
-              Funcionalidades
-            </a>
-            <a
-              href="#roles"
-              className="hidden lg:inline-block px-3 py-2 text-[13px] font-medium uppercase tracking-[0.12em] text-[#8BA4C4] hover:text-white transition-colors"
-            >
-              Roles
-            </a>
-            <a
-              href="#contacto"
-              className="hidden lg:inline-block px-3 py-2 text-[13px] font-medium uppercase tracking-[0.12em] text-[#8BA4C4] hover:text-white transition-colors"
-            >
-              Contacto
-            </a>
-            <a
-              href="#login-form"
-              className="ml-2 inline-flex items-center px-4 py-2 rounded-sm border border-white/20 text-[12px] font-semibold uppercase tracking-[0.15em] text-white hover:bg-white/10 transition-colors"
-            >
-              Iniciar sesión
-            </a>
-          </nav>
-        </div>
+    <div
+      className="min-h-screen relative overflow-hidden text-white flex flex-col"
+      style={{
+        fontFamily: "var(--font-inter), system-ui, sans-serif",
+        background: "#0A0F1A",
+      }}
+    >
+      {/* ── Aurora blobs ───────────────────────────────────────── */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div
+          className="absolute -top-40 -right-40 w-[600px] h-[600px] rounded-full blur-[120px] opacity-30 animate-aurora-1"
+          style={{ background: "radial-gradient(circle, #04E5F3 0%, transparent 70%)" }}
+        />
+        <div
+          className="absolute top-[40%] -left-40 w-[500px] h-[500px] rounded-full blur-[120px] opacity-25 animate-aurora-2"
+          style={{ background: "radial-gradient(circle, #25CF6C 0%, transparent 70%)" }}
+        />
+        <div
+          className="absolute bottom-0 right-1/4 w-[450px] h-[450px] rounded-full blur-[120px] opacity-20 animate-aurora-3"
+          style={{ background: "radial-gradient(circle, #08ACF4 0%, transparent 70%)" }}
+        />
+      </div>
+
+      {/* ── Top bar: Inovabiz ──────────────────────────────────── */}
+      <header className="relative z-10 px-6 lg:px-10 py-6 flex items-center justify-between">
+        <a href="/" className="flex items-center gap-3" aria-label="Volver al inicio">
+          <InovabizLogo className="h-6 w-auto" variant="white" />
+        </a>
+        <a
+          href="/"
+          className="text-[13px] text-white/50 hover:text-white transition-colors inline-flex items-center gap-1.5"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Volver al inicio
+        </a>
       </header>
 
-      {/* ── Hero section ───────────────────────────────────────────── */}
-      <section id="top" className="flex flex-1 min-h-[calc(100vh-64px)]">
-        {/* ── Left Panel: Dark hero (landing pitch) ───────────────────── */}
-      <div
-        className="hidden lg:flex lg:w-[52%] relative overflow-hidden flex-col justify-between p-12"
-        style={{
-          background: "linear-gradient(160deg, #0D1B2A 0%, #1F3864 60%, #2E5FA3 100%)",
-        }}
-      >
-        {/* Decorative: dot grid */}
-        <div
-          className="absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)",
-            backgroundSize: "24px 24px",
-          }}
-        />
-        {/* Decorative: bar chart + line */}
-        <div className="absolute bottom-0 left-0 right-0 h-[60%] overflow-hidden pointer-events-none">
-          <div className="absolute bottom-0 left-0 right-0 flex items-end justify-center gap-[2px] px-16 opacity-[0.06]">
-            {[28, 35, 22, 45, 38, 55, 42, 60, 50, 72, 58, 78, 65, 85, 70, 90, 75, 92, 80, 95].map(
-              (h, i) => (
-                <div
-                  key={i}
-                  className="flex-1 bg-white rounded-t-[1px]"
-                  style={{ height: `${h}%`, animation: `fadeInUp 0.4s ease-out ${i * 0.06}s both` }}
-                />
-              )
-            )}
-          </div>
-          <svg className="absolute bottom-0 left-0 w-full h-full opacity-[0.08]" viewBox="0 0 800 400" preserveAspectRatio="none">
-            <polyline fill="none" stroke="white" strokeWidth="2" points="0,380 80,340 160,350 240,280 320,300 400,220 480,240 560,160 640,140 720,80 800,40" />
-          </svg>
-        </div>
-
-        {/* Top: kicker */}
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-8 h-[2px] bg-[#4A90D9]" />
-            <span className="text-[11px] uppercase tracking-[0.2em] text-[#4A90D9] font-medium">
-              La plataforma QA de Inovabiz
-            </span>
-          </div>
-        </div>
-
-        {/* Middle: headline + lead */}
-        <div className="relative z-10">
-          <h1
-            className="text-white text-5xl font-bold tracking-tight leading-[1.05]"
-            style={{ fontFamily: "var(--font-sans), system-ui, sans-serif" }}
-          >
-            QA Metrics
-          </h1>
-          <p className="mt-3 text-xl text-[#8BA4C4] font-light leading-snug max-w-md">
-            Métricas de calidad que hablan por tu equipo.
-          </p>
-          <div
-            className="mt-6 h-[2px] w-20 origin-left"
-            style={{
-              background: "linear-gradient(90deg, #4A90D9 0%, transparent 100%)",
-              animation: "slideIn 0.8s ease-out 0.3s both",
-            }}
-          />
-          <p className="mt-6 text-[#8BA4C4] text-sm font-light leading-relaxed max-w-md">
-            Centraliza la operación QA de todos tus proyectos en una sola plataforma. Dashboards en
-            tiempo real, reportes automáticos por cliente y visibilidad del trabajo real de cada
-            analista.
-          </p>
-        </div>
-
-        {/* Bottom: stats trio */}
-        <div className="relative z-10 grid grid-cols-3 gap-3">
-          {[
-            { n: "4", u: "roles", label: "RBAC granular" },
-            { n: "2", u: "modalidades", label: "Azure DevOps o Manual" },
-            { n: "∞", u: "clientes", label: "Multi-tenant real" },
-          ].map((s) => (
-            <div
-              key={s.u}
-              className="rounded-md border border-white/10 bg-white/[0.03] px-4 py-3 backdrop-blur-sm"
-            >
-              <div className="text-white text-2xl font-bold leading-none">
-                {s.n} <span className="text-[#4A90D9] text-sm font-semibold align-middle">{s.u}</span>
-              </div>
-              <div className="mt-2 text-[10px] uppercase tracking-[0.12em] text-[#8BA4C4]">
-                {s.label}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Right Panel: Login form ────────────────────────────── */}
-      <div id="login-form" className="flex-1 flex items-center justify-center p-8 lg:p-16 bg-white relative scroll-mt-16">
-        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#1F3864] to-transparent opacity-10 lg:hidden" />
-        <div className="w-full max-w-sm">
-          <div className="lg:hidden mb-10 text-center">
-            <h1 className="text-2xl font-bold tracking-[0.2em] uppercase text-[#1F3864]">QA Metrics</h1>
-            <p className="text-xs text-[#6b7280] mt-1 tracking-wide">Sistema de Metricas y Seguimiento QA</p>
-          </div>
-          <div className="mb-10" style={{ animation: "fadeInUp 0.4s ease-out both" }}>
-            <h2 className="text-2xl font-semibold text-[#1a1a2e] tracking-tight">Iniciar Sesion</h2>
-            <p className="mt-2 text-sm text-[#6b7280]">Ingresa tus credenciales para acceder al panel</p>
-          </div>
-          <form onSubmit={handleSubmit} className="space-y-8">
-            <div className="group" style={{ animation: "fadeInUp 0.4s ease-out 0.1s both" }}>
-              <label htmlFor="email" className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-[#6b7280] mb-3">Correo Electronico</label>
-              <div className="relative">
-                <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full px-0 py-3 bg-transparent text-[#1a1a2e] placeholder-[#c5c8ce] border-0 border-b-2 border-[#e2e4e8] focus:border-[#1F3864] focus:outline-none transition-colors duration-300 text-[15px]" placeholder="admin@qametrics.com" />
-                <div className="absolute bottom-0 left-1/2 w-0 h-[2px] bg-[#1F3864] transition-all duration-300 group-focus-within:left-0 group-focus-within:w-full" />
-              </div>
-            </div>
-            <div className="group" style={{ animation: "fadeInUp 0.4s ease-out 0.2s both" }}>
-              <label htmlFor="password" className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-[#6b7280] mb-3">Contrasena</label>
-              <div className="relative">
-                <input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-0 py-3 bg-transparent text-[#1a1a2e] placeholder-[#c5c8ce] border-0 border-b-2 border-[#e2e4e8] focus:border-[#1F3864] focus:outline-none transition-colors duration-300 text-[15px]" placeholder="••••••••" />
-                <div className="absolute bottom-0 left-1/2 w-0 h-[2px] bg-[#1F3864] transition-all duration-300 group-focus-within:left-0 group-focus-within:w-full" />
-              </div>
-            </div>
-            <div className="flex items-center gap-2" style={{ animation: "fadeInUp 0.4s ease-out 0.25s both" }}>
-              <input
-                id="remember"
-                type="checkbox"
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
-                className="w-4 h-4 rounded border-[#c5c8ce] text-[#1F3864] focus:ring-[#1F3864] focus:ring-offset-0"
+      {/* ── Main: centered card ────────────────────────────────── */}
+      <main className="relative z-10 flex-1 flex items-center justify-center px-6 py-10 lg:py-16">
+        <div className="w-full max-w-[440px]">
+          {/* Brand lockup */}
+          <div className="flex flex-col items-center mb-10" style={{ animation: "fadeInUp 0.5s ease-out both" }}>
+            <div className="relative">
+              <div
+                className="absolute inset-0 blur-2xl opacity-70"
+                style={{ background: "radial-gradient(circle, #04E5F3 0%, #25CF6C 60%, transparent 80%)" }}
               />
-              <label htmlFor="remember" className="text-xs text-[#6b7280] select-none cursor-pointer">
-                Recordar mi correo
-              </label>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icon.svg"
+                alt="QA Metrics"
+                className="relative w-16 h-16 rounded-2xl shadow-[0_16px_40px_-10px_rgba(4,229,243,0.45)]"
+              />
             </div>
-            {error && (
-              <div className="flex items-center gap-3 py-3 px-4 bg-[#FEF2F2] border-l-[3px] border-[#ef4444] text-[#ef4444] text-sm" style={{ animation: "slideIn 0.3s ease-out both" }}>
-                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                {error}
+            <h1 className="mt-6 text-[32px] font-bold tracking-tight leading-[1.05] text-center">
+              Bienvenido a{" "}
+              <span
+                className="italic text-transparent bg-clip-text"
+                style={{
+                  fontFamily: "var(--font-instrument-serif), serif",
+                  backgroundImage: "linear-gradient(135deg, #04E5F3 0%, #25CF6C 100%)",
+                }}
+              >
+                QA Metrics
+              </span>
+            </h1>
+            <p className="mt-3 text-[14px] text-white/55 text-center leading-relaxed max-w-sm">
+              Ingresa tus credenciales para acceder al panel de control.
+            </p>
+          </div>
+
+          {/* Form card */}
+          <div
+            className="relative rounded-2xl border border-white/10 p-7 lg:p-8 backdrop-blur-xl shadow-[0_40px_80px_-20px_rgba(4,229,243,0.15)]"
+            style={{
+              background: "linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.015) 100%)",
+              animation: "fadeInUp 0.5s ease-out 0.1s both",
+            }}
+          >
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Email */}
+              <div className="group">
+                <label
+                  htmlFor="email"
+                  className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-white/50 mb-2.5"
+                >
+                  Correo electrónico
+                </label>
+                <div className="relative">
+                  <svg
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-[#04E5F3] transition-colors"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <input
+                    id="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3 rounded-lg bg-white/[0.04] border border-white/10 text-white placeholder-white/30 focus:border-[#04E5F3]/50 focus:bg-white/[0.06] focus:outline-none focus:ring-4 focus:ring-[#04E5F3]/10 transition-all text-[14.5px]"
+                    placeholder="admin@qametrics.com"
+                  />
+                </div>
               </div>
-            )}
-            <div style={{ animation: "fadeInUp 0.4s ease-out 0.3s both" }}>
-              <button type="submit" disabled={loading} className="w-full py-3.5 px-6 bg-[#1F3864] text-white text-[13px] font-semibold uppercase tracking-[0.15em] hover:-translate-y-[1px] hover:shadow-lg hover:shadow-[rgba(31,56,100,0.25)] active:translate-y-0 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none">
-                {loading ? (
-                  <span className="inline-flex items-center gap-2">
-                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                    Verificando...
-                  </span>
-                ) : "Iniciar Sesion"}
+
+              {/* Password */}
+              <div className="group">
+                <label
+                  htmlFor="password"
+                  className="block text-[11px] font-semibold uppercase tracking-[0.15em] text-white/50 mb-2.5"
+                >
+                  Contraseña
+                </label>
+                <div className="relative">
+                  <svg
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30 group-focus-within:text-[#04E5F3] transition-colors"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <input
+                    id="password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-11 pr-4 py-3 rounded-lg bg-white/[0.04] border border-white/10 text-white placeholder-white/30 focus:border-[#04E5F3]/50 focus:bg-white/[0.06] focus:outline-none focus:ring-4 focus:ring-[#04E5F3]/10 transition-all text-[14.5px]"
+                    placeholder="••••••••"
+                  />
+                </div>
+              </div>
+
+              {/* Remember */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <div className="relative">
+                  <input
+                    id="remember"
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <div className="w-4 h-4 rounded border border-white/20 bg-white/[0.03] peer-checked:bg-[#04E5F3] peer-checked:border-[#04E5F3] transition-colors" />
+                  <svg
+                    className="absolute top-0 left-0 w-4 h-4 text-[#0A0F1A] opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <span className="text-[13px] text-white/60">Recordar mi correo</span>
+              </label>
+
+              {/* Error */}
+              {error && (
+                <div
+                  className="flex items-center gap-2.5 py-2.5 px-3.5 rounded-lg bg-[#DC2626]/10 border border-[#DC2626]/25 text-[#F87171] text-[13px]"
+                  style={{ animation: "slideIn 0.3s ease-out both" }}
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {error}
+                </div>
+              )}
+
+              {/* Submit */}
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-shimmer w-full relative py-3.5 rounded-lg text-[14px] font-semibold text-[#0A0F1A] transition-all hover:shadow-[0_0_40px_rgba(4,229,243,0.45)] hover:scale-[1.01] active:scale-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:scale-100"
+                style={{ background: "linear-gradient(135deg, #04E5F3 0%, #25CF6C 100%)" }}
+              >
+                <span className="relative z-10 inline-flex items-center justify-center gap-2 w-full">
+                  {loading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Verificando...
+                    </>
+                  ) : (
+                    <>
+                      Iniciar sesión
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </>
+                  )}
+                </span>
               </button>
-            </div>
-          </form>
-          <div className="mt-12 pt-6 border-t border-[#e2e4e8]" style={{ animation: "fadeInUp 0.4s ease-out 0.45s both" }}>
-            <p className="text-[11px] text-[#9ca3af] text-center tracking-wide">QA METRICS COMMAND CENTER</p>
+            </form>
+          </div>
+
+          {/* Footer: powered by Inovabiz */}
+          <div
+            className="mt-10 flex flex-col items-center gap-2"
+            style={{ animation: "fadeInUp 0.5s ease-out 0.3s both" }}
+          >
+            <span className="text-[10px] text-white/30 tracking-[0.22em] uppercase">Powered by</span>
+            <InovabizLogo className="h-5 w-auto opacity-70" variant="white" />
           </div>
         </div>
-      </div>
-      </section>
-      {/* Sections (funcionalidades, roles, contacto) vendrán en tasks siguientes */}
+      </main>
     </div>
   );
 }
