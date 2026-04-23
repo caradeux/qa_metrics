@@ -102,6 +102,13 @@ export interface PortfolioTrendPoint {
   defects: number;
 }
 
+export interface AnalystCapacityCurve {
+  userKey: string;                  // User.id si existe, else anon:testerId
+  testerName: string;
+  curve: ProjectOccupationCurve;
+  projects: string[];               // nombres de proyectos a los que contribuyó
+}
+
 export interface ReportSpec {
   period: ReportPeriod;
   periodStart: Date;
@@ -110,6 +117,8 @@ export interface ReportSpec {
   clientFilter: { id: string; name: string } | null;
   projects: ProjectReportData[];
   analysts: OccupationResult[];    // reutiliza tipo existente de occupation.ts
+  analystCurves: AnalystCapacityCurve[]; // curva por analista (agrupada por User)
+  teamCurve: ProjectOccupationCurve;     // curva consolidada del equipo
   portfolio: {
     kpis: PortfolioKpis;
     pipeline: ProjectPipeline[];

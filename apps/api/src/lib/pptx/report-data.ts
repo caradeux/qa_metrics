@@ -88,6 +88,7 @@ import { loadHolidaySet } from "../workdays.js";
 import { computeOccupationBatch, aggregateOccupationByUser } from "../occupation.js";
 import {
   aggregateOccupationCurve,
+  sumCurves,
   type BucketingMode,
   type PhaseSegment,
   type ActivityRef,
@@ -104,6 +105,7 @@ import type {
   ProjectPipeline,
   PortfolioTrendPoint,
   ComplexityLevel,
+  AnalystCapacityCurve,
 } from "./types.js";
 import { PALETTE } from "./theme.js";
 
@@ -250,6 +252,9 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
     allDailyRecordsByTester.set(r.testerId, list);
   }
 
+  // Map testerId → ProjectOccupationCurve[] (una entry por proyecto donde trabajó).
+  const perTesterCurves = new Map<string, import("./types.js").ProjectOccupationCurve[]>();
+
   const projects: ProjectReportData[] = loaded.map((p) => {
     const testersRefs: TesterRef[] = p.testers.map((t) => ({
       id: t.id,
@@ -346,6 +351,26 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       assignments: assignmentsInfo,
       asOfDate: new Date(),
     });
+
+    // Curvas per-tester para este proyecto (una por cada Tester del proyecto).
+    for (const tRef of testersRefs) {
+      const testerCurve = aggregateOccupationCurve({
+        projectId: p.id,
+        from: periodStart,
+        to: periodEnd,
+        bucketing: bucketingFor(period),
+        testers: [tRef],
+        phaseSegments,
+        activities: activitiesForProject,
+        holidaysMs,
+        dailyRecords: dailyRecordsForCurve,
+        assignments: assignmentsInfo,
+        asOfDate: new Date(),
+      });
+      const arr = perTesterCurves.get(tRef.id) ?? [];
+      arr.push(testerCurve);
+      perTesterCurves.set(tRef.id, arr);
+    }
 
     const hus: HuRow[] = [];
     const bubbles: ComplexityBubble[] = [];
@@ -510,6 +535,43 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
   }
   const totalAnalysts = uniquePeople.size;
 
+  // ═══════════════════════════════════════════════════════════════
+  // Curvas por analista (agrupadas por User.id) + curva consolidada del equipo
+  // ═══════════════════════════════════════════════════════════════
+  const testerIdToUserKey = new Map<string, string>();
+  const testerIdToName = new Map<string, string>();
+  const testerIdToProjects = new Map<string, Set<string>>();
+  for (const p of loaded) {
+    for (const t of p.testers) {
+      testerIdToUserKey.set(t.id, t.userId ?? `anon:${t.id}`);
+      testerIdToName.set(t.id, t.name);
+      const set = testerIdToProjects.get(t.id) ?? new Set<string>();
+      set.add(p.name);
+      testerIdToProjects.set(t.id, set);
+    }
+  }
+  // Agrupar curves por userKey.
+  const curvesByUser = new Map<string, { name: string; curves: import("./types.js").ProjectOccupationCurve[]; projects: Set<string> }>();
+  for (const [testerId, curves] of perTesterCurves.entries()) {
+    const userKey = testerIdToUserKey.get(testerId) ?? `anon:${testerId}`;
+    const name = testerIdToName.get(testerId) ?? "—";
+    const entry = curvesByUser.get(userKey) ?? { name, curves: [], projects: new Set<string>() };
+    entry.curves.push(...curves);
+    for (const projName of testerIdToProjects.get(testerId) ?? new Set<string>()) {
+      entry.projects.add(projName);
+    }
+    curvesByUser.set(userKey, entry);
+  }
+  const analystCurves: AnalystCapacityCurve[] = Array.from(curvesByUser.entries()).map(([userKey, { name, curves, projects: projSet }]) => ({
+    userKey,
+    testerName: name,
+    curve: sumCurves(curves),
+    projects: Array.from(projSet).sort(),
+  }));
+
+  // Team curve: suma de las curvas de todos los proyectos.
+  const teamCurve = sumCurves(projects.map((p) => p.occupationCurve));
+
   return {
     period,
     periodStart,
@@ -518,6 +580,8 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
     clientFilter,
     projects,
     analysts,
+    analystCurves,
+    teamCurve,
     portfolio: {
       kpis: {
         designed: portD,

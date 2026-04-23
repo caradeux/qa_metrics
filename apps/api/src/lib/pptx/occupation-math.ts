@@ -465,3 +465,42 @@ export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupati
 
   return { buckets, bands };
 }
+
+/**
+ * Suma varias curvas que comparten el mismo array de buckets (mismos labels
+ * en el mismo orden). Retorna una curva nueva con las bandas sumadas
+ * bucket-a-bucket y la capacidad acumulada también sumada.
+ */
+export function sumCurves(curves: readonly ProjectOccupationCurve[]): ProjectOccupationCurve {
+  if (curves.length === 0) {
+    return { buckets: [], bands: [] };
+  }
+  // Tomar buckets del primero como referencia (todos deberían alinear).
+  const first = curves[0]!;
+  const buckets: OccupationBucket[] = first.buckets.map((b) => ({ label: b.label, capacityHours: 0 }));
+  const bandMap = new Map<OccupationBandLabel, { label: OccupationBandLabel; colorHex: string; values: number[] }>();
+  for (const b of first.bands) {
+    bandMap.set(b.label, { label: b.label, colorHex: b.colorHex, values: new Array(buckets.length).fill(0) });
+  }
+  for (const c of curves) {
+    for (let i = 0; i < c.buckets.length; i++) {
+      if (i >= buckets.length) break;
+      buckets[i]!.capacityHours += c.buckets[i]!.capacityHours;
+    }
+    for (const band of c.bands) {
+      const entry = bandMap.get(band.label);
+      if (!entry) continue;
+      for (let i = 0; i < band.values.length; i++) {
+        if (i >= entry.values.length) break;
+        entry.values[i]! += band.values[i]!;
+      }
+    }
+  }
+  return {
+    buckets: buckets.map((b) => ({ label: b.label, capacityHours: Math.round(b.capacityHours * 100) / 100 })),
+    bands: Array.from(bandMap.values()).map((b) => ({
+      ...b,
+      values: b.values.map((v) => Math.round(v * 100) / 100),
+    })),
+  };
+}
