@@ -13,6 +13,8 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/icon") ||
     pathname.startsWith("/apple-icon") ||
     pathname === "/favicon.ico" ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
     pathname === "/"
   ) {
     return NextResponse.next();
