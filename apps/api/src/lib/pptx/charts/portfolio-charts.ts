@@ -38,9 +38,36 @@ export async function buildPipelineDonut(pipeline: ProjectPipeline[]): Promise<B
   return canvas.renderToBuffer(cfg, "image/png");
 }
 
+// Plugin custom para dibujar el valor de cada barra encima de ella.
+const barDataLabelsPlugin = {
+  id: "barDataLabels",
+  afterDatasetsDraw(chart: any) {
+    const ctx: CanvasRenderingContext2D = chart.ctx;
+    ctx.save();
+    ctx.font = `bold 14px ${FONT_FAMILY}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    chart.data.datasets.forEach((dataset: any, di: number) => {
+      const meta = chart.getDatasetMeta(di);
+      meta.data.forEach((bar: any, i: number) => {
+        const value = dataset.data[i] as number;
+        if (value === null || value === undefined) return;
+        ctx.fillStyle = dataset.backgroundColor as string;
+        ctx.fillText(String(value), bar.x, bar.y - 4);
+      });
+    });
+    ctx.restore();
+  },
+};
+
 export async function buildComparisonBars(
   data: Array<{ projectName: string; designed: number; executed: number }>,
 ): Promise<Buffer> {
+  // Calcular totales para subtítulo.
+  const totD = data.reduce((s, d) => s + d.designed, 0);
+  const totE = data.reduce((s, d) => s + d.executed, 0);
+  const ratio = totD > 0 ? Math.round((totE / totD) * 100) : 0;
+
   const cfg: ChartConfiguration<"bar"> = {
     type: "bar",
     data: {
@@ -62,19 +89,36 @@ export async function buildComparisonBars(
     },
     options: {
       responsive: false,
+      layout: { padding: { top: 36 } },
       plugins: {
         title: {
-          display: true, text: "Diseñados vs Ejecutados por proyecto",
+          display: true,
+          text: [
+            "Diseñados vs Ejecutados por proyecto",
+            `Total: ${totD} diseñados · ${totE} ejecutados · ${ratio}% ratio`,
+          ],
           font: { size: 22, weight: "bold", family: FONT_FAMILY },
-          color: `#${PALETTE.textPrimary}`, padding: { top: 12, bottom: 18 },
+          color: `#${PALETTE.textPrimary}`,
+          padding: { top: 12, bottom: 18 },
         },
-        legend: { position: "top", labels: { font: { size: 14, family: FONT_FAMILY }, color: `#${PALETTE.textPrimary}` } },
+        legend: {
+          position: "top",
+          labels: { font: { size: 14, family: FONT_FAMILY }, color: `#${PALETTE.textPrimary}` },
+        },
       },
       scales: {
-        x: { ticks: { font: { size: 12, family: FONT_FAMILY }, color: `#${PALETTE.textPrimary}`, maxRotation: 35 }, grid: { display: false } },
-        y: { beginAtZero: true, ticks: { font: { size: 12, family: FONT_FAMILY }, color: `#${PALETTE.textMuted}` }, grid: { color: "rgba(107,114,128,0.18)" } },
+        x: {
+          ticks: { font: { size: 12, family: FONT_FAMILY }, color: `#${PALETTE.textPrimary}`, maxRotation: 35 },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { font: { size: 12, family: FONT_FAMILY }, color: `#${PALETTE.textMuted}` },
+          grid: { color: "rgba(107,114,128,0.18)" },
+        },
       },
     },
+    plugins: [barDataLabelsPlugin],
   };
   return canvas.renderToBuffer(cfg, "image/png");
 }
