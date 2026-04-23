@@ -139,3 +139,95 @@ describe("splitTransversalActivityHours", () => {
     expect(outP).toBe(2);
   });
 });
+
+import { aggregateOccupationCurve } from "../lib/pptx/occupation-math.js";
+
+describe("aggregateOccupationCurve (integración de formulas §5.1)", () => {
+  it("proyecto con 1 tester, 5 días L-V, fase EXECUTION todo el tiempo, sin activities → banda EXECUTION=40h, resto=0", () => {
+    const from = new Date(Date.UTC(2026, 3, 13)); // lunes
+    const to = new Date(Date.UTC(2026, 3, 17, 23, 59, 59)); // viernes
+    const out = aggregateOccupationCurve({
+      projectId: "P",
+      from,
+      to,
+      bucketing: "daily",
+      testers: [{ id: "T1", allocation: 100, projectIdsActive: ["P"] }],
+      phaseSegments: [
+        { testerId: "T1", projectId: "P", type: "EXECUTION", start: from, end: to },
+      ],
+      activities: [],
+      holidaysMs: new Set(),
+    });
+    expect(out.buckets).toHaveLength(5);
+    const byLabel = Object.fromEntries(out.bands.map((b) => [b.label, b.values.reduce((s, v) => s + v, 0)]));
+    expect(byLabel["Ejecución"]).toBeCloseTo(40, 5);
+    expect(byLabel["Reunión con usuario"]).toBe(0);
+    expect(byLabel["Productivas no imputadas"]).toBe(0);
+  });
+
+  it("proyecto con 1 tester, 1 día, 2h reunión con usuario + fase EXECUTION → EXECUTION=6h, reunión=2h", () => {
+    const mon = new Date(Date.UTC(2026, 3, 13));
+    const end = new Date(Date.UTC(2026, 3, 13, 23, 59, 59));
+    const out = aggregateOccupationCurve({
+      projectId: "P",
+      from: mon,
+      to: end,
+      bucketing: "daily",
+      testers: [{ id: "T1", allocation: 100, projectIdsActive: ["P"] }],
+      phaseSegments: [
+        { testerId: "T1", projectId: "P", type: "EXECUTION", start: mon, end },
+      ],
+      activities: [
+        {
+          testerId: "T1",
+          categoryName: "Reunión con usuario",
+          assignmentProjectId: "P",
+          start: new Date(Date.UTC(2026, 3, 13, 9)),
+          end: new Date(Date.UTC(2026, 3, 13, 11)),
+        },
+      ],
+      holidaysMs: new Set(),
+    });
+    const totals = Object.fromEntries(out.bands.map((b) => [b.label, b.values.reduce((s, v) => s + v, 0)]));
+    expect(totals["Ejecución"]).toBeCloseTo(6, 5);
+    expect(totals["Reunión con usuario"]).toBeCloseTo(2, 5);
+  });
+
+  it("sin phases activas pero con productiveHours → banda 'Productivas no imputadas'", () => {
+    const mon = new Date(Date.UTC(2026, 3, 13));
+    const end = new Date(Date.UTC(2026, 3, 13, 23, 59, 59));
+    const out = aggregateOccupationCurve({
+      projectId: "P",
+      from: mon,
+      to: end,
+      bucketing: "daily",
+      testers: [{ id: "T1", allocation: 100, projectIdsActive: ["P"] }],
+      phaseSegments: [],
+      activities: [],
+      holidaysMs: new Set(),
+    });
+    const totals = Object.fromEntries(out.bands.map((b) => [b.label, b.values.reduce((s, v) => s + v, 0)]));
+    expect(totals["Productivas no imputadas"]).toBeCloseTo(8, 5);
+    expect(totals["Ejecución"]).toBe(0);
+  });
+
+  it("capacityHours por bucket refleja la capacidad total del proyecto", () => {
+    const mon = new Date(Date.UTC(2026, 3, 13));
+    const fri = new Date(Date.UTC(2026, 3, 17, 23, 59, 59));
+    const out = aggregateOccupationCurve({
+      projectId: "P",
+      from: mon,
+      to: fri,
+      bucketing: "daily",
+      testers: [
+        { id: "T1", allocation: 100, projectIdsActive: ["P"] },
+        { id: "T2", allocation: 50, projectIdsActive: ["P"] },
+      ],
+      phaseSegments: [],
+      activities: [],
+      holidaysMs: new Set(),
+    });
+    // Cada día: capacity = 8h + 4h = 12h
+    expect(out.buckets.every((b) => b.capacityHours === 12)).toBe(true);
+  });
+});
