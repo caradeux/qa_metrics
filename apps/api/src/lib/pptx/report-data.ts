@@ -482,7 +482,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
 
   // Ocupación por analista (anexo interno).
   const includeInternalAppendix = userRole !== "CLIENT_PM";
-  let analysts: Awaited<ReturnType<typeof computeOccupationBatch>> = [];
+  let rawAnalysts: Awaited<ReturnType<typeof computeOccupationBatch>> = [];
   if (includeInternalAppendix && testerIds.length > 0) {
     if (userRole === "QA_ANALYST") {
       const mine = await prisma.tester.findMany({
@@ -490,11 +490,55 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
         select: { id: true },
       });
       const myTesterIds = mine.map((m) => m.id);
-      analysts = await computeOccupationBatch(myTesterIds, periodStart, periodEnd);
+      rawAnalysts = await computeOccupationBatch(myTesterIds, periodStart, periodEnd);
     } else {
-      analysts = await computeOccupationBatch(testerIds, periodStart, periodEnd);
+      rawAnalysts = await computeOccupationBatch(testerIds, periodStart, periodEnd);
     }
   }
+
+  // Dedupe: computeOccupationBatch devuelve un resultado POR Tester (entidad
+  // por proyecto). Un mismo User asignado a 3 proyectos genera 3 Testers y
+  // por lo tanto 3 slides. Agrupamos por User.id y sumamos horas para que
+  // aparezca UN slide por persona.
+  const testerIdToUserId = new Map<string, string | null>();
+  for (const p of loaded) {
+    for (const t of p.testers) {
+      testerIdToUserId.set(t.id, t.userId ?? null);
+    }
+  }
+  const byPerson = new Map<string, typeof rawAnalysts[number]>();
+  for (const a of rawAnalysts) {
+    const uid = testerIdToUserId.get(a.testerId) ?? null;
+    const key = uid ?? `anon:${a.testerId}`;
+    const prev = byPerson.get(key);
+    if (!prev) {
+      byPerson.set(key, { ...a, byCategory: [...a.byCategory], byAbsence: [...a.byAbsence], byAssignment: [...a.byAssignment] });
+      continue;
+    }
+    prev.nominalCapacityHours = Math.round((prev.nominalCapacityHours + a.nominalCapacityHours) * 100) / 100;
+    prev.absenceHours = Math.round((prev.absenceHours + a.absenceHours) * 100) / 100;
+    prev.capacityHours = Math.round((prev.capacityHours + a.capacityHours) * 100) / 100;
+    prev.activityHours = Math.round((prev.activityHours + a.activityHours) * 100) / 100;
+    prev.productiveHoursEstimate = Math.round((prev.productiveHoursEstimate + a.productiveHoursEstimate) * 100) / 100;
+    // Merge breakdowns por id/key.
+    const mergeInto = <T extends { hours: number }>(target: T[], incoming: T[], keyFn: (x: T) => string) => {
+      for (const item of incoming) {
+        const k = keyFn(item);
+        const existing = target.find((t) => keyFn(t) === k);
+        if (existing) existing.hours = Math.round((existing.hours + item.hours) * 100) / 100;
+        else target.push({ ...item });
+      }
+    };
+    mergeInto(prev.byCategory, a.byCategory, (x) => x.categoryId);
+    mergeInto(prev.byAbsence, a.byAbsence, (x) => x.categoryId);
+    mergeInto(prev.byAssignment, a.byAssignment, (x) => x.assignmentId);
+    // Recalcular ocupación y overallocated.
+    prev.occupationPct = prev.capacityHours > 0
+      ? Math.round(Math.min(100, (prev.activityHours + prev.productiveHoursEstimate) / prev.capacityHours * 100) * 100) / 100
+      : 0;
+    prev.overallocated = prev.activityHours > prev.capacityHours;
+  }
+  const analysts = Array.from(byPerson.values());
 
   // Conteo de analistas únicos por PERSONA (userId), no por Tester entity.
   // Un mismo analista asignado a 3 proyectos son 3 Testers pero 1 persona.
