@@ -110,6 +110,75 @@ function cellEquals(a: CellValue, b: CellValue) {
   );
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  REGISTERED: "No Iniciado",
+  ANALYSIS: "En Diseño (Análisis)",
+  TEST_DESIGN: "En Diseño",
+  WAITING_QA_DEPLOY: "Pdte. Instalación QA",
+  EXECUTION: "En Curso",
+  RETURNED_TO_DEV: "Devuelto a Desarrollo",
+  WAITING_UAT: "Pdte. Aprobación",
+  UAT: "Pdte. Aprobación",
+  PRODUCTION: "Completado",
+  ON_HOLD: "Detenido",
+};
+
+interface Mismatch {
+  storyTitle: string;
+  statusLabel: string;
+  date: string;
+  fields: string[];
+  reason: string;
+}
+
+function detectMismatchesForCell(
+  status: string,
+  cell: CellValue,
+): { fields: string[]; reason: string } | null {
+  const hasDesigned = cell.designed > 0;
+  const hasExecuted = cell.executed > 0;
+  const hasDefects = cell.defects > 0;
+  const hasAny = hasDesigned || hasExecuted || hasDefects;
+  if (!hasAny) return null;
+
+  const touched: string[] = [];
+  if (hasDesigned) touched.push("Diseñados");
+  if (hasExecuted) touched.push("Ejecutados");
+  if (hasDefects) touched.push("Defectos");
+
+  switch (status) {
+    case "REGISTERED":
+      return { fields: touched, reason: "La HU está en estado 'No Iniciado'. ¿Corresponde registrar carga?" };
+    case "ANALYSIS":
+    case "TEST_DESIGN":
+      if (hasExecuted || hasDefects) {
+        return { fields: touched.filter((f) => f !== "Diseñados"), reason: "La HU está en 'En Diseño'. Cargaste ejecución o defectos — ¿cambió de estado?" };
+      }
+      return null;
+    case "EXECUTION":
+      if (hasDesigned) {
+        return { fields: ["Diseñados"], reason: "La HU está 'En Curso' (ejecución). Cargaste diseño — ¿está rediseñando casos?" };
+      }
+      return null;
+    case "WAITING_QA_DEPLOY":
+      return { fields: touched, reason: "La HU está pendiente de instalación en QA. ¿Ya está desplegada?" };
+    case "RETURNED_TO_DEV":
+      if (hasDesigned) {
+        return { fields: ["Diseñados"], reason: "La HU está 'Devuelta a Desarrollo'. Cargaste diseño — revisar." };
+      }
+      return null;
+    case "WAITING_UAT":
+    case "UAT":
+      return { fields: touched, reason: "La HU está pendiente de aprobación del usuario. ¿Corresponde nueva carga?" };
+    case "PRODUCTION":
+      return { fields: touched, reason: "La HU ya está 'Completada' (en Producción). ¿Corresponde nueva carga?" };
+    case "ON_HOLD":
+      return { fields: touched, reason: "La HU está 'Detenida'. ¿Corresponde carga?" };
+    default:
+      return null;
+  }
+}
+
 export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
   const monday = startOfWeek(weekStart, { weekStartsOn: 1 });
   const mondayStr = format(monday, "yyyy-MM-dd");
@@ -120,6 +189,7 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [pendingMismatches, setPendingMismatches] = useState<Mismatch[] | null>(null);
 
   const load = () => {
     setError(null);
@@ -171,7 +241,33 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
     });
   };
 
-  const save = async () => {
+  // Calcula las inconsistencias entre la carga y el estado actual de cada HU.
+  // Solo chequea celdas modificadas (diff vs initial).
+  const collectMismatches = (): Mismatch[] => {
+    if (!data) return [];
+    const out: Mismatch[] = [];
+    for (const a of data.assignments) {
+      for (const day of data.days) {
+        if (day.isHoliday || day.isFuture) continue;
+        if (!a.activeOnDates.includes(day.date)) continue;
+        const cur = getCell(a.id, day.date);
+        const init = initial[a.id]?.[day.date] ?? EMPTY_CELL;
+        if (cellEquals(cur, init)) continue;
+        const issue = detectMismatchesForCell(a.status, cur);
+        if (!issue) continue;
+        out.push({
+          storyTitle: (a.story.externalId ? `${a.story.externalId} · ` : "") + a.story.title,
+          statusLabel: STATUS_LABEL[a.status] ?? a.status,
+          date: day.date,
+          fields: issue.fields,
+          reason: issue.reason,
+        });
+      }
+    }
+    return out;
+  };
+
+  const persist = async () => {
     if (!data) return;
     setSaving(true);
     setError(null);
@@ -212,6 +308,16 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const save = async () => {
+    if (!data) return;
+    const issues = collectMismatches();
+    if (issues.length > 0) {
+      setPendingMismatches(issues);
+      return;
+    }
+    await persist();
   };
 
   if (!data) {
@@ -479,6 +585,67 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
           </span>
         )}
       </div>
+
+      {pendingMismatches && pendingMismatches.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="flex items-start gap-3 border-b border-gray-200 bg-amber-50 px-5 py-4">
+              <svg className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-600" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Revisar carga antes de guardar</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  Encontramos {pendingMismatches.length} posible{pendingMismatches.length !== 1 ? "s" : ""} inconsistencia{pendingMismatches.length !== 1 ? "s" : ""} entre la carga y el estado actual de las HU. Revisa y confirma si corresponde.
+                </p>
+              </div>
+            </div>
+            <div className="max-h-[55vh] overflow-y-auto px-5 py-4">
+              <ul className="space-y-3">
+                {pendingMismatches.map((m, i) => (
+                  <li key={`${m.storyTitle}-${m.date}-${i}`} className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate" title={m.storyTitle}>
+                          {m.storyTitle}
+                        </p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          Estado de la HU: <span className="font-medium text-gray-700">{m.statusLabel}</span> · Fecha: {m.date}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {m.fields.map((f) => (
+                          <span key={f} className="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm text-gray-700">{m.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-200 bg-gray-50 px-5 py-3">
+              <button
+                onClick={() => setPendingMismatches(null)}
+                className="rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Revisar la carga
+              </button>
+              <button
+                onClick={async () => {
+                  setPendingMismatches(null);
+                  await persist();
+                }}
+                className="rounded bg-[#1F3864] px-4 py-2 text-sm font-medium text-white hover:bg-[#2E5FA3]"
+              >
+                Guardar de todas formas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
