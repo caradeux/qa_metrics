@@ -201,11 +201,22 @@ const STATUS_BAND_MAP: Record<string, OccupationBandLabel | null> = {
   ON_HOLD: "Detenido",
 };
 
+// Mapeo de categorías de Activity a bandas del chart. Incluye nombres
+// canónicos del seed + variantes observadas en producción (UDD).
 const ACTIVITY_BAND_MAP: Record<string, OccupationBandLabel> = {
+  // Canónicos del seed
   "Reunión con usuario": "Reunión con usuario",
   "Reunión con desarrollo": "Reunión con desarrollo",
   "Inducción": "Inducción/Capacitación",
   "Capacitación": "Inducción/Capacitación",
+  // Variantes de producción (UDD)
+  "Daily Scrum": "Reunión con desarrollo",
+  "Capacitacion Inovabiz": "Inducción/Capacitación",
+  "Capacitación Inovabiz": "Inducción/Capacitación",
+  "Aceptacion Casos de Prueba (Presentacion Usuarios)": "Reunión con usuario",
+  "Aceptación Casos de Prueba (Presentación Usuarios)": "Reunión con usuario",
+  "Presentacion Usuarios (UAT)": "Reunión con usuario",
+  "Presentación Usuarios (UAT)": "Reunión con usuario",
 };
 
 function iterDays(from: Date, to: Date): Date[] {

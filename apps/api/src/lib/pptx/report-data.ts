@@ -387,15 +387,25 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       let trainingHours = 0;
       let userMeetingHours = 0;
       let devMeetingHours = 0;
+      const TRAINING_NAMES = new Set([
+        "Inducción", "Induccion", "Capacitación", "Capacitacion",
+        "Capacitacion Inovabiz", "Capacitación Inovabiz",
+      ]);
+      const USER_MEETING_NAMES = new Set([
+        "Reunión con usuario", "Reunion con usuario",
+        "Aceptacion Casos de Prueba (Presentacion Usuarios)",
+        "Aceptación Casos de Prueba (Presentación Usuarios)",
+        "Presentacion Usuarios (UAT)", "Presentación Usuarios (UAT)",
+      ]);
+      const DEV_MEETING_NAMES = new Set([
+        "Reunión con desarrollo", "Reunion con desarrollo",
+        "Daily Scrum",
+      ]);
       for (const a of s.assignments) {
         for (const act of activitiesByAssignment.get(a.id) ?? []) {
-          if (act.categoryName === "Inducción" || act.categoryName === "Capacitación") {
-            trainingHours += act.hours;
-          } else if (act.categoryName === "Reunión con usuario") {
-            userMeetingHours += act.hours;
-          } else if (act.categoryName === "Reunión con desarrollo") {
-            devMeetingHours += act.hours;
-          }
+          if (TRAINING_NAMES.has(act.categoryName)) trainingHours += act.hours;
+          else if (USER_MEETING_NAMES.has(act.categoryName)) userMeetingHours += act.hours;
+          else if (DEV_MEETING_NAMES.has(act.categoryName)) devMeetingHours += act.hours;
         }
       }
 
