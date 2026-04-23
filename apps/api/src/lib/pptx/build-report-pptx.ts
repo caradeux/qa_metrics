@@ -1,4 +1,4 @@
-import PptxGenJS from "pptxgenjs";
+import PptxGenJSImport from "pptxgenjs";
 import type { ReportSpec } from "./types.js";
 import { SLIDE } from "./theme.js";
 import { addCoverSlide } from "./slides/cover.js";
@@ -13,6 +13,13 @@ import { addPortfolioTrendSlide } from "./slides/portfolio-trend.js";
 import { addAppendixDividerSlide } from "./slides/appendix-divider.js";
 import { addAnalystDetailSlide } from "./slides/analyst-detail.js";
 import { addClosingSlide } from "./slides/closing.js";
+
+// pptxgenjs es CJS: según el loader (node ESM vs tsx/esbuild) el default
+// llega como la clase directamente o anidado en `.default`. Normalizamos.
+const PptxGenJS: typeof PptxGenJSImport =
+  typeof (PptxGenJSImport as any) === "function"
+    ? (PptxGenJSImport as any)
+    : ((PptxGenJSImport as any).default ?? PptxGenJSImport);
 
 export async function buildReportPptx(spec: ReportSpec): Promise<Buffer> {
   const pres = new PptxGenJS();
