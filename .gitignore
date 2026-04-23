@@ -58,6 +58,9 @@ yarn-error.log*
 # Worktrees locales
 .worktrees/
 
+# Generados locales de prueba de PPTX
+tmp-pptx/
+
 # Misc
 *.pem
 next-env.d.ts
