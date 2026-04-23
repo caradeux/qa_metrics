@@ -417,109 +417,33 @@ router.get(
   requirePermission("reports", "read") as any,
   async (req: AuthRequest, res: Response) => {
     try {
+      const { buildReportSpec, buildProjectScope } = await import("../lib/pptx/report-data.js");
+      const { buildReportPptx } = await import("../lib/pptx/build-report-pptx.js");
+
       const monthParam = (req.query.month as string | undefined) ?? format(new Date(), "yyyy-MM");
       const clientIdFilter = req.query.clientId as string | undefined;
-      const monthDate = new Date(`${monthParam}-01T00:00:00`);
-      const monthStartD = startOfMonth(monthDate);
-      const monthEndD = endOfMonth(monthDate);
+      const monthDate = new Date(`${monthParam}-01T00:00:00Z`);
+      const periodStart = startOfMonth(monthDate);
+      const periodEnd = endOfMonth(monthDate);
 
-      const projectScope: any = {};
-      if (isClientPm(req)) {
-        projectScope.id = { in: await clientPmProjectIds(req.user!.id) };
-      } else if (isAnalyst(req)) {
-        projectScope.id = { in: await analystProjectIds(req.user!.id) };
-      } else {
-        projectScope.client = { userId: req.user!.id };
-      }
-      if (clientIdFilter) projectScope.clientId = clientIdFilter;
+      const scope = await buildProjectScope(req, clientIdFilter);
+      const clientRecord = clientIdFilter
+        ? await prisma.client.findUnique({ where: { id: clientIdFilter }, select: { id: true, name: true } })
+        : null;
 
-      const projects = await prisma.project.findMany({
-        where: {
-          ...projectScope,
-          stories: { some: { assignments: { some: { status: { in: [...ACTIVE_OR_UAT] } } } } },
-        },
-        select: {
-          id: true, name: true,
-          client: { select: { name: true } },
-          projectManager: { select: { name: true } },
-          testers: { select: { id: true, name: true, allocation: true }, orderBy: { allocation: "desc" } },
-          stories: {
-            select: {
-              id: true, title: true, externalId: true,
-              assignments: {
-                where: { status: { in: [...ACTIVE_OR_UAT] } },
-                select: {
-                  id: true, status: true, testerId: true,
-                  dailyRecords: {
-                    where: { date: { gte: monthStartD, lte: monthEndD } },
-                    select: { date: true, designed: true, executed: true, defects: true },
-                  },
-                },
-              },
-            },
-          },
-        },
-        orderBy: { name: "asc" },
+      const spec = await buildReportSpec({
+        period: "monthly",
+        periodStart,
+        periodEnd,
+        scope,
+        clientFilter: clientRecord ? { id: clientRecord.id, name: clientRecord.name } : null,
+        userRole: req.user!.role.name,
+        userId: req.user!.id,
       });
 
-      const projectSlides: WeeklyProjectSlide[] = projects.map((p) => {
-        const testerHits = new Map<string, number>();
-        for (const s of p.stories) for (const a of s.assignments) testerHits.set(a.testerId, (testerHits.get(a.testerId) ?? 0) + 1);
-        let dominantTesterId: string | null = null, maxHits = 0;
-        for (const [tid, hits] of testerHits) if (hits > maxHits) { maxHits = hits; dominantTesterId = tid; }
-        const dt = p.testers.find((t) => t.id === dominantTesterId) ?? p.testers[0] ?? null;
-        const hus = p.stories.filter((s) => s.assignments.length > 0).map((s) => {
-          const flat = s.assignments.flatMap((a) => a.dailyRecords);
-          const designed = flat.reduce((s, r) => s + r.designed, 0);
-          const executed = flat.reduce((s, r) => s + r.executed, 0);
-          const defects = flat.reduce((s, r) => s + r.defects, 0);
-          const title = s.externalId ? `${s.externalId} — ${s.title}` : s.title;
-          return { title, status: s.assignments[0]?.status ?? "REGISTERED", designed: flat.length ? designed : null, executed: flat.length ? executed : null, defects: flat.length ? defects : null };
-        });
-        return { projectName: p.name, clientName: p.client.name, projectManagerName: p.projectManager?.name ?? null, testerName: dt?.name ?? null, testerAllocation: dt?.allocation ?? null, hus };
-      });
-
-      // Charts
-      const STATUS_LABEL_M: Record<string, string> = { REGISTERED: "No Iniciado", ANALYSIS: "En Diseño", TEST_DESIGN: "En Diseño", WAITING_QA_DEPLOY: "Pdte. Instalación QA", EXECUTION: "En Curso", RETURNED_TO_DEV: "Devuelto a Desarrollo", WAITING_UAT: "Pdte. Aprobación", UAT: "Pdte. Aprobación", PRODUCTION: "Completado", ON_HOLD: "Detenido" };
-      const pipelineMap = new Map<string, number>();
-      const projectMetrics: ProjectMetricsDatum[] = [];
-      for (const p of projects) {
-        let d = 0, e = 0, bug = 0;
-        for (const s of p.stories) for (const a of s.assignments) {
-          pipelineMap.set(STATUS_LABEL_M[a.status] ?? a.status, (pipelineMap.get(STATUS_LABEL_M[a.status] ?? a.status) ?? 0) + 1);
-          for (const r of a.dailyRecords) { d += r.designed; e += r.executed; bug += r.defects; }
-        }
-        projectMetrics.push({ projectName: p.name, designed: d, executed: e, defects: bug });
-      }
-      const pipelineData: PipelineDatum[] = [...pipelineMap.entries()].map(([label, count]) => ({ label, count }));
-
-      // Weekly buckets within the month
-      const allRecords = projects.flatMap((p) => p.stories.flatMap((s) => s.assignments.flatMap((a) => a.dailyRecords)));
-      const wbMap = new Map<string, WeekBucket>();
-      for (const r of allRecords) {
-        const ws = startOfWeek(r.date, { weekStartsOn: 1 });
-        const key = ws.toISOString().slice(0, 10);
-        const b = wbMap.get(key) ?? { label: `Sem ${getISOWeek(ws)}`, designed: 0, executed: 0, defects: 0 };
-        b.designed += r.designed; b.executed += r.executed; b.defects += r.defects;
-        wbMap.set(key, b);
-      }
-      const sortedWeeks = [...wbMap.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, v]) => v);
-      const mLabel = format(monthDate, "MMMM yyyy", { locale: es });
-
-      let charts: any;
-      try {
-        const [pipeline, dve, defects, monthly] = await Promise.all([
-          buildPipelineDonut(pipelineData),
-          buildDesignedVsExecutedBars(projectMetrics),
-          buildDefectsBars(projectMetrics),
-          sortedWeeks.length > 0 ? buildMonthlyCumulativeBars(sortedWeeks, mLabel) : Promise.resolve(undefined),
-        ]);
-        charts = { pipeline, designedVsExecuted: dve, defects, monthlyCumulative: monthly };
-      } catch {}
-
-      const buffer = await buildWeeklyPptxBuffer({ weekStart: monthStartD, weekEnd: monthEndD, projects: projectSlides, charts });
+      const buffer = await buildReportPptx(spec);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-      res.setHeader("Content-Disposition", `attachment; filename="Avance_Mensual_QA_${monthParam}.pptx"`);
+      res.setHeader("Content-Disposition", `attachment; filename="Informe_QA_Mensual_${monthParam}.pptx"`);
       res.send(buffer);
     } catch (err) {
       console.error("monthly-pptx error:", err);
@@ -537,111 +461,32 @@ router.get(
   requirePermission("reports", "read") as any,
   async (req: AuthRequest, res: Response) => {
     try {
+      const { buildReportSpec, buildProjectScope } = await import("../lib/pptx/report-data.js");
+      const { buildReportPptx } = await import("../lib/pptx/build-report-pptx.js");
+
       const year = Number(req.query.year) || new Date().getFullYear();
       const clientIdFilter = req.query.clientId as string | undefined;
-      const yearStart = new Date(`${year}-01-01T00:00:00`);
-      const yearEnd = new Date(`${year}-12-31T23:59:59`);
+      const periodStart = new Date(Date.UTC(year, 0, 1));
+      const periodEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59));
 
-      const projectScope: any = {};
-      if (isClientPm(req)) {
-        projectScope.id = { in: await clientPmProjectIds(req.user!.id) };
-      } else if (isAnalyst(req)) {
-        projectScope.id = { in: await analystProjectIds(req.user!.id) };
-      } else {
-        projectScope.client = { userId: req.user!.id };
-      }
-      if (clientIdFilter) projectScope.clientId = clientIdFilter;
+      const scope = await buildProjectScope(req, clientIdFilter);
+      const clientRecord = clientIdFilter
+        ? await prisma.client.findUnique({ where: { id: clientIdFilter }, select: { id: true, name: true } })
+        : null;
 
-      const projects = await prisma.project.findMany({
-        where: {
-          ...projectScope,
-          stories: { some: { assignments: { some: { status: { in: [...ACTIVE_OR_UAT] } } } } },
-        },
-        select: {
-          id: true, name: true,
-          client: { select: { name: true } },
-          projectManager: { select: { name: true } },
-          testers: { select: { id: true, name: true, allocation: true }, orderBy: { allocation: "desc" } },
-          stories: {
-            select: {
-              id: true, title: true, externalId: true,
-              assignments: {
-                where: { status: { in: [...ACTIVE_OR_UAT] } },
-                select: {
-                  id: true, status: true, testerId: true,
-                  dailyRecords: {
-                    where: { date: { gte: yearStart, lte: yearEnd } },
-                    select: { date: true, designed: true, executed: true, defects: true },
-                  },
-                },
-              },
-            },
-          },
-        },
-        orderBy: { name: "asc" },
+      const spec = await buildReportSpec({
+        period: "yearly",
+        periodStart,
+        periodEnd,
+        scope,
+        clientFilter: clientRecord ? { id: clientRecord.id, name: clientRecord.name } : null,
+        userRole: req.user!.role.name,
+        userId: req.user!.id,
       });
 
-      const projectSlides: WeeklyProjectSlide[] = projects.map((p) => {
-        const testerHits = new Map<string, number>();
-        for (const s of p.stories) for (const a of s.assignments) testerHits.set(a.testerId, (testerHits.get(a.testerId) ?? 0) + 1);
-        let dominantTesterId: string | null = null, maxHits = 0;
-        for (const [tid, hits] of testerHits) if (hits > maxHits) { maxHits = hits; dominantTesterId = tid; }
-        const dt = p.testers.find((t) => t.id === dominantTesterId) ?? p.testers[0] ?? null;
-        const hus = p.stories.filter((s) => s.assignments.length > 0).map((s) => {
-          const flat = s.assignments.flatMap((a) => a.dailyRecords);
-          const designed = flat.reduce((s, r) => s + r.designed, 0);
-          const executed = flat.reduce((s, r) => s + r.executed, 0);
-          const defects = flat.reduce((s, r) => s + r.defects, 0);
-          const title = s.externalId ? `${s.externalId} — ${s.title}` : s.title;
-          return { title, status: s.assignments[0]?.status ?? "REGISTERED", designed: flat.length ? designed : null, executed: flat.length ? executed : null, defects: flat.length ? defects : null };
-        });
-        return { projectName: p.name, clientName: p.client.name, projectManagerName: p.projectManager?.name ?? null, testerName: dt?.name ?? null, testerAllocation: dt?.allocation ?? null, hus };
-      });
-
-      // Pipeline + per-project
-      const STATUS_LABEL_Y: Record<string, string> = { REGISTERED: "No Iniciado", ANALYSIS: "En Diseño", TEST_DESIGN: "En Diseño", WAITING_QA_DEPLOY: "Pdte. Instalación QA", EXECUTION: "En Curso", RETURNED_TO_DEV: "Devuelto a Desarrollo", WAITING_UAT: "Pdte. Aprobación", UAT: "Pdte. Aprobación", PRODUCTION: "Completado", ON_HOLD: "Detenido" };
-      const pipelineMap = new Map<string, number>();
-      const projectMetrics: ProjectMetricsDatum[] = [];
-      for (const p of projects) {
-        let d = 0, e = 0, bug = 0;
-        for (const s of p.stories) for (const a of s.assignments) {
-          pipelineMap.set(STATUS_LABEL_Y[a.status] ?? a.status, (pipelineMap.get(STATUS_LABEL_Y[a.status] ?? a.status) ?? 0) + 1);
-          for (const r of a.dailyRecords) { d += r.designed; e += r.executed; bug += r.defects; }
-        }
-        projectMetrics.push({ projectName: p.name, designed: d, executed: e, defects: bug });
-      }
-      const pipelineData: PipelineDatum[] = [...pipelineMap.entries()].map(([label, count]) => ({ label, count }));
-
-      // Monthly buckets for the year
-      const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-      const allRecords = projects.flatMap((p) => p.stories.flatMap((s) => s.assignments.flatMap((a) => a.dailyRecords)));
-      const mbMap = new Map<number, MonthBucket>();
-      for (const r of allRecords) {
-        const m = r.date.getMonth();
-        const b = mbMap.get(m) ?? { label: MONTH_NAMES[m]!, designed: 0, executed: 0, defects: 0 };
-        b.designed += r.designed; b.executed += r.executed; b.defects += r.defects;
-        mbMap.set(m, b);
-      }
-      const sortedMonths: MonthBucket[] = [];
-      for (let i = 0; i < 12; i++) {
-        sortedMonths.push(mbMap.get(i) ?? { label: MONTH_NAMES[i]!, designed: 0, executed: 0, defects: 0 });
-      }
-
-      let charts: any;
-      try {
-        const [pipeline, dve, defects, yearly] = await Promise.all([
-          buildPipelineDonut(pipelineData),
-          buildDesignedVsExecutedBars(projectMetrics),
-          buildDefectsBars(projectMetrics),
-          buildYearlyCumulativeBars(sortedMonths, year),
-        ]);
-        // Re-use monthlyCumulative slot for the yearly chart
-        charts = { pipeline, designedVsExecuted: dve, defects, monthlyCumulative: yearly };
-      } catch {}
-
-      const buffer = await buildWeeklyPptxBuffer({ weekStart: yearStart, weekEnd: yearEnd, projects: projectSlides, charts });
+      const buffer = await buildReportPptx(spec);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
-      res.setHeader("Content-Disposition", `attachment; filename="Avance_Anual_QA_${year}.pptx"`);
+      res.setHeader("Content-Disposition", `attachment; filename="Informe_QA_Anual_${year}.pptx"`);
       res.send(buffer);
     } catch (err) {
       console.error("yearly-pptx error:", err);
