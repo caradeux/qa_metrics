@@ -207,6 +207,40 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
     }
   }
 
+  // DailyRecords del periodo para TODOS los testers, sin filtrar por status del
+  // assignment. Esto es clave para la curva de ocupación: trabajo real en HUs
+  // que ya pasaron a PRODUCTION no aparece en loadScopedProjects (que filtra
+  // por ACTIVE_OR_UAT), pero sí debe clasificarse como "Ejecución" en la curva.
+  const allDailyRecordsRaw = testerIds.length === 0 ? [] : await prisma.dailyRecord.findMany({
+    where: {
+      testerId: { in: testerIds },
+      date: { gte: periodStart, lte: periodEnd },
+    },
+    select: {
+      testerId: true,
+      date: true,
+      designed: true,
+      executed: true,
+      defects: true,
+      assignment: { select: { story: { select: { projectId: true } } } },
+    },
+  });
+  const allDailyRecordsByTester = new Map<string, DailyRecordRef[]>();
+  for (const r of allDailyRecordsRaw) {
+    const projectId = r.assignment?.story?.projectId;
+    if (!projectId) continue;
+    const list = allDailyRecordsByTester.get(r.testerId) ?? [];
+    list.push({
+      testerId: r.testerId,
+      date: r.date,
+      projectId,
+      designed: r.designed,
+      executed: r.executed,
+      defects: r.defects,
+    });
+    allDailyRecordsByTester.set(r.testerId, list);
+  }
+
   const projects: ProjectReportData[] = loaded.map((p) => {
     const testersRefs: TesterRef[] = p.testers.map((t) => ({
       id: t.id,
@@ -259,25 +293,12 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       }
     }
 
-    // DailyRecords del proyecto P + de OTROS proyectos donde los testers de P
-    // también trabajan — necesarios como fallback para clasificar fases.
+    // DailyRecords del periodo para los testers de P, SIN filtrar por status
+    // del assignment (incluye PRODUCTION y ON_HOLD). Usamos la query global.
     const dailyRecordsForCurve: DailyRecordRef[] = [];
-    const projectTesterIds = new Set(p.testers.map((t) => t.id));
-    for (const proj of loaded) {
-      for (const story of proj.stories) {
-        for (const asg of story.assignments) {
-          if (!projectTesterIds.has(asg.testerId)) continue;
-          for (const dr of asg.dailyRecords) {
-            dailyRecordsForCurve.push({
-              testerId: asg.testerId,
-              date: dr.date,
-              projectId: proj.id,
-              designed: dr.designed,
-              executed: dr.executed,
-              defects: dr.defects,
-            });
-          }
-        }
+    for (const t of p.testers) {
+      for (const r of allDailyRecordsByTester.get(t.id) ?? []) {
+        dailyRecordsForCurve.push(r);
       }
     }
 
