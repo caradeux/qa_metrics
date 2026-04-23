@@ -312,6 +312,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       activities: activitiesForProject,
       holidaysMs,
       dailyRecords: dailyRecordsForCurve,
+      asOfDate: new Date(),
     });
 
     const hus: HuRow[] = [];

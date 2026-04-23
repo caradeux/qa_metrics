@@ -146,6 +146,10 @@ export interface AggregateInput {
   activities: readonly ActivityRef[];
   holidaysMs: Set<number>;
   dailyRecords?: readonly DailyRecordRef[]; // fallback cuando no hay AssignmentPhase
+  // Fecha de corte: días estrictamente posteriores a asOfDate (por fecha UTC)
+  // se excluyen del cálculo y la gráfica. Evita dibujar días que aún no han
+  // ocurrido (que aparecerían como capacidad sin imputar).
+  asOfDate?: Date;
 }
 
 const BAND_ORDER = [
@@ -262,10 +266,14 @@ function sameUTCDay(a: Date, b: Date): boolean {
 }
 
 export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupationCurve {
-  const { projectId, from, to, bucketing, testers, phaseSegments, activities, holidaysMs, dailyRecords = [] } = input;
+  const { projectId, from, to, bucketing, testers, phaseSegments, activities, holidaysMs, dailyRecords = [], asOfDate } = input;
+  const cutoffMs = asOfDate
+    ? Date.UTC(asOfDate.getUTCFullYear(), asOfDate.getUTCMonth(), asOfDate.getUTCDate()) + 24 * 3600 * 1000 - 1
+    : Infinity;
   const days = iterDays(from, to).filter((d) => {
     const dow = d.getUTCDay();
-    return dow !== 0 && dow !== 6;
+    if (dow === 0 || dow === 6) return false;
+    return d.getTime() <= cutoffMs;
   });
 
   // Orden de buckets estable.
