@@ -85,7 +85,7 @@ export type LoadedProject = Awaited<ReturnType<typeof loadScopedProjects>>[numbe
 import { startOfWeek, format, getISOWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import { loadHolidaySet } from "../workdays.js";
-import { computeOccupationBatch } from "../occupation.js";
+import { computeOccupationBatch, aggregateOccupationByUser } from "../occupation.js";
 import {
   aggregateOccupationCurve,
   type BucketingMode,
@@ -495,50 +495,8 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       rawAnalysts = await computeOccupationBatch(testerIds, periodStart, periodEnd);
     }
   }
-
-  // Dedupe: computeOccupationBatch devuelve un resultado POR Tester (entidad
-  // por proyecto). Un mismo User asignado a 3 proyectos genera 3 Testers y
-  // por lo tanto 3 slides. Agrupamos por User.id y sumamos horas para que
-  // aparezca UN slide por persona.
-  const testerIdToUserId = new Map<string, string | null>();
-  for (const p of loaded) {
-    for (const t of p.testers) {
-      testerIdToUserId.set(t.id, t.userId ?? null);
-    }
-  }
-  const byPerson = new Map<string, typeof rawAnalysts[number]>();
-  for (const a of rawAnalysts) {
-    const uid = testerIdToUserId.get(a.testerId) ?? null;
-    const key = uid ?? `anon:${a.testerId}`;
-    const prev = byPerson.get(key);
-    if (!prev) {
-      byPerson.set(key, { ...a, byCategory: [...a.byCategory], byAbsence: [...a.byAbsence], byAssignment: [...a.byAssignment] });
-      continue;
-    }
-    prev.nominalCapacityHours = Math.round((prev.nominalCapacityHours + a.nominalCapacityHours) * 100) / 100;
-    prev.absenceHours = Math.round((prev.absenceHours + a.absenceHours) * 100) / 100;
-    prev.capacityHours = Math.round((prev.capacityHours + a.capacityHours) * 100) / 100;
-    prev.activityHours = Math.round((prev.activityHours + a.activityHours) * 100) / 100;
-    prev.productiveHoursEstimate = Math.round((prev.productiveHoursEstimate + a.productiveHoursEstimate) * 100) / 100;
-    // Merge breakdowns por id/key.
-    const mergeInto = <T extends { hours: number }>(target: T[], incoming: T[], keyFn: (x: T) => string) => {
-      for (const item of incoming) {
-        const k = keyFn(item);
-        const existing = target.find((t) => keyFn(t) === k);
-        if (existing) existing.hours = Math.round((existing.hours + item.hours) * 100) / 100;
-        else target.push({ ...item });
-      }
-    };
-    mergeInto(prev.byCategory, a.byCategory, (x) => x.categoryId);
-    mergeInto(prev.byAbsence, a.byAbsence, (x) => x.categoryId);
-    mergeInto(prev.byAssignment, a.byAssignment, (x) => x.assignmentId);
-    // Recalcular ocupación y overallocated.
-    prev.occupationPct = prev.capacityHours > 0
-      ? Math.round(Math.min(100, (prev.activityHours + prev.productiveHoursEstimate) / prev.capacityHours * 100) * 100) / 100
-      : 0;
-    prev.overallocated = prev.activityHours > prev.capacityHours;
-  }
-  const analysts = Array.from(byPerson.values());
+  // Agrupar por persona + capear al máximo físico 40h/semana.
+  const analysts = await aggregateOccupationByUser(rawAnalysts);
 
   // Conteo de analistas únicos por PERSONA (userId), no por Tester entity.
   // Un mismo analista asignado a 3 proyectos son 3 Testers pero 1 persona.

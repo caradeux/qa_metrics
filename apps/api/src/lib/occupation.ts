@@ -273,3 +273,77 @@ export async function computeOccupationBatch(
     })
     .filter((r): r is OccupationResult => r !== null);
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Agrupar resultados por persona (User.id) y capear la capacidad al
+// máximo físico de 8h/día × días hábiles. Evita mostrar 60h o 45h cuando
+// una persona está asignada a varios proyectos con allocations que suman
+// > 100%. Refleja la sobre-asignación con el flag `overallocated`.
+// ═══════════════════════════════════════════════════════════════════
+
+export async function aggregateOccupationByUser(
+  results: OccupationResult[]
+): Promise<OccupationResult[]> {
+  if (results.length === 0) return [];
+
+  // Resolver userId de cada Tester para hacer el grouping.
+  const testerIds = [...new Set(results.map((r) => r.testerId))];
+  const testers = await prisma.tester.findMany({
+    where: { id: { in: testerIds } },
+    select: { id: true, userId: true },
+  });
+  const testerIdToUserId = new Map(testers.map((t) => [t.id, t.userId ?? null]));
+
+  const byPerson = new Map<string, OccupationResult>();
+  for (const r of results) {
+    const uid = testerIdToUserId.get(r.testerId) ?? null;
+    const key = uid ?? `anon:${r.testerId}`;
+    const prev = byPerson.get(key);
+    if (!prev) {
+      byPerson.set(key, {
+        ...r,
+        byCategory: [...r.byCategory],
+        byAbsence: [...r.byAbsence],
+        byAssignment: [...r.byAssignment],
+      });
+      continue;
+    }
+    prev.nominalCapacityHours = Math.round((prev.nominalCapacityHours + r.nominalCapacityHours) * 100) / 100;
+    prev.absenceHours = Math.round((prev.absenceHours + r.absenceHours) * 100) / 100;
+    prev.capacityHours = Math.round((prev.capacityHours + r.capacityHours) * 100) / 100;
+    prev.activityHours = Math.round((prev.activityHours + r.activityHours) * 100) / 100;
+    prev.productiveHoursEstimate = Math.round((prev.productiveHoursEstimate + r.productiveHoursEstimate) * 100) / 100;
+
+    const mergeArr = <T extends { hours: number }>(target: T[], incoming: T[], keyFn: (x: T) => string) => {
+      for (const item of incoming) {
+        const k = keyFn(item);
+        const existing = target.find((t) => keyFn(t) === k);
+        if (existing) existing.hours = Math.round((existing.hours + item.hours) * 100) / 100;
+        else target.push({ ...item });
+      }
+    };
+    mergeArr(prev.byCategory, r.byCategory, (x) => x.categoryId);
+    mergeArr(prev.byAbsence, r.byAbsence, (x) => x.categoryId);
+    mergeArr(prev.byAssignment, r.byAssignment, (x) => x.assignmentId);
+  }
+
+  // Cap físico: workdays × 8h. Recalcular derivados post-cap.
+  return Array.from(byPerson.values()).map((a) => {
+    const physicalMax = a.workdays * 8;
+    const wasOverByAllocation = a.nominalCapacityHours > physicalMax;
+    const nominal = Math.min(a.nominalCapacityHours, physicalMax);
+    const capacity = Math.max(0, nominal - a.absenceHours);
+    const productive = Math.max(0, capacity - a.activityHours);
+    const occupationPct = capacity > 0
+      ? Math.round(Math.min(100, (a.activityHours + productive) / capacity * 100) * 100) / 100
+      : 0;
+    return {
+      ...a,
+      nominalCapacityHours: Math.round(nominal * 100) / 100,
+      capacityHours: Math.round(capacity * 100) / 100,
+      productiveHoursEstimate: Math.round(productive * 100) / 100,
+      occupationPct,
+      overallocated: wasOverByAllocation || a.activityHours > capacity,
+    } satisfies OccupationResult;
+  });
+}

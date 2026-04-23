@@ -13,7 +13,7 @@ import { aggregateDailyToWeekly } from "../services/metrics.service.js";
 import { jsPDF } from "jspdf";
 import { addDays, startOfWeek, startOfMonth, endOfMonth, format } from "date-fns";
 import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../lib/access.js";
-import { computeOccupationBatch } from "../lib/occupation.js";
+import { computeOccupationBatch, aggregateOccupationByUser } from "../lib/occupation.js";
 import { loadHolidaySet, computeMissingWorkdaysSync } from "../lib/workdays.js";
 
 const router = Router();
@@ -523,7 +523,11 @@ router.get(
       testerIds = allowed.map((t) => t.id);
     }
 
-    const results = await computeOccupationBatch(testerIds, from, to);
+    const raw = await computeOccupationBatch(testerIds, from, to);
+    // Agrupar por persona (User.id) y capear al máximo físico 40h/semana.
+    // Una persona asignada al 50% en 3 proyectos NO tiene 60h de capacidad
+    // real — tiene 40h distribuidas y está sobre-asignada.
+    const results = await aggregateOccupationByUser(raw);
     res.json(results);
   }
 );
