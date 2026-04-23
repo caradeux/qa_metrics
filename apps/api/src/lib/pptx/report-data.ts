@@ -29,10 +29,15 @@ export async function loadScopedProjects(
   periodEnd: Date,
 ) {
   // Incluir assignments en estado activo O con DailyRecord en el periodo
-  // (para capturar HUs que pasaron a PRODUCTION esta semana).
+  // (para capturar HUs que pasaron a PRODUCTION esta semana) O en estado
+  // ON_HOLD (HUs detenidas siempre deben aparecer en el reporte).
+  const VISIBLE_STATUSES = [
+    ...ACTIVE_OR_UAT,
+    "ON_HOLD" as const,
+  ];
   const assignmentFilter = {
     OR: [
-      { status: { in: [...ACTIVE_OR_UAT] } },
+      { status: { in: VISIBLE_STATUSES } },
       { dailyRecords: { some: { date: { gte: periodStart, lte: periodEnd } } } },
     ],
   };
@@ -64,6 +69,8 @@ export async function loadScopedProjects(
               id: true,
               status: true,
               testerId: true,
+              createdAt: true,
+              cycle: { select: { id: true, startDate: true } },
               phases: {
                 select: { phase: true, startDate: true, endDate: true },
               },
@@ -72,6 +79,9 @@ export async function loadScopedProjects(
                 select: { date: true, designed: true, executed: true, defects: true },
               },
             },
+            // Ordenar por fecha de creación para que la primera sea la más
+            // reciente y represente el estado actual de la HU.
+            orderBy: { createdAt: "desc" },
           },
         },
       },

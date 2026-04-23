@@ -324,7 +324,17 @@ router.put(
       if (data.endDate !== undefined && dateChanged(existing.endDate, data.endDate as Date | null)) {
         diffs.push({ field: "endDate", oldValue: existing.endDate, newValue: data.endDate as Date | null });
       }
-      const reasonError = validateReasonForChanges(body.reason, diffs);
+      // Caso especial: al pasar a PRODUCTION la fecha fin cambia automáticamente
+      // como parte natural de la transición. No requerimos motivo explícito.
+      const onlyAutoEndDateFromProduction =
+        statusChanged &&
+        body.status === "PRODUCTION" &&
+        diffs.length === 1 &&
+        diffs[0]!.field === "endDate";
+      const effectiveReason = onlyAutoEndDateFromProduction
+        ? (body.reason ?? "HU pasó a Producción — cierre automático")
+        : body.reason;
+      const reasonError = onlyAutoEndDateFromProduction ? null : validateReasonForChanges(body.reason, diffs);
       if (reasonError) {
         res.status(400).json({ error: reasonError });
         return;
@@ -340,7 +350,7 @@ router.put(
             entityType: "ASSIGNMENT",
             entityId: id,
             userId: req.user!.id,
-            reason: body.reason!,
+            reason: effectiveReason ?? body.reason!,
             diffs,
           });
         }
