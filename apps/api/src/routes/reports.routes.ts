@@ -11,20 +11,7 @@ import {
 } from "../services/report-excel.js";
 import { aggregateDailyToWeekly } from "../services/metrics.service.js";
 import { jsPDF } from "jspdf";
-import { buildWeeklyPptxBuffer, type WeeklyProjectSlide } from "../lib/weekly-pptx.js";
-import {
-  buildPipelineDonut,
-  buildDesignedVsExecutedBars,
-  buildDefectsBars,
-  buildMonthlyCumulativeBars,
-  buildYearlyCumulativeBars,
-  type PipelineDatum,
-  type ProjectMetricsDatum,
-  type WeekBucket,
-  type MonthBucket,
-} from "../lib/weekly-charts.js";
-import { addDays, startOfWeek, startOfMonth, endOfMonth, format, getISOWeek } from "date-fns";
-import { es } from "date-fns/locale";
+import { addDays, startOfWeek, startOfMonth, endOfMonth, format } from "date-fns";
 import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../lib/access.js";
 import { computeOccupationBatch } from "../lib/occupation.js";
 import { loadHolidaySet, computeMissingWorkdaysSync } from "../lib/workdays.js";
@@ -362,11 +349,6 @@ router.post(
 // GET /weekly-pptx — Avance Semanal QA en PPTX (auto-generado desde los datos)
 // Query: ?weekStart=YYYY-MM-DD (opcional, default lunes de la semana actual)
 // Incluye proyectos con asignaciones activas o en UAT/WAITING_UAT
-const ACTIVE_OR_UAT = [
-  "REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY",
-  "EXECUTION", "RETURNED_TO_DEV", "WAITING_UAT", "UAT",
-] as const;
-
 router.get(
   "/weekly-pptx",
   requirePermission("reports", "read") as any,
