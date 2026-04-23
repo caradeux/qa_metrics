@@ -63,3 +63,39 @@ export function splitProductiveHoursAcrossPhases(
   }
   return { projectHours, byPhase };
 }
+
+export interface TransversalInput {
+  activityHours: number;
+  assignmentProjectId: string | null;   // null = transversal
+  phasesByProject: Record<string, number>; // conteo de phases activas por proyecto ese día
+  testerProjectIds: readonly string[];   // proyectos en los que el tester tiene Tester activo
+  targetProjectId: string;
+}
+
+export function splitTransversalActivityHours(input: TransversalInput): number {
+  const {
+    activityHours,
+    assignmentProjectId,
+    phasesByProject,
+    testerProjectIds,
+    targetProjectId,
+  } = input;
+
+  if (activityHours <= 0) return 0;
+
+  // Caso 1: Activity vinculada a un assignment de un proyecto específico.
+  if (assignmentProjectId !== null) {
+    return assignmentProjectId === targetProjectId ? activityHours : 0;
+  }
+
+  // Caso 2: Activity transversal (sin assignment).
+  const totalPhases = Object.values(phasesByProject).reduce((s, n) => s + n, 0);
+  if (totalPhases > 0) {
+    const phasesInTarget = phasesByProject[targetProjectId] ?? 0;
+    return activityHours * (phasesInTarget / totalPhases);
+  }
+
+  // Sin phases → reparto equitativo entre proyectos donde el tester está activo.
+  if (!testerProjectIds.includes(targetProjectId)) return 0;
+  return activityHours / testerProjectIds.length;
+}

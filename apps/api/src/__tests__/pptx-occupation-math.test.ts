@@ -72,3 +72,70 @@ describe("splitProductiveHoursAcrossPhases", () => {
     expect(out.byPhase.EXECUTION).toBe(0);
   });
 });
+
+import { splitTransversalActivityHours } from "../lib/pptx/occupation-math.js";
+
+describe("splitTransversalActivityHours", () => {
+  it("activity con assignmentId resuelto a P → 100% a P, 0 a Q", () => {
+    const out = splitTransversalActivityHours({
+      activityHours: 2,
+      assignmentProjectId: "P",
+      phasesByProject: { P: 1, Q: 1 },
+      testerProjectIds: ["P", "Q"],
+      targetProjectId: "P",
+    });
+    expect(out).toBe(2);
+  });
+
+  it("misma activity vista desde Q → 0", () => {
+    const out = splitTransversalActivityHours({
+      activityHours: 2,
+      assignmentProjectId: "P",
+      phasesByProject: { P: 1, Q: 1 },
+      testerProjectIds: ["P", "Q"],
+      targetProjectId: "Q",
+    });
+    expect(out).toBe(0);
+  });
+
+  it("activity transversal (sin assignment) con phases P=2, Q=1 → 2/3 a P, 1/3 a Q", () => {
+    const outP = splitTransversalActivityHours({
+      activityHours: 3,
+      assignmentProjectId: null,
+      phasesByProject: { P: 2, Q: 1 },
+      testerProjectIds: ["P", "Q"],
+      targetProjectId: "P",
+    });
+    const outQ = splitTransversalActivityHours({
+      activityHours: 3,
+      assignmentProjectId: null,
+      phasesByProject: { P: 2, Q: 1 },
+      testerProjectIds: ["P", "Q"],
+      targetProjectId: "Q",
+    });
+    expect(outP).toBeCloseTo(2, 5);
+    expect(outQ).toBeCloseTo(1, 5);
+  });
+
+  it("transversal y el tester no tiene phases activas → reparto equitativo entre testerProjectIds", () => {
+    const outP = splitTransversalActivityHours({
+      activityHours: 2,
+      assignmentProjectId: null,
+      phasesByProject: {},
+      testerProjectIds: ["P", "Q"],
+      targetProjectId: "P",
+    });
+    expect(outP).toBe(1);
+  });
+
+  it("transversal y el tester solo está en P → todo a P", () => {
+    const outP = splitTransversalActivityHours({
+      activityHours: 2,
+      assignmentProjectId: null,
+      phasesByProject: {},
+      testerProjectIds: ["P"],
+      targetProjectId: "P",
+    });
+    expect(outP).toBe(2);
+  });
+});
