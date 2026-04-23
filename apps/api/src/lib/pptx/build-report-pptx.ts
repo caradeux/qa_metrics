@@ -43,7 +43,7 @@ export async function buildReportPptx(spec: ReportSpec): Promise<Buffer> {
 
   // Bloque C — portfolio
   if (spec.projects.length > 0) {
-    await addPortfolioPipelineSlide(pres, spec);
+    addPortfolioPipelineSlide(pres, spec);
     await addPortfolioComparisonSlide(pres, spec);
     await addPortfolioTrendSlide(pres, spec);
   }

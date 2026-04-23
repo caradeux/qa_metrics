@@ -1,42 +1,10 @@
 import { ChartJSNodeCanvas } from "chartjs-node-canvas";
 import type { ChartConfiguration } from "chart.js";
-import type { ProjectPipeline, PortfolioTrendPoint } from "../types.js";
+import type { PortfolioTrendPoint } from "../types.js";
 import { PALETTE, FONT } from "../theme.js";
 
 const FONT_FAMILY = `${FONT.face}, ${FONT.fallback}`;
 const canvas = new ChartJSNodeCanvas({ width: 1400, height: 720, backgroundColour: "#FFFFFF" });
-
-export async function buildPipelineDonut(pipeline: ProjectPipeline[]): Promise<Buffer> {
-  const filtered = pipeline.filter((p) => p.count > 0);
-  const cfg: ChartConfiguration<"doughnut"> = {
-    type: "doughnut",
-    data: {
-      labels: filtered.map((p) => p.label),
-      datasets: [{
-        data: filtered.map((p) => p.count),
-        backgroundColor: filtered.map((p) => `#${p.colorHex}`),
-        borderColor: "#FFFFFF",
-        borderWidth: 2,
-      }],
-    },
-    options: {
-      responsive: false,
-      plugins: {
-        title: {
-          display: true, text: "Pipeline global por estado (HUs)",
-          font: { size: 22, weight: "bold", family: FONT_FAMILY },
-          color: `#${PALETTE.textPrimary}`, padding: { top: 12, bottom: 18 },
-        },
-        legend: {
-          position: "right",
-          labels: { font: { size: 14, family: FONT_FAMILY }, color: `#${PALETTE.textPrimary}`, padding: 12 },
-        },
-      },
-      cutout: "55%",
-    },
-  };
-  return canvas.renderToBuffer(cfg, "image/png");
-}
 
 // Plugin custom para dibujar el valor de cada barra encima de ella.
 const barDataLabelsPlugin = {
