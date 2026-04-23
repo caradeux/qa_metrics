@@ -23,6 +23,11 @@ export const PALETTE = {
   activityDevMeeting: "A855F7",
   activityInduction: "F59E0B",
   activityUnassigned: "6B7280",
+  // Estados de dependencia externa (bandas nuevas)
+  waitingClient: "C084FC",        // púrpura claro — "Esperando aprobación cliente"
+  onDev: "FB7185",                // rojo apagado — "En manos de desarrollo"
+  onHold: "94A3B8",               // gris medio — "Detenido"
+  notStarted: "CBD5E1",           // gris claro — "No iniciado"
 } as const;
 
 export const FONT = {

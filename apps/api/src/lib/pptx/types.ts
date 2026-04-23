@@ -37,6 +37,10 @@ export type OccupationBandLabel =
   | "Reunión con usuario"
   | "Reunión con desarrollo"
   | "Inducción/Capacitación"
+  | "Esperando aprobación cliente"
+  | "En manos de desarrollo"
+  | "Detenido"
+  | "No iniciado"
   | "Productivas no imputadas";
 
 export interface OccupationBand {
@@ -82,7 +86,8 @@ export interface PortfolioKpis {
   designed: number;
   executed: number;
   defects: number;
-  ratioPct: number;
+  ratioPct: number;               // legacy, se mantiene por compatibilidad de tipos
+  advancePct: number;             // % HUs que alcanzaron EXECUTION+ (reemplazo del Ratio en UI)
   husFirstCycle: number;
   husMultipleCycles: number;
   capacityUtilizationPct: number;

@@ -136,6 +136,12 @@ export interface DailyRecordRef {
   defects: number;
 }
 
+export interface AssignmentInfo {
+  testerId: string;
+  projectId: string;
+  status: string;                   // AssignmentStatus (string para no acoplar con Prisma enum)
+}
+
 export interface AggregateInput {
   projectId: string;
   from: Date;
@@ -146,6 +152,7 @@ export interface AggregateInput {
   activities: readonly ActivityRef[];
   holidaysMs: Set<number>;
   dailyRecords?: readonly DailyRecordRef[]; // fallback cuando no hay AssignmentPhase
+  assignments?: readonly AssignmentInfo[];  // para clasificar por status cuando no hay DailyRecord ni phase
   // Fecha de corte: días estrictamente posteriores a asOfDate (por fecha UTC)
   // se excluyen del cálculo y la gráfica. Evita dibujar días que aún no han
   // ocurrido (que aparecerían como capacidad sin imputar).
@@ -159,6 +166,10 @@ const BAND_ORDER = [
   "Reunión con usuario",
   "Reunión con desarrollo",
   "Inducción/Capacitación",
+  "Esperando aprobación cliente",
+  "En manos de desarrollo",
+  "Detenido",
+  "No iniciado",
   "Productivas no imputadas",
 ] as const satisfies readonly OccupationBandLabel[];
 
@@ -169,7 +180,25 @@ const BAND_COLORS: Record<OccupationBandLabel, string> = {
   "Reunión con usuario": PALETTE.activityUserMeeting,
   "Reunión con desarrollo": PALETTE.activityDevMeeting,
   "Inducción/Capacitación": PALETTE.activityInduction,
+  "Esperando aprobación cliente": PALETTE.waitingClient,
+  "En manos de desarrollo": PALETTE.onDev,
+  "Detenido": PALETTE.onHold,
+  "No iniciado": PALETTE.notStarted,
   "Productivas no imputadas": PALETTE.activityUnassigned,
+};
+
+// Mapa de AssignmentStatus → banda cuando NO hay DailyRecord ni AssignmentPhase activa.
+const STATUS_BAND_MAP: Record<string, OccupationBandLabel | null> = {
+  REGISTERED: "No iniciado",
+  ANALYSIS: null,                   // clasifica por fase (activo)
+  TEST_DESIGN: null,                // clasifica por fase (activo)
+  EXECUTION: null,                  // clasifica por fase (activo)
+  WAITING_QA_DEPLOY: "En manos de desarrollo",
+  RETURNED_TO_DEV: "En manos de desarrollo",
+  WAITING_UAT: "Esperando aprobación cliente",
+  UAT: "Esperando aprobación cliente",
+  PRODUCTION: null,                 // no consume capacidad
+  ON_HOLD: "Detenido",
 };
 
 const ACTIVITY_BAND_MAP: Record<string, OccupationBandLabel> = {
@@ -266,7 +295,7 @@ function sameUTCDay(a: Date, b: Date): boolean {
 }
 
 export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupationCurve {
-  const { projectId, from, to, bucketing, testers, phaseSegments, activities, holidaysMs, dailyRecords = [], asOfDate } = input;
+  const { projectId, from, to, bucketing, testers, phaseSegments, activities, holidaysMs, dailyRecords = [], assignments = [], asOfDate } = input;
   const cutoffMs = asOfDate
     ? Date.UTC(asOfDate.getUTCFullYear(), asOfDate.getUTCMonth(), asOfDate.getUTCDate()) + 24 * 3600 * 1000 - 1
     : Infinity;
@@ -336,7 +365,10 @@ export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupati
       const activityHoursByBand: Record<OccupationBandLabel, number> = {
         "Análisis": 0, "Diseño de pruebas": 0, "Ejecución": 0,
         "Reunión con usuario": 0, "Reunión con desarrollo": 0,
-        "Inducción/Capacitación": 0, "Productivas no imputadas": 0,
+        "Inducción/Capacitación": 0,
+        "Esperando aprobación cliente": 0, "En manos de desarrollo": 0,
+        "Detenido": 0, "No iniciado": 0,
+        "Productivas no imputadas": 0,
       };
 
       for (const a of activities) {
@@ -375,13 +407,47 @@ export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupati
       bandTotals["Diseño de pruebas"][bKey]! += split.byPhase.TEST_DESIGN;
       bandTotals["Ejecución"][bKey]! += split.byPhase.EXECUTION;
 
-      // Productivas no imputadas: si el tester tiene Tester en P pero no phases en P ni en otros proyectos.
+      // Cuando el tester no tiene fases activas EN NINGÚN proyecto y tampoco
+      // DailyRecord, clasificamos sus horas productivas según los assignments
+      // del tester en ESTE proyecto. Si están en estados de dependencia
+      // externa, las horas van a bandas específicas; si no, al fallback gris.
       const phasesInP = phasesByProject[projectId] ?? 0;
       const phasesInOtherProjects = Object.entries(phasesByProject)
         .filter(([k]) => k !== projectId)
         .reduce((s, [, n]) => s + n, 0);
+
       if (t.projectIdsActive.includes(projectId) && phasesInP === 0 && phasesInOtherProjects === 0 && productive > 0) {
-        bandTotals["Productivas no imputadas"][bKey]! += productive;
+        const myAssignments = assignments.filter(
+          (a) => a.testerId === t.id && a.projectId === projectId,
+        );
+        // Mapear cada assignment a una banda según su estado. null = activo sin fase,
+        // se trata como productivas no imputadas (el tester debería estar
+        // trabajando pero no hay evidencia).
+        const bandCounts: Partial<Record<OccupationBandLabel, number>> = {};
+        let unimputedCount = 0;
+        let productionCount = 0;
+        for (const a of myAssignments) {
+          const band = STATUS_BAND_MAP[a.status];
+          if (band === undefined) continue;
+          if (a.status === "PRODUCTION") { productionCount++; continue; }
+          if (band === null) { unimputedCount++; continue; }
+          bandCounts[band] = (bandCounts[band] ?? 0) + 1;
+        }
+        const totalClassified = Object.values(bandCounts).reduce((s, n) => s + (n ?? 0), 0) + unimputedCount;
+        if (totalClassified === 0) {
+          // Sin assignments o todos en PRODUCTION → productivas no imputadas
+          bandTotals["Productivas no imputadas"][bKey]! += productive;
+        } else {
+          for (const [label, n] of Object.entries(bandCounts)) {
+            if (!n) continue;
+            bandTotals[label as OccupationBandLabel][bKey]! += productive * (n / totalClassified);
+          }
+          if (unimputedCount > 0) {
+            bandTotals["Productivas no imputadas"][bKey]! += productive * (unimputedCount / totalClassified);
+          }
+        }
+        // productionCount es solo para evitar "sin assignments" cuando hay producción
+        void productionCount;
       }
     }
   }

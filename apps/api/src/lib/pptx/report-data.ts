@@ -28,10 +28,18 @@ export async function loadScopedProjects(
   periodStart: Date,
   periodEnd: Date,
 ) {
+  // Incluir assignments en estado activo O con DailyRecord en el periodo
+  // (para capturar HUs que pasaron a PRODUCTION esta semana).
+  const assignmentFilter = {
+    OR: [
+      { status: { in: [...ACTIVE_OR_UAT] } },
+      { dailyRecords: { some: { date: { gte: periodStart, lte: periodEnd } } } },
+    ],
+  };
   return prisma.project.findMany({
     where: {
       ...scope,
-      stories: { some: { assignments: { some: { status: { in: [...ACTIVE_OR_UAT] } } } } },
+      stories: { some: { assignments: { some: assignmentFilter } } },
     },
     select: {
       id: true,
@@ -51,7 +59,7 @@ export async function loadScopedProjects(
           executionComplexity: true,
           cycles: { select: { id: true } },
           assignments: {
-            where: { status: { in: [...ACTIVE_OR_UAT] } },
+            where: assignmentFilter,
             select: {
               id: true,
               status: true,
@@ -85,6 +93,7 @@ import {
   type ActivityRef,
   type TesterRef,
   type DailyRecordRef,
+  type AssignmentInfo,
 } from "./occupation-math.js";
 import type {
   ReportSpec,
@@ -302,6 +311,20 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       }
     }
 
+    // AssignmentInfo: lista plana de assignments con su status actual — permite
+    // clasificar horas en bandas "Esperando aprobación", "En manos de desarrollo",
+    // "Detenido", "No iniciado" cuando no hay DailyRecord ni phase activa.
+    const assignmentsInfo: AssignmentInfo[] = [];
+    for (const story of p.stories) {
+      for (const a of story.assignments) {
+        assignmentsInfo.push({
+          testerId: a.testerId,
+          projectId: p.id,
+          status: a.status,
+        });
+      }
+    }
+
     const curve = aggregateOccupationCurve({
       projectId: p.id,
       from: periodStart,
@@ -312,6 +335,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       activities: activitiesForProject,
       holidaysMs,
       dailyRecords: dailyRecordsForCurve,
+      assignments: assignmentsInfo,
       asOfDate: new Date(),
     });
 
@@ -399,14 +423,25 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
   const portB = projects.reduce((s, p) => s + p.kpis.defects, 0);
   const ratioPct = portD > 0 ? Math.round((portE / portD) * 100) : 0;
 
+  // "HUs completadas en 1ª regresión" = HUs que efectivamente cerraron en
+  // status PRODUCTION y solo tuvieron 1 TestCycle. Las que aún están en proceso
+  // (aunque sea R1) NO cuentan aquí.
   let husFirstCycle = 0;
   let husMultipleCycles = 0;
+  // "Avance de la semana" = HUs que alcanzaron ejecución o más
+  // (EXECUTION/WAITING_UAT/UAT/PRODUCTION) sobre total de HUs del reporte.
+  let husAtOrPastExecution = 0;
+  let husTotal = 0;
+  const AT_OR_PAST_EXECUTION = new Set(["EXECUTION", "WAITING_UAT", "UAT", "PRODUCTION"]);
   for (const p of projects) {
     for (const h of p.hus) {
-      if (h.regressionNumber <= 1) husFirstCycle++;
-      else husMultipleCycles++;
+      husTotal++;
+      if (h.status === "PRODUCTION" && h.regressionNumber <= 1) husFirstCycle++;
+      if (h.regressionNumber >= 2) husMultipleCycles++;
+      if (AT_OR_PAST_EXECUTION.has(h.status)) husAtOrPastExecution++;
     }
   }
+  const advancePct = husTotal > 0 ? Math.round((husAtOrPastExecution / husTotal) * 100) : 0;
 
   let totalBands = 0;
   let totalCapacity = 0;
@@ -453,7 +488,17 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
     }
   }
 
-  const totalAnalysts = new Set(projects.flatMap((p) => p.testers.map((t) => t.id))).size;
+  // Conteo de analistas únicos por PERSONA (userId), no por Tester entity.
+  // Un mismo analista asignado a 3 proyectos son 3 Testers pero 1 persona.
+  const uniquePeople = new Set<string>();
+  for (const p of projects) {
+    for (const t of p.testers) {
+      const loadedP = loaded.find((lp) => lp.id === p.projectId);
+      const loadedT = loadedP?.testers.find((lt) => lt.id === t.id);
+      uniquePeople.add(loadedT?.userId ?? `anon:${t.id}`);
+    }
+  }
+  const totalAnalysts = uniquePeople.size;
 
   return {
     period,
@@ -469,6 +514,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
         executed: portE,
         defects: portB,
         ratioPct,
+        advancePct,
         husFirstCycle,
         husMultipleCycles,
         capacityUtilizationPct,

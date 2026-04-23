@@ -52,7 +52,7 @@ export function addExecutiveSummarySlide(pres: PptxGenJS, spec: ReportSpec): voi
   kpiCard(pres, s, startX + 0 * (cardW + gap), y, cardW, 1.7, String(k.designed), "Casos Diseñados", `#${PALETTE.blue}`);
   kpiCard(pres, s, startX + 1 * (cardW + gap), y, cardW, 1.7, String(k.executed), "Casos Ejecutados", `#${PALETTE.greenPrimary}`);
   kpiCard(pres, s, startX + 2 * (cardW + gap), y, cardW, 1.7, String(k.defects), "Defectos Detectados", `#${PALETTE.red}`);
-  kpiCard(pres, s, startX + 3 * (cardW + gap), y, cardW, 1.7, `${k.ratioPct}%`, "Ratio Ejec / Dis", `#${PALETTE.cyan}`);
+  kpiCard(pres, s, startX + 3 * (cardW + gap), y, cardW, 1.7, `${k.advancePct}%`, "Avance de la semana", `#${PALETTE.cyan}`);
 
   // Narrativa de regresiones + capacidad.
   const nY = 3.4;
