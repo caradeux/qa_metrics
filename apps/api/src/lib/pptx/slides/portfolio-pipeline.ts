@@ -10,7 +10,8 @@ const STATE_ORDER = [
   "En Curso",
   "Devuelto a Desarrollo",
   "Pdte. Aprobación",
-  "Completado",
+  "En UAT",
+  "En Producción",
   "Detenido",
 ];
 

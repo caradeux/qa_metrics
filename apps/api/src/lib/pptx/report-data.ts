@@ -127,8 +127,8 @@ const STATUS_LABEL: Record<string, string> = {
   EXECUTION: "En Curso",
   RETURNED_TO_DEV: "Devuelto a Desarrollo",
   WAITING_UAT: "Pdte. Aprobación",
-  UAT: "Pdte. Aprobación",
-  PRODUCTION: "Completado",
+  UAT: "En UAT",
+  PRODUCTION: "En Producción",
   ON_HOLD: "Detenido",
 };
 
@@ -139,7 +139,8 @@ const STATUS_COLOR: Record<string, string> = {
   "En Curso": PALETTE.greenPrimary,
   "Devuelto a Desarrollo": PALETTE.red,
   "Pdte. Aprobación": PALETTE.purple,
-  "Completado": PALETTE.greenPrimary,
+  "En UAT": PALETTE.waitingClient,          // fuchsia — cliente en revisión activa
+  "En Producción": PALETTE.greenPrimary,
   "Detenido": PALETTE.textMuted,
 };
 
