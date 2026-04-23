@@ -6,7 +6,9 @@ import { dirname, join } from "node:path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const LOGO_PATH = join(__dirname, "..", "..", "..", "assets", "inovabiz-logo.svg");
+// Resolver desde apps/api/src/lib/pptx/slides (dev con tsx) o apps/api/dist/lib/pptx/slides (prod)
+// a apps/api/assets/inovabiz-logo.svg — 4 niveles arriba, luego assets/.
+const LOGO_PATH = join(__dirname, "..", "..", "..", "..", "assets", "inovabiz-logo.svg");
 
 export function addClosingSlide(pres: PptxGenJS): void {
   const s = pres.addSlide();
