@@ -238,6 +238,23 @@ function inferPhaseFromDailyRecord(r: DailyRecordRef): AssignmentPhaseType {
   return "EXECUTION";
 }
 
+// Categorías cuyo significado es "no trabajó" (resta capacidad en lugar de ocupar una banda).
+const ABSENCE_CATEGORIES = new Set([
+  "vacaciones",
+  "ausencia",
+  "licencia",
+  "licencia médica",
+  "licencia medica",
+  "permiso",
+  "feriado",
+  "día administrativo",
+  "dia administrativo",
+]);
+
+export function isAbsenceCategory(name: string): boolean {
+  return ABSENCE_CATEGORIES.has(name.trim().toLowerCase());
+}
+
 function sameUTCDay(a: Date, b: Date): boolean {
   return a.getUTCFullYear() === b.getUTCFullYear()
     && a.getUTCMonth() === b.getUTCMonth()
@@ -269,7 +286,17 @@ export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupati
     const bKey = bucketKey(day, bucketing);
 
     for (const t of testers) {
-      const cap = dailyCapacityHours(day, t.allocation, holidaysMs);
+      const nominalCap = dailyCapacityHours(day, t.allocation, holidaysMs);
+      if (nominalCap === 0) continue;
+
+      // Restar horas de ausencia (vacaciones, licencias, permisos) de la capacidad.
+      let absenceHoursToday = 0;
+      for (const a of activities) {
+        if (a.testerId !== t.id) continue;
+        if (!isAbsenceCategory(a.categoryName)) continue;
+        absenceHoursToday += hoursOverlapDay(a.start, a.end, day);
+      }
+      const cap = Math.max(0, nominalCap - absenceHoursToday);
       if (cap === 0) continue;
       capacityByBucket[bKey]! += cap;
 
@@ -306,6 +333,8 @@ export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupati
 
       for (const a of activities) {
         if (a.testerId !== t.id) continue;
+        // Ausencias ya restaron capacidad; no suman a ninguna banda.
+        if (isAbsenceCategory(a.categoryName)) continue;
         const hrs = hoursOverlapDay(a.start, a.end, day);
         if (hrs === 0) continue;
         totalActivityHoursAllProjects += hrs;
