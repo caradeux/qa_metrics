@@ -187,7 +187,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       endAt: { gt: periodStart },
     },
     include: {
-      category: { select: { name: true } },
+      category: { select: { name: true, bandType: true } },
       assignment: { select: { id: true, story: { select: { projectId: true } } } },
     },
   });
@@ -200,6 +200,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
     list.push({
       testerId: a.testerId,
       categoryName: a.category.name,
+      categoryBandType: a.category.bandType as any,
       assignmentProjectId: a.assignment?.story?.projectId ?? null,
       start: a.startAt,
       end: a.endAt,

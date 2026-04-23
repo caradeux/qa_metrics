@@ -37,6 +37,7 @@ export type OccupationBandLabel =
   | "Reunión con usuario"
   | "Reunión con desarrollo"
   | "Inducción/Capacitación"
+  | "Otras actividades"
   | "Esperando aprobación cliente"
   | "En manos de desarrollo"
   | "Detenido"

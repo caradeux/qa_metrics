@@ -1,8 +1,20 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { activityCategoriesApi, type ActivityCategory } from "@/lib/api-client";
+import { activityCategoriesApi, type ActivityCategory, type ActivityCategoryBandType } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/usePermissions";
+
+const BAND_TYPE_OPTIONS: Array<{ value: ActivityCategoryBandType; label: string; hint: string }> = [
+  { value: "USER_MEETING", label: "Reunión con usuario", hint: "Cyan · aparece en banda de usuario" },
+  { value: "DEV_MEETING", label: "Reunión con desarrollo", hint: "Púrpura · aparece en banda de dev" },
+  { value: "TRAINING", label: "Inducción / Capacitación", hint: "Ámbar · aparece en banda de capacitación" },
+  { value: "ABSENCE", label: "Ausencia (vacaciones / licencia)", hint: "Rojo · resta capacidad del día" },
+  { value: "OTHER", label: "Otras actividades", hint: "Violeta · banda genérica" },
+];
+
+const BAND_TYPE_LABEL: Record<ActivityCategoryBandType, string> = Object.fromEntries(
+  BAND_TYPE_OPTIONS.map((o) => [o.value, o.label]),
+) as Record<ActivityCategoryBandType, string>;
 
 const CATEGORY_PALETTE = [
   "#EF4444", "#F97316", "#F59E0B", "#EAB308",
@@ -24,6 +36,7 @@ export default function ActivityCategoriesPage() {
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState("#EF4444");
+  const [newBandType, setNewBandType] = useState<ActivityCategoryBandType>("OTHER");
   const [userPickedColor, setUserPickedColor] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,12 +66,22 @@ export default function ActivityCategoriesPage() {
   async function create() {
     setError(null);
     try {
-      await activityCategoriesApi.create({ name: newName.trim(), color: newColor });
+      await activityCategoriesApi.create({ name: newName.trim(), color: newColor, bandType: newBandType });
       setNewName("");
+      setNewBandType("OTHER");
       setUserPickedColor(false); // vuelve al modo "auto" para la siguiente
       await load();
     } catch (e: any) {
       setError(e.message ?? "Error al crear la categoría");
+    }
+  }
+
+  async function updateBandType(c: ActivityCategory, bandType: ActivityCategoryBandType) {
+    try {
+      await activityCategoriesApi.update(c.id, { bandType });
+      await load();
+    } catch (e: any) {
+      setError(e.message ?? "Error al actualizar el tipo de banda");
     }
   }
 
@@ -106,14 +129,24 @@ export default function ActivityCategoriesPage() {
       {can("activity-categories", "create") && (
         <div className="bg-white rounded-lg border border-gray-200 px-5 py-4 mb-6">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Nueva categoría</p>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <input
-              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1 focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30 focus:border-[#1F3864]"
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30 focus:border-[#1F3864]"
               placeholder="Nombre de la categoría"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && newName.trim()) create(); }}
             />
+            <select
+              value={newBandType}
+              onChange={(e) => setNewBandType(e.target.value as ActivityCategoryBandType)}
+              title="Tipo de banda en el gráfico de capacidad ocupada"
+              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30 focus:border-[#1F3864]"
+            >
+              {BAND_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value} title={o.hint}>{o.label}</option>
+              ))}
+            </select>
             <div className="flex items-center gap-1.5">
               <label className="text-[11px] text-gray-500" title={userPickedColor ? "Color manual" : "Auto: próximo color libre de la paleta"}>
                 Color {userPickedColor ? "" : "(auto)"}
@@ -173,6 +206,24 @@ export default function ActivityCategoriesPage() {
 
               {/* Actions */}
               <div className="flex items-center gap-3 shrink-0 ml-4">
+                {/* Band type selector */}
+                {can("activity-categories", "update") ? (
+                  <select
+                    value={c.bandType}
+                    onChange={(e) => updateBandType(c, e.target.value as ActivityCategoryBandType)}
+                    title="Banda en el gráfico de capacidad ocupada"
+                    className="border border-gray-200 rounded px-2 py-0.5 text-[11px] text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
+                  >
+                    {BAND_TYPE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="px-2 py-0.5 rounded bg-gray-50 text-[11px] text-gray-500">
+                    {BAND_TYPE_LABEL[c.bandType] ?? c.bandType}
+                  </span>
+                )}
+
                 {/* Active toggle */}
                 {can("activity-categories", "update") ? (
                   <button

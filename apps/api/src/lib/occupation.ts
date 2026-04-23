@@ -41,6 +41,7 @@ export interface OccupationResult {
   };
 }
 
+// Fallback por nombre (por si una categoría antigua aún tiene bandType=OTHER).
 const ABSENCE_CATEGORY_NAMES = new Set([
   "vacaciones",
   "ausencia",
@@ -53,7 +54,8 @@ const ABSENCE_CATEGORY_NAMES = new Set([
   "dia administrativo",
 ]);
 
-function isAbsence(name: string): boolean {
+function isAbsence(name: string, bandType?: string | null): boolean {
+  if (bandType === "ABSENCE") return true;
   return ABSENCE_CATEGORY_NAMES.has(name.trim().toLowerCase());
 }
 
@@ -98,7 +100,7 @@ export async function computeOccupation(
     const start = a.startAt > from ? a.startAt : from;
     const end = a.endAt < to ? a.endAt : to;
     const hours = hoursBetween(start, end);
-    const absence = isAbsence(a.category.name);
+    const absence = isAbsence(a.category.name, (a.category as any).bandType);
 
     if (absence) {
       absenceHours += hours;
@@ -219,7 +221,7 @@ export async function computeOccupationBatch(
         const start = a.startAt > from ? a.startAt : from;
         const end = a.endAt < to ? a.endAt : to;
         const hours = hoursBetween(start, end);
-        const absence = isAbsence(a.category.name);
+        const absence = isAbsence(a.category.name, (a.category as any).bandType);
 
         if (absence) {
           absenceHours += hours;

@@ -23,6 +23,7 @@ export const PALETTE = {
   activityDevMeeting: "A855F7",
   activityInduction: "F59E0B",
   activityUnassigned: "6B7280",
+  activityOther: "8B5CF6",        // violeta — "Otras actividades" (bandType=OTHER)
   // Estados de dependencia externa (bandas nuevas)
   waitingClient: "C084FC",        // púrpura claro — "Esperando aprobación cliente"
   onDev: "FB7185",                // rojo apagado — "En manos de desarrollo"

@@ -181,6 +181,7 @@ describe("aggregateOccupationCurve (integración de formulas §5.1)", () => {
         {
           testerId: "T1",
           categoryName: "Reunión con usuario",
+          categoryBandType: "USER_MEETING" as const,
           assignmentProjectId: "P",
           start: new Date(Date.UTC(2026, 3, 13, 9)),
           end: new Date(Date.UTC(2026, 3, 13, 11)),

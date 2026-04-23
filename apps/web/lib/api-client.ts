@@ -117,11 +117,19 @@ export { ApiError };
 
 // ---------- Actividades ----------
 
+export type ActivityCategoryBandType =
+  | "USER_MEETING"
+  | "DEV_MEETING"
+  | "TRAINING"
+  | "ABSENCE"
+  | "OTHER";
+
 export interface ActivityCategory {
   id: string;
   name: string;
   color: string | null;
   active: boolean;
+  bandType: ActivityCategoryBandType;
 }
 
 export interface Activity {
@@ -140,9 +148,9 @@ export interface Activity {
 export const activityCategoriesApi = {
   list: (activeOnly = false) =>
     apiClient<ActivityCategory[]>(`/api/activity-categories${activeOnly ? "?activeOnly=true" : ""}`),
-  create: (data: { name: string; color?: string | null; active?: boolean }) =>
+  create: (data: { name: string; color?: string | null; active?: boolean; bandType?: ActivityCategoryBandType }) =>
     apiClient<ActivityCategory>("/api/activity-categories", { method: "POST", body: JSON.stringify(data) }),
-  update: (id: string, data: Partial<{ name: string; color: string | null; active: boolean }>) =>
+  update: (id: string, data: Partial<{ name: string; color: string | null; active: boolean; bandType: ActivityCategoryBandType }>) =>
     apiClient<ActivityCategory>(`/api/activity-categories/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   remove: (id: string) =>
     apiClient<void>(`/api/activity-categories/${id}`, { method: "DELETE" }),

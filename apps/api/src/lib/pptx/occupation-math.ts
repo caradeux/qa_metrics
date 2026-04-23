@@ -119,9 +119,17 @@ export interface PhaseSegment {
   end: Date;
 }
 
+export type CategoryBandType =
+  | "USER_MEETING"
+  | "DEV_MEETING"
+  | "TRAINING"
+  | "ABSENCE"
+  | "OTHER";
+
 export interface ActivityRef {
   testerId: string;
-  categoryName: string;             // exacto: "Reunión con usuario", "Reunión con desarrollo", "Inducción", "Capacitación"
+  categoryName: string;             // nombre literal, se conserva para diagnósticos
+  categoryBandType: CategoryBandType; // fuente de verdad para clasificación en bandas
   assignmentProjectId: string | null;
   start: Date;
   end: Date;
@@ -166,6 +174,7 @@ const BAND_ORDER = [
   "Reunión con usuario",
   "Reunión con desarrollo",
   "Inducción/Capacitación",
+  "Otras actividades",
   "Esperando aprobación cliente",
   "En manos de desarrollo",
   "Detenido",
@@ -180,6 +189,7 @@ const BAND_COLORS: Record<OccupationBandLabel, string> = {
   "Reunión con usuario": PALETTE.activityUserMeeting,
   "Reunión con desarrollo": PALETTE.activityDevMeeting,
   "Inducción/Capacitación": PALETTE.activityInduction,
+  "Otras actividades": PALETTE.activityOther,
   "Esperando aprobación cliente": PALETTE.waitingClient,
   "En manos de desarrollo": PALETTE.onDev,
   "Detenido": PALETTE.onHold,
@@ -201,22 +211,13 @@ const STATUS_BAND_MAP: Record<string, OccupationBandLabel | null> = {
   ON_HOLD: "Detenido",
 };
 
-// Mapeo de categorías de Activity a bandas del chart. Incluye nombres
-// canónicos del seed + variantes observadas en producción (UDD).
-const ACTIVITY_BAND_MAP: Record<string, OccupationBandLabel> = {
-  // Canónicos del seed
-  "Reunión con usuario": "Reunión con usuario",
-  "Reunión con desarrollo": "Reunión con desarrollo",
-  "Inducción": "Inducción/Capacitación",
-  "Capacitación": "Inducción/Capacitación",
-  // Variantes de producción (UDD)
-  "Daily Scrum": "Reunión con desarrollo",
-  "Capacitacion Inovabiz": "Inducción/Capacitación",
-  "Capacitación Inovabiz": "Inducción/Capacitación",
-  "Aceptacion Casos de Prueba (Presentacion Usuarios)": "Reunión con usuario",
-  "Aceptación Casos de Prueba (Presentación Usuarios)": "Reunión con usuario",
-  "Presentacion Usuarios (UAT)": "Reunión con usuario",
-  "Presentación Usuarios (UAT)": "Reunión con usuario",
+// Mapeo de bandType (configurable en ActivityCategory desde la UI) a banda del chart.
+const BAND_TYPE_TO_BAND: Record<CategoryBandType, OccupationBandLabel | null> = {
+  USER_MEETING: "Reunión con usuario",
+  DEV_MEETING: "Reunión con desarrollo",
+  TRAINING: "Inducción/Capacitación",
+  ABSENCE: null,                       // se maneja aparte (resta capacidad)
+  OTHER: "Otras actividades",
 };
 
 function iterDays(from: Date, to: Date): Date[] {
@@ -337,11 +338,11 @@ export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupati
       const nominalCap = dailyCapacityHours(day, t.allocation, holidaysMs);
       if (nominalCap === 0) continue;
 
-      // Restar horas de ausencia (vacaciones, licencias, permisos) de la capacidad.
+      // Restar horas de ausencia (bandType=ABSENCE) de la capacidad.
       let absenceHoursToday = 0;
       for (const a of activities) {
         if (a.testerId !== t.id) continue;
-        if (!isAbsenceCategory(a.categoryName)) continue;
+        if (a.categoryBandType !== "ABSENCE") continue;
         absenceHoursToday += hoursOverlapDay(a.start, a.end, day);
       }
       const cap = Math.max(0, nominalCap - absenceHoursToday);
@@ -376,7 +377,7 @@ export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupati
       const activityHoursByBand: Record<OccupationBandLabel, number> = {
         "Análisis": 0, "Diseño de pruebas": 0, "Ejecución": 0,
         "Reunión con usuario": 0, "Reunión con desarrollo": 0,
-        "Inducción/Capacitación": 0,
+        "Inducción/Capacitación": 0, "Otras actividades": 0,
         "Esperando aprobación cliente": 0, "En manos de desarrollo": 0,
         "Detenido": 0, "No iniciado": 0,
         "Productivas no imputadas": 0,
@@ -385,7 +386,7 @@ export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupati
       for (const a of activities) {
         if (a.testerId !== t.id) continue;
         // Ausencias ya restaron capacidad; no suman a ninguna banda.
-        if (isAbsenceCategory(a.categoryName)) continue;
+        if (a.categoryBandType === "ABSENCE") continue;
         const hrs = hoursOverlapDay(a.start, a.end, day);
         if (hrs === 0) continue;
         totalActivityHoursAllProjects += hrs;
@@ -396,7 +397,7 @@ export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupati
           testerProjectIds: t.projectIdsActive,
           targetProjectId: projectId,
         });
-        const bandLabel = ACTIVITY_BAND_MAP[a.categoryName];
+        const bandLabel = BAND_TYPE_TO_BAND[a.categoryBandType];
         if (bandLabel) activityHoursByBand[bandLabel] += toProject;
       }
 
