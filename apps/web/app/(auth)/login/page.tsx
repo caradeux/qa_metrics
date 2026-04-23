@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api-client";
+import { InovabizLogo } from "@/components/InovabizLogo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -61,8 +62,45 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex">
-      {/* ── Left Panel: Dark hero (landing pitch) ───────────────────── */}
+    <div className="min-h-screen flex flex-col bg-white">
+      {/* ── Top navbar ─────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 backdrop-blur-md bg-[rgba(13,27,42,0.7)] border-b border-white/10">
+        <div className="mx-auto max-w-[1400px] flex items-center justify-between px-6 lg:px-10 h-16">
+          <a href="#top" className="flex items-center" aria-label="Inicio">
+            <InovabizLogo className="h-7 w-auto" variant="white" />
+          </a>
+          <nav className="flex items-center gap-1 lg:gap-2">
+            <a
+              href="#funcionalidades"
+              className="hidden lg:inline-block px-3 py-2 text-[13px] font-medium uppercase tracking-[0.12em] text-[#8BA4C4] hover:text-white transition-colors"
+            >
+              Funcionalidades
+            </a>
+            <a
+              href="#roles"
+              className="hidden lg:inline-block px-3 py-2 text-[13px] font-medium uppercase tracking-[0.12em] text-[#8BA4C4] hover:text-white transition-colors"
+            >
+              Roles
+            </a>
+            <a
+              href="#contacto"
+              className="hidden lg:inline-block px-3 py-2 text-[13px] font-medium uppercase tracking-[0.12em] text-[#8BA4C4] hover:text-white transition-colors"
+            >
+              Contacto
+            </a>
+            <a
+              href="#login-form"
+              className="ml-2 inline-flex items-center px-4 py-2 rounded-sm border border-white/20 text-[12px] font-semibold uppercase tracking-[0.15em] text-white hover:bg-white/10 transition-colors"
+            >
+              Iniciar sesión
+            </a>
+          </nav>
+        </div>
+      </header>
+
+      {/* ── Hero section ───────────────────────────────────────────── */}
+      <section id="top" className="flex flex-1 min-h-[calc(100vh-64px)]">
+        {/* ── Left Panel: Dark hero (landing pitch) ───────────────────── */}
       <div
         className="hidden lg:flex lg:w-[52%] relative overflow-hidden flex-col justify-between p-12"
         style={{
@@ -154,7 +192,7 @@ export default function LoginPage() {
       </div>
 
       {/* ── Right Panel: Login form ────────────────────────────── */}
-      <div className="flex-1 flex items-center justify-center p-8 lg:p-16 bg-white relative">
+      <div id="login-form" className="flex-1 flex items-center justify-center p-8 lg:p-16 bg-white relative scroll-mt-16">
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#1F3864] to-transparent opacity-10 lg:hidden" />
         <div className="w-full max-w-sm">
           <div className="lg:hidden mb-10 text-center">
@@ -214,6 +252,8 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+      </section>
+      {/* Sections (funcionalidades, roles, contacto) vendrán en tasks siguientes */}
     </div>
   );
 }
