@@ -18,6 +18,7 @@ interface AssignmentRecord {
   designed: number;
   executed: number;
   defects: number;
+  notes?: string | null;
 }
 
 interface AssignmentRow {
@@ -41,6 +42,7 @@ interface CellValue {
   designed: number;
   executed: number;
   defects: number;
+  notes: string;
 }
 
 type DraftMap = Record<string, Record<string, CellValue>>;
@@ -51,7 +53,7 @@ interface Props {
   onSaved?: () => void;
 }
 
-const EMPTY_CELL: CellValue = { designed: 0, executed: 0, defects: 0 };
+const EMPTY_CELL: CellValue = { designed: 0, executed: 0, defects: 0, notes: "" };
 
 const FIELD_META = {
   designed: {
@@ -98,6 +100,7 @@ function buildDraft(assignments: AssignmentRow[]): DraftMap {
         designed: r.designed,
         executed: r.executed,
         defects: r.defects,
+        notes: r.notes ?? "",
       };
     }
   }
@@ -106,7 +109,10 @@ function buildDraft(assignments: AssignmentRow[]): DraftMap {
 
 function cellEquals(a: CellValue, b: CellValue) {
   return (
-    a.designed === b.designed && a.executed === b.executed && a.defects === b.defects
+    a.designed === b.designed &&
+    a.executed === b.executed &&
+    a.defects === b.defects &&
+    (a.notes ?? "") === (b.notes ?? "")
   );
 }
 
@@ -190,6 +196,7 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [pendingMismatches, setPendingMismatches] = useState<Mismatch[] | null>(null);
+  const [openNoteFor, setOpenNoteFor] = useState<{ assignmentId: string; date: string } | null>(null);
 
   const load = () => {
     setError(null);
@@ -227,7 +234,7 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
   const setCell = (
     assignmentId: string,
     date: string,
-    field: keyof CellValue,
+    field: "designed" | "executed" | "defects",
     value: number
   ) => {
     setDraft((prev) => {
@@ -235,6 +242,18 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
       const row = { ...(next[assignmentId] ?? {}) };
       const cell = { ...(row[date] ?? EMPTY_CELL) };
       cell[field] = Math.max(0, value | 0);
+      row[date] = cell;
+      next[assignmentId] = row;
+      return next;
+    });
+  };
+
+  const setCellNotes = (assignmentId: string, date: string, value: string) => {
+    setDraft((prev) => {
+      const next = { ...prev };
+      const row = { ...(next[assignmentId] ?? {}) };
+      const cell = { ...(row[date] ?? EMPTY_CELL) };
+      cell.notes = value.slice(0, 2000);
       row[date] = cell;
       next[assignmentId] = row;
       return next;
@@ -288,7 +307,8 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
               designed: cur.designed,
               executed: cur.executed,
               defects: cur.defects,
-            });
+              notes: cur.notes.trim() === "" ? null : cur.notes,
+            } as any);
           }
         }
       }
@@ -475,6 +495,23 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
                             </label>
                           );
                         })}
+                        {!disabled && (
+                          <button
+                            type="button"
+                            onClick={() => setOpenNoteFor({ assignmentId: a.id, date: day.date })}
+                            title={cell.notes ? `Nota: ${cell.notes.slice(0, 80)}${cell.notes.length > 80 ? "…" : ""}` : "Agregar nota interna"}
+                            className={`mt-0.5 inline-flex items-center gap-1 self-start rounded px-1.5 py-0.5 text-[10px] transition ${
+                              cell.notes
+                                ? "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                            }`}
+                          >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            {cell.notes ? "Nota" : "+nota"}
+                          </button>
+                        )}
                       </div>
                     </td>
                   );
@@ -547,7 +584,7 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
                   </div>
                   {(["designed", "executed", "defects"] as const).map((f) => {
                     const m = FIELD_META[f];
-                    const val = Object.values(rowTotals).reduce((s, r) => s + r[f as keyof CellValue], 0);
+                    const val = Object.values(rowTotals).reduce((s, r) => s + (r[f] as number), 0);
                     return (
                       <div
                         key={f}
@@ -585,6 +622,58 @@ export function WeeklyGrid({ testerId, weekStart, onSaved }: Props) {
           </span>
         )}
       </div>
+
+      {openNoteFor && (() => {
+        const a = data.assignments.find((x) => x.id === openNoteFor.assignmentId);
+        if (!a) return null;
+        const currentNote = draft[openNoteFor.assignmentId]?.[openNoteFor.date]?.notes ?? "";
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-xl">
+              <div className="border-b border-gray-200 bg-gray-50 px-5 py-3">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Nota interna del día
+                </h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {(a.story.externalId ? `${a.story.externalId} · ` : "")}{a.story.title} · {openNoteFor.date}
+                </p>
+                <p className="mt-1 text-[11px] text-gray-400">
+                  Las notas son de uso interno — no aparecen en el PPTX ni en reportes al cliente.
+                </p>
+              </div>
+              <div className="px-5 py-4">
+                <textarea
+                  autoFocus
+                  value={currentNote}
+                  onChange={(e) => setCellNotes(openNoteFor.assignmentId, openNoteFor.date, e.target.value)}
+                  rows={6}
+                  maxLength={2000}
+                  placeholder="Ej: me llamaron a soporte urgente 2h · estaba esperando respuesta de dev · ..."
+                  className="w-full resize-none rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1F3864] focus:outline-none focus:ring-2 focus:ring-[#1F3864]/20"
+                />
+                <p className="mt-1 text-right text-[10px] text-gray-400">{currentNote.length} / 2000</p>
+              </div>
+              <div className="flex justify-end gap-2 border-t border-gray-200 bg-gray-50 px-5 py-3">
+                <button
+                  onClick={() => setOpenNoteFor(null)}
+                  className="rounded border border-gray-300 bg-white px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Cerrar
+                </button>
+                <button
+                  onClick={() => {
+                    setCellNotes(openNoteFor.assignmentId, openNoteFor.date, "");
+                    setOpenNoteFor(null);
+                  }}
+                  className="rounded border border-red-200 bg-white px-4 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Borrar nota
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {pendingMismatches && pendingMismatches.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">

@@ -170,6 +170,7 @@ model DailyRecord {
   designed     Int               @default(0)
   executed     Int               @default(0)
   defects      Int               @default(0)
+  notes        String?                                   // nota interna del analista (no aparece en PPTX)
   source       String            @default("MANUAL")
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt

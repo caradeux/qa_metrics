@@ -18,6 +18,7 @@ const bulkSchema = z.object({
         designed: z.number().int().min(0),
         executed: z.number().int().min(0),
         defects: z.number().int().min(0),
+        notes: z.string().max(2000).nullable().optional(),
       })
     )
     .min(1),
@@ -188,6 +189,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
         designed: r.designed,
         executed: r.executed,
         defects: r.defects,
+        notes: r.notes ?? null,
       })),
     };
   });
@@ -275,11 +277,13 @@ router.post("/bulk", async (req: AuthRequest, res: Response) => {
           designed: e.designed,
           executed: e.executed,
           defects: e.defects,
+          notes: e.notes ?? null,
         },
         update: {
           designed: e.designed,
           executed: e.executed,
           defects: e.defects,
+          ...(e.notes !== undefined ? { notes: e.notes } : {}),
         },
       })
     )
