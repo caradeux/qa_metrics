@@ -63,10 +63,46 @@ export function addAnalystDetailSlide(pres: PptxGenJS, a: OccupationResult): voi
     });
   });
 
+  // Mini-fila de desglose productivo (Análisis / Diseño / Ejecución)
+  const phaseY = 2.85;
+  const phaseH = 0.7;
+  if (a.productiveByPhase) {
+    const phases: Array<{ label: string; v: number; c: string }> = [
+      { label: "Análisis", v: a.productiveByPhase.analysis, c: PALETTE.phaseAnalysis },
+      { label: "Diseño de pruebas", v: a.productiveByPhase.design, c: PALETTE.phaseDesign },
+      { label: "Ejecución", v: a.productiveByPhase.execution, c: PALETTE.phaseExecution },
+    ];
+    const pcardW = 3.9;
+    const pgap = 0.15;
+    const pstartX = (SLIDE.widthIn - (3 * pcardW + 2 * pgap)) / 2;
+    phases.forEach((p, i) => {
+      const x = pstartX + i * (pcardW + pgap);
+      s.addShape((pres as any).shapes.RECTANGLE, {
+        x, y: phaseY, w: pcardW, h: phaseH,
+        fill: { color: PALETTE.white },
+        line: { color: p.c, width: 1 },
+      } as any);
+      // Etiqueta pequeña izquierda
+      s.addText(p.label, {
+        x: x + 0.15, y: phaseY + 0.05, w: pcardW * 0.6, h: 0.28,
+        fontFace: FONT.face, fontSize: 10, color: PALETTE.textMuted,
+      });
+      s.addText("Horas productivas", {
+        x: x + 0.15, y: phaseY + 0.35, w: pcardW * 0.6, h: 0.28,
+        fontFace: FONT.face, fontSize: 8, color: PALETTE.textMuted, italic: true,
+      });
+      // Valor grande derecha
+      s.addText(formatHours(p.v), {
+        x: x + pcardW * 0.6, y: phaseY + 0.05, w: pcardW * 0.38 - 0.15, h: 0.6,
+        fontFace: FONT.face, fontSize: 22, bold: true, color: `#${p.c}`, align: "right", valign: "middle",
+      });
+    });
+  }
+
   const leftX = 0.5;
   const rightX = 6.8;
   const colW = 6;
-  const tableY = 3.05;
+  const tableY = a.productiveByPhase ? 3.7 : 3.05;
 
   // IZQ: Ausencias + Categorías Activity
   let cursorY = tableY;

@@ -579,6 +579,24 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
     projects: Array.from(projSet).sort(),
   }));
 
+  // Anexar productiveByPhase a cada analista (Análisis / Diseño / Ejecución).
+  // Busca la curva del userKey correspondiente (matcheando por nombre, ya que
+  // aggregateOccupationByUser devuelve OccupationResult con testerName).
+  const sumBand = (curve: import("./types.js").ProjectOccupationCurve, label: string): number => {
+    const band = curve.bands.find((b) => b.label === label);
+    if (!band) return 0;
+    return Math.round(band.values.reduce((s, v) => s + v, 0) * 100) / 100;
+  };
+  for (const analyst of analysts) {
+    const match = analystCurves.find((c) => c.testerName === analyst.testerName);
+    if (!match) continue;
+    analyst.productiveByPhase = {
+      analysis: sumBand(match.curve, "Análisis"),
+      design: sumBand(match.curve, "Diseño de pruebas"),
+      execution: sumBand(match.curve, "Ejecución"),
+    };
+  }
+
   // Team curve: suma de las curvas de todos los proyectos.
   const teamCurve = sumCurves(projects.map((p) => p.occupationCurve));
 

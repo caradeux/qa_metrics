@@ -31,6 +31,14 @@ export interface OccupationResult {
   productiveHoursEstimate: number;   // capacityHours - activityHours
   occupationPct: number;
   overallocated: boolean;
+  // Desglose fino de las horas productivas por fase (se calcula en report-data
+  // a partir de la curva por-tester; opcional porque los endpoints que usan
+  // computeOccupation directo no lo necesitan).
+  productiveByPhase?: {
+    analysis: number;
+    design: number;
+    execution: number;
+  };
 }
 
 const ABSENCE_CATEGORY_NAMES = new Set([
