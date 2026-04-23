@@ -127,6 +127,15 @@ export interface ActivityRef {
   end: Date;
 }
 
+export interface DailyRecordRef {
+  testerId: string;
+  date: Date;                       // fecha (se compara por parte de día UTC)
+  projectId: string;
+  designed: number;
+  executed: number;
+  defects: number;
+}
+
 export interface AggregateInput {
   projectId: string;
   from: Date;
@@ -136,6 +145,7 @@ export interface AggregateInput {
   phaseSegments: readonly PhaseSegment[];
   activities: readonly ActivityRef[];
   holidaysMs: Set<number>;
+  dailyRecords?: readonly DailyRecordRef[]; // fallback cuando no hay AssignmentPhase
 }
 
 const BAND_ORDER = [
@@ -221,8 +231,21 @@ function dateInSegment(seg: PhaseSegment, day: Date): boolean {
   return seg.start.getTime() <= de && seg.end.getTime() >= ds;
 }
 
+function inferPhaseFromDailyRecord(r: DailyRecordRef): AssignmentPhaseType {
+  if (r.executed > 0) return "EXECUTION";
+  if (r.designed > 0) return "TEST_DESIGN";
+  // Defects o cargas sin números concretos → asumimos ejecución (estaba probando).
+  return "EXECUTION";
+}
+
+function sameUTCDay(a: Date, b: Date): boolean {
+  return a.getUTCFullYear() === b.getUTCFullYear()
+    && a.getUTCMonth() === b.getUTCMonth()
+    && a.getUTCDate() === b.getUTCDate();
+}
+
 export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupationCurve {
-  const { projectId, from, to, bucketing, testers, phaseSegments, activities, holidaysMs } = input;
+  const { projectId, from, to, bucketing, testers, phaseSegments, activities, holidaysMs, dailyRecords = [] } = input;
   const days = iterDays(from, to).filter((d) => {
     const dow = d.getUTCDay();
     return dow !== 0 && dow !== 6;
@@ -254,6 +277,19 @@ export function aggregateOccupationCurve(input: AggregateInput): ProjectOccupati
       const activePhases: PhaseRef[] = phaseSegments
         .filter((s) => s.testerId === t.id && dateInSegment(s, day))
         .map((s) => ({ type: s.type, projectId: s.projectId }));
+
+      // Fallback: si no hay AssignmentPhase modeladas, usar DailyRecord como evidencia
+      // de trabajo productivo del tester ese día e inferir la fase desde los números.
+      if (activePhases.length === 0 && dailyRecords.length > 0) {
+        for (const r of dailyRecords) {
+          if (r.testerId !== t.id) continue;
+          if (!sameUTCDay(r.date, day)) continue;
+          activePhases.push({
+            type: inferPhaseFromDailyRecord(r),
+            projectId: r.projectId,
+          });
+        }
+      }
 
       const phasesByProject: Record<string, number> = {};
       for (const p of activePhases) {

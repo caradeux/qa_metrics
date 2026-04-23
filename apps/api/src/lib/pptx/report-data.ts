@@ -84,6 +84,7 @@ import {
   type PhaseSegment,
   type ActivityRef,
   type TesterRef,
+  type DailyRecordRef,
 } from "./occupation-math.js";
 import type {
   ReportSpec,
@@ -258,6 +259,28 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       }
     }
 
+    // DailyRecords del proyecto P + de OTROS proyectos donde los testers de P
+    // también trabajan — necesarios como fallback para clasificar fases.
+    const dailyRecordsForCurve: DailyRecordRef[] = [];
+    const projectTesterIds = new Set(p.testers.map((t) => t.id));
+    for (const proj of loaded) {
+      for (const story of proj.stories) {
+        for (const asg of story.assignments) {
+          if (!projectTesterIds.has(asg.testerId)) continue;
+          for (const dr of asg.dailyRecords) {
+            dailyRecordsForCurve.push({
+              testerId: asg.testerId,
+              date: dr.date,
+              projectId: proj.id,
+              designed: dr.designed,
+              executed: dr.executed,
+              defects: dr.defects,
+            });
+          }
+        }
+      }
+    }
+
     const curve = aggregateOccupationCurve({
       projectId: p.id,
       from: periodStart,
@@ -267,6 +290,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       phaseSegments,
       activities: activitiesForProject,
       holidaysMs,
+      dailyRecords: dailyRecordsForCurve,
     });
 
     const hus: HuRow[] = [];
