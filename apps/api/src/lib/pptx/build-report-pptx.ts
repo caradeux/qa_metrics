@@ -3,6 +3,7 @@ import type { ReportSpec } from "./types.js";
 import { SLIDE } from "./theme.js";
 import { addCoverSlide } from "./slides/cover.js";
 import { addExecutiveSummarySlide } from "./slides/executive-summary.js";
+import { addStatusLegendSlide } from "./slides/status-legend.js";
 import { addProjectCoverSlide } from "./slides/project-cover.js";
 import { addProjectHuTableSlide } from "./slides/project-hu-table.js";
 import { addProjectComplexityMatrixSlide } from "./slides/project-complexity-matrix.js";
@@ -33,6 +34,7 @@ export async function buildReportPptx(spec: ReportSpec): Promise<Buffer> {
   // Bloque A
   addCoverSlide(pres, spec);
   addExecutiveSummarySlide(pres, spec);
+  addStatusLegendSlide(pres);
 
   // Bloque B — por proyecto (cover + HU table + matriz; ya NO curva por proyecto)
   for (const p of spec.projects) {
