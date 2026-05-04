@@ -23,18 +23,25 @@ export async function buildProjectScope(
   return scope;
 }
 
+// Estados visibles a nivel de visibilidad del reporte. PRODUCTION queda fuera
+// porque una HU cerrada hace semanas no debe re-aparecer; sí entra si tiene
+// DailyRecords en el periodo (HU que cerró durante el periodo).
+const VISIBLE_STATUSES = [
+  ...ACTIVE_OR_UAT,
+  "ON_HOLD" as const,
+];
+
 export async function loadScopedProjects(
   scope: Record<string, unknown>,
   periodStart: Date,
   periodEnd: Date,
 ) {
-  // Incluir assignments en estado activo O con DailyRecord en el periodo
-  // (para capturar HUs que pasaron a PRODUCTION esta semana) O en estado
-  // ON_HOLD (HUs detenidas siempre deben aparecer en el reporte).
-  const VISIBLE_STATUSES = [
-    ...ACTIVE_OR_UAT,
-    "ON_HOLD" as const,
-  ];
+  // Filtro de visibilidad: assignment en estado visible O con DailyRecord en
+  // el periodo. Se aplica a nivel de project + story para decidir QUÉ HUs
+  // aparecen en el reporte. NO se aplica al cargar los assignments dentro de
+  // cada story: ahí se traen TODOS los assignments para que el "estado actual"
+  // (s.assignments[0]) sea el del último ciclo real, sin importar si ese
+  // último ciclo está en PRODUCTION o en cualquier otro estado filtrado.
   const assignmentFilter = {
     OR: [
       { status: { in: VISIBLE_STATUSES } },
@@ -56,6 +63,9 @@ export async function loadScopedProjects(
         orderBy: { allocation: "desc" },
       },
       stories: {
+        // Visibilidad a nivel story: solo cargar stories con al menos un
+        // assignment que cumpla el filtro de visibilidad.
+        where: { assignments: { some: assignmentFilter } },
         select: {
           id: true,
           externalId: true,
@@ -64,7 +74,8 @@ export async function loadScopedProjects(
           executionComplexity: true,
           cycles: { select: { id: true } },
           assignments: {
-            where: assignmentFilter,
+            // SIN where: queremos TODOS los assignments de la story para que
+            // el estado mostrado sea el del último ciclo real.
             select: {
               id: true,
               status: true,
@@ -79,8 +90,8 @@ export async function loadScopedProjects(
                 select: { date: true, designed: true, executed: true, defects: true },
               },
             },
-            // Ordenar por fecha de creación para que la primera sea la más
-            // reciente y represente el estado actual de la HU.
+            // Ordenar por createdAt DESC: [0] es el último ciclo creado y
+            // representa el estado actual de la HU.
             orderBy: { createdAt: "desc" },
           },
         },
@@ -339,9 +350,16 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
     // AssignmentInfo: lista plana de assignments con su status actual — permite
     // clasificar horas en bandas "Esperando aprobación", "En manos de desarrollo",
     // "Detenido", "No iniciado" cuando no hay DailyRecord ni phase activa.
+    // story.assignments ahora trae TODOS los assignments (incl. PRODUCTION sin
+    // records) para preservar el estado del último ciclo. Aplicamos aquí en JS
+    // el filtro de visibilidad equivalente al que antes hacía Prisma, así la
+    // curva no recibe assignments cerrados que no contribuyen al periodo.
     const assignmentsInfo: AssignmentInfo[] = [];
     for (const story of p.stories) {
       for (const a of story.assignments) {
+        const isVisibleStatus = (VISIBLE_STATUSES as readonly string[]).includes(a.status);
+        const hasRecordsInPeriod = a.dailyRecords.length > 0;
+        if (!isVisibleStatus && !hasRecordsInPeriod) continue;
         assignmentsInfo.push({
           testerId: a.testerId,
           projectId: p.id,
