@@ -832,8 +832,11 @@ function EditCycleDatesModal({
 
   async function save() {
     if (!cycle) return;
-    if (!datesChanged) { onClose(); return; }
-    if (reasonTooShort) {
+    // Si hay cambios de fechas, el motivo es obligatorio. Sin cambios se
+    // permite ejecutar el PUT igual para forzar sincronización con assignments
+    // que hubieran quedado desfasados (caso típico: ediciones antes del fix
+    // de cascada, o assignments cuyo endDate quedó atrás del ciclo extendido).
+    if (datesChanged && reasonTooShort) {
       setError(`Motivo obligatorio: mínimo ${MIN_REASON_LENGTH} caracteres.`);
       return;
     }
@@ -844,7 +847,7 @@ function EditCycleDatesModal({
         body: JSON.stringify({
           startDate: startDate || null,
           endDate: endDate || null,
-          reason: reason.trim(),
+          ...(datesChanged ? { reason: reason.trim() } : {}),
         }),
       });
       onSaved();
@@ -858,7 +861,7 @@ function EditCycleDatesModal({
     <Modal open={open} onClose={onClose} title={`Editar fechas: ${cycle?.name ?? ""}`}>
       <div className="space-y-3">
         <p className="text-[11px] text-gray-500">
-          Las fechas deben ser días hábiles (L-V, no feriado). El cambio queda registrado con tu motivo en auditoría.
+          Las fechas deben ser días hábiles (L-V, no feriado). El cambio queda registrado con tu motivo en auditoría. Si no cambiás fechas y guardás, se re-sincroniza el rango de los assignments con el del ciclo (útil cuando quedaron desfasados).
         </p>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -879,7 +882,7 @@ function EditCycleDatesModal({
             onChange={e => setReason(e.target.value)}
             rows={3}
             disabled={!datesChanged}
-            placeholder={datesChanged ? "Ej: Se extendió el plazo por retraso en ambiente de pruebas" : "Cambia alguna fecha para habilitar el motivo"}
+            placeholder={datesChanged ? "Ej: Se extendió el plazo por retraso en ambiente de pruebas" : "Sin cambios de fecha — al guardar se sincronizan los assignments"}
             className={`${inp} resize-none disabled:bg-gray-50 disabled:text-gray-400`}
           />
           {datesChanged && (
@@ -897,7 +900,7 @@ function EditCycleDatesModal({
             disabled={saving || (datesChanged && reasonTooShort)}
             className="px-3 py-2 text-xs font-semibold text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] disabled:opacity-50"
           >
-            {saving ? "Guardando..." : "Guardar"}
+            {saving ? "Guardando..." : datesChanged ? "Guardar" : "Sincronizar"}
           </button>
         </div>
       </div>
