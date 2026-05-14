@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addDays, format, startOfDay, startOfWeek, addWeeks } from "date-fns";
 import { apiClient } from "@/lib/api-client";
 import { useHolidays } from "@/lib/holidays";
+import { fmtDateUtc } from "@/lib/dates";
 import { Modal } from "@/components/ui/Modal";
 import { GanttChart, type GanttAssignment } from "@/components/gantt/GanttChart";
 
@@ -446,11 +447,11 @@ export default function GanttPage() {
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">Inicio</p>
-                <p className="text-sm text-gray-800">{format(new Date(selected.startDate), "dd/MM/yyyy")}</p>
+                <p className="text-sm text-gray-800">{fmtDateUtc(selected.startDate)}</p>
               </div>
               <div>
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider">Fin</p>
-                <p className="text-sm text-gray-800">{selected.endDate ? format(new Date(selected.endDate), "dd/MM/yyyy") : "En curso"}</p>
+                <p className="text-sm text-gray-800">{selected.endDate ? fmtDateUtc(selected.endDate) : "En curso"}</p>
               </div>
             </div>
             {selected.notes && (

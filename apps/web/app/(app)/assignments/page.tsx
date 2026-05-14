@@ -40,7 +40,7 @@ const ACTIVE_STATUSES = ["REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DE
 const statusMap = Object.fromEntries(STATUSES.map(s => [s.value, s]));
 const complexityBadge: Record<string, string> = { HIGH: "bg-red-100 text-red-700", MEDIUM: "bg-amber-100 text-amber-700", LOW: "bg-green-100 text-green-700" };
 
-function fmtDate(d: string) { return new Date(d).toLocaleDateString("es", { day: "2-digit", month: "short" }); }
+function fmtDate(d: string) { return new Date(d).toLocaleDateString("es", { day: "2-digit", month: "short", timeZone: "UTC" }); }
 function daysBetween(a: string, b: string) { return Math.ceil((new Date(b).getTime() - new Date(a).getTime()) / (1000 * 60 * 60 * 24)); }
 function daysUntil(d: string) { return daysBetween(new Date().toISOString().split("T")[0], d); }
 

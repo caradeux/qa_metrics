@@ -63,7 +63,7 @@ const COMPLEXITY_BADGE: Record<string, string> = {
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("es-CL", { day: "2-digit", month: "short" });
+  return new Date(iso).toLocaleDateString("es-CL", { day: "2-digit", month: "short", timeZone: "UTC" });
 }
 
 export default function TesterReportPage() {

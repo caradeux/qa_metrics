@@ -46,7 +46,10 @@ const FIELD_LABEL: Record<string, string> = {
 function formatDateValue(v: string | null): string {
   if (!v) return "—";
   const d = new Date(v);
-  return d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
+  // Las fechas oldValue/newValue del DateChangeLog representan "días"
+  // (TestCycle/Assignment/Phase startDate/endDate) almacenados en UTC midnight.
+  // Forzar timeZone: "UTC" evita el desplazamiento al día anterior en Chile.
+  return d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 function formatTimestamp(v: string): string {

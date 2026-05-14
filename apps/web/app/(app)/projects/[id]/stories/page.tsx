@@ -7,6 +7,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { STATUSES, statusMap, ComplexityBadge } from "@/components/stories/StatusBadge";
+import { fmtDateShortUtc, fmtDateUtc } from "@/lib/dates";
 
 interface TesterLite { id: string; name: string }
 interface AssignmentPhase {
@@ -50,11 +51,7 @@ const complexityLabels: Record<string, string> = { LOW: "Baja", MEDIUM: "Media",
 
 const PHASE_LABEL: Record<string, string> = { ANALYSIS: "Análisis", TEST_DESIGN: "Diseño", EXECUTION: "Ejecución" };
 
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
-}
+const fmtDate = fmtDateUtc;
 
 function daysBetween(startIso: string, endIso: string): number {
   const s = new Date(startIso).getTime();
@@ -514,8 +511,8 @@ function StoryCard({
                     <span className="text-sm font-semibold text-gray-800">{cycle.name}</span>
                     {cycle.startDate && (
                       <span className="text-[10px] text-gray-500">
-                        {new Date(cycle.startDate).toLocaleDateString("es")}
-                        {cycle.endDate ? ` - ${new Date(cycle.endDate).toLocaleDateString("es")}` : ""}
+                        {fmtDateUtc(cycle.startDate)}
+                        {cycle.endDate ? ` - ${fmtDateUtc(cycle.endDate)}` : ""}
                       </span>
                     )}
                     <span className="text-[10px] text-gray-400">· {cycle.assignments.length} asignacion(es)</span>
@@ -585,10 +582,8 @@ function StoryCard({
                               )}
                             </td>
                             <td className="px-3 py-1.5 text-gray-500">
-                              {startD.toLocaleDateString("es", { day: "2-digit", month: "short" })}
-                              {endD
-                                ? ` → ${endD.toLocaleDateString("es", { day: "2-digit", month: "short" })}`
-                                : " → en curso"}
+                              {fmtDateShortUtc(startD)}
+                              {endD ? ` → ${fmtDateShortUtc(endD)}` : " → en curso"}
                             </td>
                             <td className="px-3 py-1.5 text-center font-mono text-gray-700">
                               {duration}d{open ? <span className="ml-0.5 text-[9px] text-gray-400">(en curso)</span> : ""}
