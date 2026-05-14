@@ -127,6 +127,7 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
   const [editPhases, setEditPhases] = useState<{ assignmentId: string; phases: AssignmentPhase[] } | null>(null);
   const [deleteStoryTarget, setDeleteStoryTarget] = useState<Story | null>(null);
   const [deleteCycleTarget, setDeleteCycleTarget] = useState<{ id: string; name: string; assignmentCount: number } | null>(null);
+  const [editCycleDates, setEditCycleDates] = useState<StoryCycle | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -334,8 +335,10 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
               onEdit={() => setEditStory(story)}
               onDelete={() => setDeleteStoryTarget(story)}
               canDeleteCycle={can("cycles", "delete")}
+              canUpdateCycle={can("cycles", "update")}
               onNewCycle={() => setNewCycleForStory(story)}
               onDeleteCycle={(cycleId, cycleName, count) => setDeleteCycleTarget({ id: cycleId, name: cycleName, assignmentCount: count })}
+              onEditCycleDates={(cycle) => setEditCycleDates(cycle)}
               onAssignToCycle={(cycle, isFirstCycle) => setAssignToCycle({ story, cycle, isFirstCycle })}
               onChangeStatus={changeStatus}
               onEditPhases={(assignmentId, phases) => setEditPhases({ assignmentId, phases })}
@@ -377,6 +380,12 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
         onClose={() => setEditPhases(null)}
         onSaved={() => { setEditPhases(null); fetchData(); }}
       />
+      <EditCycleDatesModal
+        open={!!editCycleDates}
+        cycle={editCycleDates ?? undefined}
+        onClose={() => setEditCycleDates(null)}
+        onSaved={() => { setEditCycleDates(null); fetchData(); }}
+      />
 
       <ConfirmDialog
         open={!!deleteStoryTarget}
@@ -416,8 +425,8 @@ export default function ProjectStoriesPage({ params }: { params: Promise<{ id: s
 }
 
 function StoryCard({
-  story, projectName, clientName, canUpdate, canDelete, canCreateCycle, canDeleteCycle, canAssign, canChangeStatus,
-  onEdit, onDelete, onNewCycle, onDeleteCycle, onAssignToCycle, onChangeStatus, onEditPhases,
+  story, projectName, clientName, canUpdate, canDelete, canCreateCycle, canDeleteCycle, canUpdateCycle, canAssign, canChangeStatus,
+  onEdit, onDelete, onNewCycle, onDeleteCycle, onEditCycleDates, onAssignToCycle, onChangeStatus, onEditPhases,
 }: {
   story: Story;
   projectName: string;
@@ -426,12 +435,14 @@ function StoryCard({
   canDelete: boolean;
   canCreateCycle: boolean;
   canDeleteCycle: boolean;
+  canUpdateCycle: boolean;
   canAssign: boolean;
   canChangeStatus: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onNewCycle: () => void;
   onDeleteCycle: (cycleId: string, cycleName: string, assignmentCount: number) => void;
+  onEditCycleDates: (cycle: StoryCycle) => void;
   onAssignToCycle: (cycle: StoryCycle, isFirstCycle: boolean) => void;
   onChangeStatus: (assignmentId: string, status: string) => void;
   onEditPhases: (assignmentId: string, phases: AssignmentPhase[]) => void;
@@ -512,6 +523,15 @@ function StoryCard({
                   <div className="flex items-center gap-3">
                     {canAssign && (
                       <button onClick={() => onAssignToCycle(cycle, cycle.id === firstCycleId)} className="text-[11px] text-[#2E5FA3] hover:underline font-semibold">+ Asignar tester</button>
+                    )}
+                    {canUpdateCycle && (
+                      <button
+                        onClick={() => onEditCycleDates(cycle)}
+                        className="text-[11px] text-[#2E5FA3] hover:underline font-medium"
+                        title="Editar fechas del ciclo (requiere motivo)"
+                      >
+                        Editar fechas
+                      </button>
                     )}
                     {canDeleteCycle && (
                       <button
@@ -772,6 +792,112 @@ function CycleFormModal({
           <button type="button" onClick={onClose} className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200">Cancelar</button>
           <button type="button" onClick={save} disabled={saving} className="px-3 py-2 text-xs font-semibold text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] disabled:opacity-50">
             {saving ? "Guardando..." : "Crear"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+const MIN_REASON_LENGTH = 10;
+
+function EditCycleDatesModal({
+  open, onClose, cycle, onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  cycle?: StoryCycle;
+  onSaved: () => void;
+}) {
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const initialStart = cycle?.startDate ? cycle.startDate.slice(0, 10) : "";
+  const initialEnd = cycle?.endDate ? cycle.endDate.slice(0, 10) : "";
+
+  useEffect(() => {
+    if (open && cycle) {
+      setStartDate(initialStart);
+      setEndDate(initialEnd);
+      setReason("");
+      setError("");
+    }
+  }, [open, cycle, initialStart, initialEnd]);
+
+  const datesChanged = startDate !== initialStart || endDate !== initialEnd;
+  const reasonTooShort = reason.trim().length < MIN_REASON_LENGTH;
+
+  async function save() {
+    if (!cycle) return;
+    if (!datesChanged) { onClose(); return; }
+    if (reasonTooShort) {
+      setError(`Motivo obligatorio: mínimo ${MIN_REASON_LENGTH} caracteres.`);
+      return;
+    }
+    setSaving(true); setError("");
+    try {
+      await apiClient(`/api/cycles/${cycle.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          startDate: startDate || null,
+          endDate: endDate || null,
+          reason: reason.trim(),
+        }),
+      });
+      onSaved();
+    } catch (e: any) {
+      setError(e?.message || "Error al guardar");
+    } finally { setSaving(false); }
+  }
+
+  const inp = "w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#2E5FA3]";
+  return (
+    <Modal open={open} onClose={onClose} title={`Editar fechas: ${cycle?.name ?? ""}`}>
+      <div className="space-y-3">
+        <p className="text-[11px] text-gray-500">
+          Las fechas deben ser días hábiles (L-V, no feriado). El cambio queda registrado con tu motivo en auditoría.
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Inicio</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inp} />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Fin</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inp} />
+          </div>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">
+            Motivo del cambio {datesChanged && <span className="text-red-500">*</span>}
+          </label>
+          <textarea
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            rows={3}
+            disabled={!datesChanged}
+            placeholder={datesChanged ? "Ej: Se extendió el plazo por retraso en ambiente de pruebas" : "Cambia alguna fecha para habilitar el motivo"}
+            className={`${inp} resize-none disabled:bg-gray-50 disabled:text-gray-400`}
+          />
+          {datesChanged && (
+            <p className={`text-[11px] mt-1 ${reasonTooShort ? "text-amber-600" : "text-gray-400"}`}>
+              {reason.trim().length}/{MIN_REASON_LENGTH} caracteres mínimos
+            </p>
+          )}
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200">Cancelar</button>
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving || (datesChanged && reasonTooShort)}
+            className="px-3 py-2 text-xs font-semibold text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] disabled:opacity-50"
+          >
+            {saving ? "Guardando..." : "Guardar"}
           </button>
         </div>
       </div>
