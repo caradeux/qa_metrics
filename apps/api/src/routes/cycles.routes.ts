@@ -179,6 +179,43 @@ router.put("/:id", requirePermission("cycles", "update") as any, async (req: Aut
           reason: data.reason!,
           diffs,
         });
+
+        // Cascada a assignments abiertos del ciclo: extender startDate/endDate
+        // hacia el nuevo rango del ciclo cuando corresponda. Solo extiende,
+        // nunca acorta (preserva data ya cargada). Excluye assignments
+        // cerrados (PRODUCTION/ON_HOLD) para no reabrirlos automáticamente.
+        const dateDidChange = (f: "startDate" | "endDate") =>
+          diffs.some((d) => d.field === f);
+        if (dateDidChange("startDate") || dateDidChange("endDate")) {
+          const openAssignments = await tx.testerAssignment.findMany({
+            where: { cycleId: id, status: { notIn: ["PRODUCTION", "ON_HOLD"] } },
+            select: { id: true, startDate: true, endDate: true },
+          });
+          for (const a of openAssignments) {
+            const aDiffs: DateDiff[] = [];
+            const aData: { startDate?: Date; endDate?: Date } = {};
+            // Extender hacia atrás si el ciclo arranca antes
+            if (newStart && a.startDate > newStart) {
+              aDiffs.push({ field: "startDate", oldValue: a.startDate, newValue: newStart });
+              aData.startDate = newStart;
+            }
+            // Extender hacia adelante si el ciclo termina después (o no tenía fin)
+            if (newEnd && (a.endDate === null || a.endDate < newEnd)) {
+              aDiffs.push({ field: "endDate", oldValue: a.endDate, newValue: newEnd });
+              aData.endDate = newEnd;
+            }
+            if (aDiffs.length > 0) {
+              await tx.testerAssignment.update({ where: { id: a.id }, data: aData });
+              await writeDateChangeLogs(tx, {
+                entityType: "ASSIGNMENT",
+                entityId: a.id,
+                userId: req.user!.id,
+                reason: `Propagado desde ciclo: ${data.reason!}`,
+                diffs: aDiffs,
+              });
+            }
+          }
+        }
       }
       return updated;
     });
