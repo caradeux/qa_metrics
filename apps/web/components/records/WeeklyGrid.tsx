@@ -175,7 +175,10 @@ function detectMismatchesForCell(
       return null;
     case "WAITING_UAT":
     case "UAT":
-      return { fields: touched, reason: "La HU está pendiente de aprobación del usuario. ¿Corresponde nueva carga?" };
+      if (hasDesigned) {
+        return { fields: ["Diseñados"], reason: "La HU está pendiente de aprobación del usuario. Cargaste diseño — ¿corresponde?" };
+      }
+      return null;
     case "PRODUCTION":
       return { fields: touched, reason: "La HU ya está 'Completada' (en Producción). ¿Corresponde nueva carga?" };
     case "ON_HOLD":
