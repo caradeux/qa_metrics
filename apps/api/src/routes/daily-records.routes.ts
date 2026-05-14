@@ -113,8 +113,9 @@ router.get("/", async (req: AuthRequest, res: Response) => {
   // Get assignments overlapping the week. By default ACTIVE statuses + RETURNED_TO_DEV
   // + WAITING_UAT / UAT (en UAT los QA siguen ejecutando pruebas y registrando bugs
   // que aparecen durante la validación del usuario).
-  // QA_ANALYST además incluye PRODUCTION para permitir cargar datos el mismo día
-  // que la HU pasa a producción; al día siguiente se oculta (post-filter abajo).
+  // QA_ANALYST además incluye PRODUCTION para permitir cargar datos durante los
+  // primeros 7 días tras el pase a producción (catch-up de registros, bugs
+  // tardíos del go-live); pasados los 7 días se oculta (post-filter abajo).
   const baseStatuses: AssignmentStatus[] = [
     ...ACTIVE_STATUSES,
     "RETURNED_TO_DEV",
@@ -161,21 +162,27 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     orderBy: { createdAt: "asc" },
   });
 
-  // Regla "ocultar PRODUCTION al día siguiente" para QA_ANALYST, pero
-  // preserva la HU si ya tiene registros en la semana (para poder editarlos).
-  const startOfTodayMs = today.getTime();
+  // Regla "ocultar PRODUCTION tras 7 días" para QA_ANALYST, pero preserva la
+  // HU si ya tiene registros en la semana (para poder editarlos). Los 7 días
+  // dan margen para cargar registros olvidados o bugs reportados tras el pase.
+  const productionWindowStartMs = today.getTime() - 7 * 24 * 60 * 60 * 1000;
   const assignments = isAnalyst
     ? rawAssignments.filter((a) => {
         if (a.status !== "PRODUCTION") return true;
         if (a.dailyRecords.length > 0) return true;
         const last = a.statusLogs[0];
         if (!last) return false;
-        return new Date(last.changedAt).getTime() >= startOfTodayMs;
+        return new Date(last.changedAt).getTime() >= productionWindowStartMs;
       })
     : rawAssignments;
 
   const result = assignments.map((a) => {
-    const rangeEnd = a.endDate ?? today;
+    // Si la HU está en PRODUCTION dentro de los últimos 7 días, extender el
+    // rango efectivo hasta hoy para que las celdas no queden disabled por
+    // el endDate ya cerrado (catch-up post-pase).
+    const lastProdMs = a.statusLogs[0] ? new Date(a.statusLogs[0].changedAt).getTime() : 0;
+    const isProdRecent = a.status === "PRODUCTION" && lastProdMs >= productionWindowStartMs;
+    const rangeEnd = isProdRecent ? today : (a.endDate ?? today);
     const effectiveEnd = rangeEnd < friday ? rangeEnd : friday;
     const effectiveStart = a.startDate > monday ? a.startDate : monday;
     const activeOnDates =
@@ -234,7 +241,10 @@ router.post("/bulk", async (req: AuthRequest, res: Response) => {
     return;
   }
 
-  // Validate assignments belong to tester and dates are within range
+  // Validate assignments belong to tester and dates are within range.
+  // Para HUs en PRODUCTION dentro de los últimos 7 días, ignoramos el endDate
+  // del assignment y permitimos cargar hasta hoy (catch-up post-pase).
+  const prodWindowStartMs = today.getTime() - 7 * 24 * 60 * 60 * 1000;
   const assignmentIds = [...new Set(entries.map((e) => e.assignmentId))];
   const assignments = await prisma.testerAssignment.findMany({
     where: { id: { in: assignmentIds } },
@@ -243,6 +253,13 @@ router.post("/bulk", async (req: AuthRequest, res: Response) => {
       testerId: true,
       startDate: true,
       endDate: true,
+      status: true,
+      statusLogs: {
+        where: { status: "PRODUCTION" },
+        orderBy: { changedAt: "desc" },
+        take: 1,
+        select: { changedAt: true },
+      },
     },
   });
   const aMap = new Map(assignments.map((a) => [a.id, a]));
@@ -258,7 +275,9 @@ router.post("/bulk", async (req: AuthRequest, res: Response) => {
     }
     const d = new Date(e.date + "T00:00:00");
     const start = startOfDay(a.startDate);
-    const end = a.endDate ? startOfDay(a.endDate) : today;
+    const lastProdMs = a.statusLogs[0] ? new Date(a.statusLogs[0].changedAt).getTime() : 0;
+    const isProdRecent = a.status === "PRODUCTION" && lastProdMs >= prodWindowStartMs;
+    const end = (a.endDate && !isProdRecent) ? startOfDay(a.endDate) : today;
     if (d < start || d > end) {
       res
         .status(400)
