@@ -182,12 +182,13 @@ function MonthCalendar({
   const byDate = new Map(days.map((d) => [d.date, d]));
   const [y, m] = monthKey.split("-").map(Number);
   const first = new Date(Date.UTC(y!, m! - 1, 1));
-  const offset = (first.getUTCDay() + 6) % 7; // días desde el lunes
-  const start = new Date(first); start.setUTCDate(1 - offset);
-  const cells = Array.from({ length: 42 }, (_, i) => {
-    const d = new Date(start); d.setUTCDate(start.getUTCDate() + i);
-    return d.toISOString().slice(0, 10);
-  });
+  const offset = (first.getUTCDay() + 6) % 7; // celdas vacías antes del día 1 (semana inicia lunes)
+  const dim = daysInMonth(monthKey);
+  // Solo días del mes en curso: relleno inicial vacío + días 1..fin (sin días del mes siguiente).
+  const cells: (string | null)[] = [
+    ...Array.from({ length: offset }, () => null),
+    ...Array.from({ length: dim }, (_, i) => `${monthKey}-${String(i + 1).padStart(2, "0")}`),
+  ];
   const monthLabel = new Date(`${monthKey}-15T12:00:00Z`).toLocaleDateString("es-CL", { month: "long", year: "numeric", timeZone: "America/Santiago" });
   const DOW = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -211,8 +212,8 @@ function MonthCalendar({
         {DOW.map((d) => (
           <div key={d} className="text-center text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-1">{d}</div>
         ))}
-        {cells.map((d) => {
-          const inMonth = d.slice(0, 7) === monthKey;
+        {cells.map((d, idx) => {
+          if (!d) return <div key={`empty-${idx}`} className="h-16" />;
           const st = byDate.get(d);
           const isToday = d === today;
           const isSelected = d === selected;
@@ -221,17 +222,15 @@ function MonthCalendar({
           // Estado del día. Un día hábil no presente en la respuesta (que excluye
           // feriados) y que cae en lun-vie es un FERIADO; si cae en sáb/dom es fin de semana.
           const dow = new Date(`${d}T00:00:00Z`).getUTCDay(); // 0=Dom..6=Sáb
-          let kind: "out" | "cargado" | "pendiente" | "sindatos" | "finde" | "feriado" | "futuro";
-          if (!inMonth) kind = "out";
-          else if (st?.sent) kind = "cargado";
+          let kind: "cargado" | "pendiente" | "sindatos" | "finde" | "feriado" | "futuro";
+          if (st?.sent) kind = "cargado";
           else if (st?.hasData) kind = "pendiente";
           else if (!st) kind = (dow === 0 || dow === 6) ? "finde" : "feriado";
           else if (d > today) kind = "futuro";
           else kind = "sindatos";
 
           const style = {
-            out:       { cell: "bg-white", num: "text-gray-300", mark: null as React.ReactNode },
-            finde:     { cell: "bg-gray-50", num: "text-gray-300", mark: null },
+            finde:     { cell: "bg-gray-50", num: "text-gray-300", mark: null as React.ReactNode },
             feriado:   { cell: "bg-red-50", num: "text-red-600 font-semibold", mark: <span className="text-[9px] font-semibold text-red-500">Feriado</span> },
             futuro:    { cell: "bg-white", num: "text-gray-400", mark: null },
             sindatos:  { cell: "bg-white", num: "text-gray-600", mark: <span className="text-[9px] font-medium text-gray-400">Sin registro</span> },
