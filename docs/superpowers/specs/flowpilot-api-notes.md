@@ -76,9 +76,14 @@ Certificación(50), Facturación(331), Feriado(94), Gestión Interna(33),
 Licencia médica(36), Pre-venta(49), Reuniones internas(26), Seguridad Inovabiz(246),
 **Vacaciones(54)**.
 
-**Tipos de Tarea** — no apareció como XHR; render server-side o endpoint global.
-Valores conocidos: `task_type_id=3` → "QA", `task_type_id=20` → "vacacion".
-**A confirmar: fuente del catálogo completo de tipos de tarea.**
+**Tipos de Tarea** — **CONFIRMADO (2026-06-01):**
+```
+GET /api/task_types   (¡con guion bajo!)
+→ {"success":true,"task_types":[{"id":3,"name":"QA"},{"id":20,"name":"vacacion"}, ...]}
+```
+Catálogo: Desarrollo(1), Análisis(2), QA(3), Arquitectura(5), Cambios(6),
+Capacitación(7), Control de cambios(8), DEVOPS(9), … vacacion(20).
+(Ojo: este endpoint usa `_` mientras `clients-by-entity-type` usa `-`.)
 
 ### Leer entradas del día
 ```
