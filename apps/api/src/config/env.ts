@@ -17,6 +17,10 @@ const envSchema = z.object({
   ALERT_REPLY_TO: z.string().email().optional(),
   INTERNAL_SECRET: z.string().min(16).optional(),
   APP_URL: z.string().url().default("http://localhost:3000"),
+  FLOWPILOT_BASE_URL: z
+    .string()
+    .url()
+    .default("https://wap-asignacion-semanal-horas-qa.azurewebsites.net"),
 });
 
 export const env = envSchema.parse(process.env);
