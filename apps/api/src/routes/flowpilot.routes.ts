@@ -22,6 +22,30 @@ function requireAdmin(req: AuthRequest, res: Response): boolean {
   return true;
 }
 
+// La URL de FlowPilot es a donde se envía el password descifrado de cada analista,
+// así que solo se permite https hacia hosts EXACTOS conocidos (+ subdominios de
+// flowpilot.biz, que FlowPilot controla). NO se usa un sufijo compartido como
+// azurewebsites.net porque cualquiera puede registrar subdominios ahí y
+// exfiltrar credenciales / hacer SSRF a direcciones internas. Ampliable por
+// entorno (FLOWPILOT_ALLOWED_HOSTS) si FlowPilot migra de dominio.
+const ALLOWED_HOSTS = (process.env.FLOWPILOT_ALLOWED_HOSTS ||
+  "flowpilot.biz,wap-asignacion-semanal-horas-qa.azurewebsites.net")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+
+function isAllowedHost(host: string): boolean {
+  return ALLOWED_HOSTS.includes(host) || host.endsWith(".flowpilot.biz");
+}
+
+function validateFlowpilotUrl(raw: string): { ok: true; origin: string } | { ok: false; error: string } {
+  let u: URL;
+  try { u = new URL(raw); } catch { return { ok: false, error: "URL inválida (ej. https://flowpilot.biz)" }; }
+  if (u.protocol !== "https:") return { ok: false, error: "Solo se permite https" };
+  if (!isAllowedHost(u.hostname.toLowerCase())) {
+    return { ok: false, error: `Host no permitido. Hosts válidos: ${ALLOWED_HOSTS.join(", ")} (o subdominios de flowpilot.biz)` };
+  }
+  return { ok: true, origin: `${u.protocol}//${u.host}` };
+}
+
 async function withCatalog<T>(req: AuthRequest, res: Response, fn: (client: any, session: any) => Promise<T>) {
   try {
     const { client, session } = await getSession(req.user!.id);
@@ -119,17 +143,16 @@ router.get("/config", async (req: AuthRequest, res) => {
 });
 
 router.put("/config", async (req: AuthRequest, res) => {
-  if (!requireAdmin(req, res)) return;
-  const baseUrl = String((req.body ?? {}).baseUrl ?? "").trim().replace(/\/+$/, "");
-  try {
-    const u = new URL(baseUrl);
-    if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("protocolo");
-  } catch {
-    res.status(400).json({ error: "URL inválida (ej. https://flowpilot.biz)" });
+  // Cambiar la URL define a dónde se envían las credenciales de TODOS los
+  // analistas → restringido a ADMIN (no QA_LEAD).
+  if (req.user?.role?.name !== "ADMIN") {
+    res.status(403).json({ error: "Solo ADMIN puede cambiar la URL de FlowPilot" });
     return;
   }
-  await setBaseUrl(baseUrl);
-  res.json({ baseUrl, envDefault: ENV_BASE_URL, isCustom: baseUrl !== ENV_BASE_URL });
+  const v = validateFlowpilotUrl(String((req.body ?? {}).baseUrl ?? "").trim());
+  if (!v.ok) { res.status(400).json({ error: v.error }); return; }
+  await setBaseUrl(v.origin);
+  res.json({ baseUrl: v.origin, envDefault: ENV_BASE_URL, isCustom: v.origin !== ENV_BASE_URL });
 });
 
 router.get("/mappings", async (req: AuthRequest, res) => {
