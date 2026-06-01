@@ -218,20 +218,23 @@ function MonthCalendar({
           const isSelected = d === selected;
           const dayNum = Number(d.slice(8, 10));
 
-          // Estado del día
-          let kind: "out" | "cargado" | "pendiente" | "sindatos" | "nolab" | "futuro";
+          // Estado del día. Un día hábil no presente en la respuesta (que excluye
+          // feriados) y que cae en lun-vie es un FERIADO; si cae en sáb/dom es fin de semana.
+          const dow = new Date(`${d}T00:00:00Z`).getUTCDay(); // 0=Dom..6=Sáb
+          let kind: "out" | "cargado" | "pendiente" | "sindatos" | "finde" | "feriado" | "futuro";
           if (!inMonth) kind = "out";
           else if (st?.sent) kind = "cargado";
           else if (st?.hasData) kind = "pendiente";
-          else if (!st) kind = "nolab"; // fin de semana / feriado (no es día hábil)
+          else if (!st) kind = (dow === 0 || dow === 6) ? "finde" : "feriado";
           else if (d > today) kind = "futuro";
           else kind = "sindatos";
 
           const style = {
             out:       { cell: "bg-white", num: "text-gray-300", mark: null as React.ReactNode },
-            nolab:     { cell: "bg-gray-50", num: "text-gray-300", mark: null },
+            finde:     { cell: "bg-gray-50", num: "text-gray-300", mark: null },
+            feriado:   { cell: "bg-red-50", num: "text-red-600 font-semibold", mark: <span className="text-[9px] font-semibold text-red-500">Feriado</span> },
             futuro:    { cell: "bg-white", num: "text-gray-400", mark: null },
-            sindatos:  { cell: "bg-white", num: "text-gray-600", mark: <span className="text-[9px] font-medium text-gray-400">Sin carga</span> },
+            sindatos:  { cell: "bg-white", num: "text-gray-600", mark: <span className="text-[9px] font-medium text-gray-400">Sin registro</span> },
             pendiente: { cell: "bg-amber-100 ring-1 ring-amber-300", num: "text-amber-900 font-extrabold", mark: <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Pendiente</span> },
             cargado:   { cell: "bg-emerald-50", num: "text-emerald-700 font-bold", mark: <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Cargado</span> },
           }[kind];
@@ -253,11 +256,12 @@ function MonthCalendar({
         })}
       </div>
 
-      <div className="mt-3 flex items-center gap-4 text-[10px] text-gray-500">
+      <div className="mt-3 flex items-center gap-x-4 gap-y-1 flex-wrap text-[10px] text-gray-500">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-50 border border-emerald-300" />Cargado ({counts.cargado})</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-100 border border-amber-300" />Pendiente ({counts.pendiente})</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-white border border-gray-300" />Sin carga ({counts.sinDatos})</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-gray-50 border border-gray-200" />No laborable</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-100 border border-amber-300" />Pendiente de enviar ({counts.pendiente})</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-white border border-gray-300" />Sin registro ({counts.sinDatos})</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-50 border border-red-300" />Feriado</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-gray-50 border border-gray-200" />Fin de semana</span>
       </div>
     </div>
   );
