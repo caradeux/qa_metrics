@@ -119,10 +119,25 @@ Respuesta `201`:
  "message":"Entrada creada correctamente", "success":true}
 ```
 
-### Editar / Eliminar entrada — *endpoint a confirmar*
-La tabla "Entradas del día" tiene botones **Editar** y **Eliminar** por fila.
-Probable: `PUT /api/time-entries/{id}` y `DELETE /api/time-entries/{id}`.
-**Confirmar capturando esas acciones** (necesario para reenvío/corrección de un día).
+### Editar / Eliminar entrada
+**CONFIRMADO (spike server-to-server, 2026-06-01):**
+```
+DELETE /api/time-entries/{id}  → 200 {"message":"Time entry deleted successfully","success":true}
+```
+`PUT /api/time-entries/{id}` (editar) probable pero no probado; con DELETE+create
+basta para el reenvío idempotente del Plan 3.
+
+### Resultado del spike server-to-server (2026-06-01)
+
+Ejecutado desde Node (`apps/api/scripts/flowpilot-spike.ts`) contra el ambiente QA:
+- `[1] GET /auth/login` → 200, CSRF + cookie OK.
+- `[2] POST /auth/login` → **302** ✓ — **el backend acepta login server-to-server
+  sin navegador** (no rechaza por Origin/Referer). Riesgo principal despejado.
+- `[3] POST /api/time-entries` → **201** ✓ (crea desde Node).
+- `[4] DELETE /api/time-entries/{id}` → **200** ✓.
+- `[5] GET /api/dashboard-summary` → 200, pero **no expone el user id** de forma
+  evidente (trae alertas/notificaciones). El `user_filter` del GET del día queda
+  **pendiente** (buscar en perfil/otro endpoint); no bloquea la creación.
 
 ## Dos patrones de mapeo (confirmados con cargas reales)
 
