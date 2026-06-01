@@ -12,12 +12,9 @@ function formatLongDate(iso: string) {
     weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "America/Santiago",
   });
 }
-function mondayOf(iso: string): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  const dow = d.getUTCDay(); // 0=Dom..6=Sáb
-  const diff = dow === 0 ? -6 : 1 - dow;
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0, 10);
+function daysInMonth(monthKey: string): number {
+  const [y, m] = monthKey.split("-").map(Number);
+  return new Date(Date.UTC(y!, m!, 0)).getUTCDate();
 }
 
 export default function RegistroHorasPage() {
@@ -30,8 +27,8 @@ export default function RegistroHorasPage() {
   const [sending, setSending] = useState(false);
   const [confirmResend, setConfirmResend] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [weekStart, setWeekStart] = useState(() => mondayOf(todayIso()));
-  const [week, setWeek] = useState<{ date: string; hasData: boolean; sent: boolean }[]>([]);
+  const [monthDays, setMonthDays] = useState<{ date: string; hasData: boolean; sent: boolean }[]>([]);
+  const monthKey = date.slice(0, 7);
 
   const load = useCallback((d: string) => {
     setLoading(true); setError(null);
@@ -44,12 +41,18 @@ export default function RegistroHorasPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const loadWeek = useCallback((ws: string) => {
-    flowpilotApi.pending({ from: ws, to: shiftIso(ws, 4) }).then((r) => setWeek(r.days)).catch(() => {});
+  const loadMonth = useCallback((mk: string) => {
+    flowpilotApi.pending({ from: `${mk}-01`, to: `${mk}-${String(daysInMonth(mk)).padStart(2, "0")}` })
+      .then((r) => setMonthDays(r.days)).catch(() => {});
   }, []);
 
   useEffect(() => { load(date); }, [date, load]);
-  useEffect(() => { loadWeek(weekStart); }, [weekStart, loadWeek]);
+  useEffect(() => { loadMonth(monthKey); }, [monthKey, loadMonth]);
+
+  const goMonth = (delta: number) => {
+    const [y, m] = monthKey.split("-").map(Number);
+    setDate(new Date(Date.UTC(y!, m! - 1 + delta, 1)).toISOString().slice(0, 10));
+  };
 
   const total = rows.reduce((s, r) => s + (Number(r.hours) || 0), 0);
   const allMapped = rows.every((r) => r.mapped);
@@ -69,7 +72,7 @@ export default function RegistroHorasPage() {
       setToast("Día enviado a FlowPilot");
       setTimeout(() => setToast(null), 2500);
       load(date);
-      loadWeek(weekStart);
+      loadMonth(monthKey);
     } catch (e: any) {
       if (e instanceof ApiError && e.status === 409) setNeedsConnect(true);
       else setError(e?.message ?? "Error al enviar");
@@ -92,14 +95,14 @@ export default function RegistroHorasPage() {
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2.5 text-[12px] text-red-800">{error}</div>}
-      <WeekStrip
-        weekStart={weekStart}
-        week={week}
+      <MonthCalendar
+        monthKey={monthKey}
+        days={monthDays}
         selected={date}
         today={todayIso()}
-        onPrev={() => setWeekStart((w) => shiftIso(w, -7))}
-        onNext={() => setWeekStart((w) => shiftIso(w, 7))}
-        onThis={() => setWeekStart(mondayOf(todayIso()))}
+        onPrevMonth={() => goMonth(-1)}
+        onNextMonth={() => goMonth(1)}
+        onToday={() => setDate(todayIso())}
         onPick={(d) => setDate(d)}
       />
 
@@ -167,56 +170,94 @@ export default function RegistroHorasPage() {
   );
 }
 
-function WeekStrip({
-  weekStart, week, selected, today, onPrev, onNext, onThis, onPick,
+function MonthCalendar({
+  monthKey, days, selected, today, onPrevMonth, onNextMonth, onToday, onPick,
 }: {
-  weekStart: string;
-  week: { date: string; hasData: boolean; sent: boolean }[];
+  monthKey: string;
+  days: { date: string; hasData: boolean; sent: boolean }[];
   selected: string;
   today: string;
-  onPrev: () => void; onNext: () => void; onThis: () => void; onPick: (d: string) => void;
+  onPrevMonth: () => void; onNextMonth: () => void; onToday: () => void; onPick: (d: string) => void;
 }) {
-  const byDate = new Map(week.map((d) => [d.date, d]));
-  const days = Array.from({ length: 5 }, (_, i) => shiftIso(weekStart, i));
-  const DOW = ["Lun", "Mar", "Mié", "Jue", "Vie"];
-  const monthLabel = new Date(`${weekStart}T12:00:00Z`).toLocaleDateString("es-CL", { month: "long", year: "numeric", timeZone: "America/Santiago" });
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  const [y, m] = monthKey.split("-").map(Number);
+  const first = new Date(Date.UTC(y!, m! - 1, 1));
+  const offset = (first.getUTCDay() + 6) % 7; // días desde el lunes
+  const start = new Date(first); start.setUTCDate(1 - offset);
+  const cells = Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start); d.setUTCDate(start.getUTCDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
+  const monthLabel = new Date(`${monthKey}-15T12:00:00Z`).toLocaleDateString("es-CL", { month: "long", year: "numeric", timeZone: "America/Santiago" });
+  const DOW = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+  const counts = days.reduce(
+    (a, d) => { if (d.sent) a.cargado++; else if (d.hasData) a.pendiente++; else a.sinDatos++; return a; },
+    { cargado: 0, pendiente: 0, sinDatos: 0 },
+  );
 
   return (
     <div className="mb-5 rounded-lg border border-gray-200 bg-white p-3">
-      <div className="flex items-center justify-between mb-2.5">
-        <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-          Calendario de carga · <span className="normal-case text-gray-700 first-letter:uppercase">{monthLabel}</span>
-        </div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-sm font-bold text-gray-800 capitalize">{monthLabel}</h2>
         <div className="flex items-center gap-1">
-          <button onClick={onPrev} aria-label="Semana anterior" className="w-6 h-6 rounded text-gray-500 hover:bg-gray-100">‹</button>
-          <button onClick={onThis} className="px-2 h-6 text-[11px] text-gray-600 rounded hover:bg-gray-100">Esta semana</button>
-          <button onClick={onNext} aria-label="Semana siguiente" className="w-6 h-6 rounded text-gray-500 hover:bg-gray-100">›</button>
+          <button onClick={onPrevMonth} aria-label="Mes anterior" className="w-7 h-7 rounded text-gray-500 hover:bg-gray-100">‹</button>
+          <button onClick={onToday} className="px-2.5 h-7 text-[11px] font-medium text-gray-600 rounded hover:bg-gray-100">Hoy</button>
+          <button onClick={onNextMonth} aria-label="Mes siguiente" className="w-7 h-7 rounded text-gray-500 hover:bg-gray-100">›</button>
         </div>
       </div>
-      <div className="grid grid-cols-5 gap-1.5">
-        {days.map((d, i) => {
+
+      <div className="grid grid-cols-7 gap-1">
+        {DOW.map((d) => (
+          <div key={d} className="text-center text-[10px] font-semibold uppercase tracking-wider text-gray-400 pb-1">{d}</div>
+        ))}
+        {cells.map((d) => {
+          const inMonth = d.slice(0, 7) === monthKey;
           const st = byDate.get(d);
-          const isFuture = d > today;
+          const isToday = d === today;
+          const isSelected = d === selected;
           const dayNum = Number(d.slice(8, 10));
-          let cls = "border-gray-200 bg-white"; let label = "Sin datos"; let dot = "bg-gray-300"; let txt = "text-gray-400";
-          if (!st) { cls = "border-dashed border-gray-200 bg-gray-50"; label = "No laborable"; dot = "bg-gray-200"; txt = "text-gray-300"; }
-          else if (st.sent) { cls = "border-emerald-200 bg-emerald-50"; label = "Cargado"; dot = "bg-emerald-500"; txt = "text-emerald-700"; }
-          else if (st.hasData) { cls = "border-amber-300 bg-amber-50"; label = "Pendiente"; dot = "bg-amber-500"; txt = "text-amber-700"; }
-          else if (isFuture) { cls = "border-gray-100 bg-white"; label = "—"; dot = "bg-gray-200"; txt = "text-gray-300"; }
-          const sel = d === selected ? "ring-2 ring-[#2E5FA3] ring-offset-1" : "";
+
+          // Estado del día
+          let kind: "out" | "cargado" | "pendiente" | "sindatos" | "nolab" | "futuro";
+          if (!inMonth) kind = "out";
+          else if (st?.sent) kind = "cargado";
+          else if (st?.hasData) kind = "pendiente";
+          else if (!st) kind = "nolab"; // fin de semana / feriado (no es día hábil)
+          else if (d > today) kind = "futuro";
+          else kind = "sindatos";
+
+          const style = {
+            out:       { cell: "bg-white", num: "text-gray-300", mark: null as React.ReactNode },
+            nolab:     { cell: "bg-gray-50", num: "text-gray-300", mark: null },
+            futuro:    { cell: "bg-white", num: "text-gray-400", mark: null },
+            sindatos:  { cell: "bg-white", num: "text-gray-600", mark: <span className="text-[9px] font-medium text-gray-400">Sin carga</span> },
+            pendiente: { cell: "bg-amber-100 ring-1 ring-amber-300", num: "text-amber-900 font-extrabold", mark: <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Pendiente</span> },
+            cargado:   { cell: "bg-emerald-50", num: "text-emerald-700 font-bold", mark: <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>Cargado</span> },
+          }[kind];
+
           return (
-            <button key={d} onClick={() => onPick(d)} className={`flex flex-col items-center gap-1 rounded-md border px-1 py-2 transition hover:shadow-sm ${cls} ${sel}`}>
-              <span className="text-[9px] uppercase tracking-wider text-gray-400">{DOW[i]}</span>
-              <span className={`text-lg font-bold leading-none ${txt}`}>{dayNum}</span>
-              <span className={`flex items-center gap-1 text-[9px] font-semibold ${txt}`}><span className={`w-1.5 h-1.5 rounded-full ${dot}`} />{label}</span>
+            <button
+              key={d}
+              onClick={() => onPick(d)}
+              className={`relative h-16 rounded-md border text-left px-1.5 py-1 transition hover:shadow-sm flex flex-col justify-between ${style.cell} ${
+                isSelected ? "border-[#2E5FA3] ring-2 ring-[#2E5FA3]" : "border-gray-100"
+              }`}
+            >
+              <span className={`text-[13px] leading-none ${style.num} ${isToday ? "inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#2E5FA3] text-white font-bold" : ""}`}>
+                {dayNum}
+              </span>
+              {style.mark && <span className="self-start">{style.mark}</span>}
             </button>
           );
         })}
       </div>
-      <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-400">
-        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Cargado</span>
-        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Pendiente</span>
-        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-300" />Sin datos</span>
+
+      <div className="mt-3 flex items-center gap-4 text-[10px] text-gray-500">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-50 border border-emerald-300" />Cargado ({counts.cargado})</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-100 border border-amber-300" />Pendiente ({counts.pendiente})</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-white border border-gray-300" />Sin carga ({counts.sinDatos})</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-gray-50 border border-gray-200" />No laborable</span>
       </div>
     </div>
   );
