@@ -259,4 +259,19 @@ export const flowpilotApi = {
     apiClient<FlowpilotMapping>(`/api/flowpilot/mappings`, { method: "PUT", body: JSON.stringify(data) }),
   deleteMapping: (id: string) =>
     apiClient<void>(`/api/flowpilot/mappings/${id}`, { method: "DELETE" }),
+  preview: (date: string) =>
+    apiClient<FlowpilotDayPreview>(`/api/flowpilot/preview?date=${date}`),
+  sync: (date: string, entries: { kind: string; description: string; hours: number }[]) =>
+    apiClient<{ ok: boolean; entryIds?: number[] }>(`/api/flowpilot/sync`, { method: "POST", body: JSON.stringify({ date, entries }) }),
 };
+
+export interface FlowpilotPreviewEntry {
+  kind: string; description: string; hours: number;
+  source: "activity" | "story"; refId: string; mapped: boolean;
+}
+export interface FlowpilotDayPreview {
+  date: string; capacityHours: number; totalHours: number;
+  allMapped: boolean; withinCap: boolean;
+  entries: FlowpilotPreviewEntry[];
+  sync: { status: string; sentAt: string; hoursTotal: number } | null;
+}

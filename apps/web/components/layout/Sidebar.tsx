@@ -106,6 +106,7 @@ export function Sidebar() {
     sections.push({
       key: "work",
       items: [
+        { label: "Registro de Horas", href: "/registro-horas", icon: iconClock },
         { label: "Mi semana", href: "/mi-semana", icon: iconCalendar },
         { label: "Planificación", href: "/gantt", icon: iconGantt },
         { label: "Asignaciones", href: "/assignments", icon: iconUsers },
