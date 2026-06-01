@@ -152,28 +152,39 @@ router.delete("/mappings/:id", async (req: AuthRequest, res) => {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MS_DAY = 24 * 60 * 60 * 1000;
 
-// Días hábiles recientes con su estado de carga: con datos / enviado.
-// Permite al analista ver qué días tiene pendientes de enviar a FlowPilot.
+// Días hábiles con su estado de carga: con datos / enviado.
+// Acepta un rango (from/to, p.ej. una semana) o, por defecto, los últimos N días.
+// Alimenta el calendario semanal de gestión de la página Registro de Horas.
 router.get("/pending", async (req: AuthRequest, res) => {
-  const days = Math.min(60, Math.max(1, Number(req.query.days) || 14));
   const today = toUtcDateOnly(new Date());
-  const from = new Date(today.getTime() - (days - 1) * MS_DAY);
+  let from: Date;
+  let to: Date;
+  const qf = req.query.from as string | undefined;
+  const qt = req.query.to as string | undefined;
+  if (qf && qt && DATE_RE.test(qf) && DATE_RE.test(qt)) {
+    from = toUtcDateOnly(qf);
+    to = toUtcDateOnly(qt);
+  } else {
+    const days = Math.min(60, Math.max(1, Number(req.query.days) || 14));
+    to = today;
+    from = new Date(today.getTime() - (days - 1) * MS_DAY);
+  }
 
   const testers = await prisma.tester.findMany({ where: { userId: req.user!.id }, select: { id: true } });
   const testerIds = testers.map((t) => t.id);
 
   const [workdays, records, activities, logs] = await Promise.all([
-    workdaysInRange(from, today),
+    workdaysInRange(from, to),
     prisma.dailyRecord.findMany({
-      where: { testerId: { in: testerIds }, date: { gte: from, lte: today } },
+      where: { testerId: { in: testerIds }, date: { gte: from, lte: to } },
       select: { date: true },
     }),
     prisma.activity.findMany({
-      where: { testerId: { in: testerIds }, startAt: { gte: from, lt: new Date(today.getTime() + MS_DAY) } },
+      where: { testerId: { in: testerIds }, startAt: { gte: from, lt: new Date(to.getTime() + MS_DAY) } },
       select: { startAt: true },
     }),
     prisma.flowpilotSyncLog.findMany({
-      where: { userId: req.user!.id, status: "SENT", date: { gte: from, lte: today } },
+      where: { userId: req.user!.id, status: "SENT", date: { gte: from, lte: to } },
       select: { date: true },
     }),
   ]);
@@ -188,7 +199,7 @@ router.get("/pending", async (req: AuthRequest, res) => {
     const k = iso(d);
     return { date: k, hasData: dataDates.has(k), sent: sentDates.has(k) };
   });
-  res.json({ days: out });
+  res.json({ days: out, from: iso(from), to: iso(to), today: iso(today) });
 });
 
 

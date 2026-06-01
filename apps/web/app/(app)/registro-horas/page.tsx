@@ -7,9 +7,12 @@ function todayIso() { return new Date().toISOString().slice(0, 10); }
 function shiftIso(iso: string, d: number) {
   const x = new Date(`${iso}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10);
 }
-function fmtShort(iso: string) {
-  const d = new Date(`${iso}T12:00:00Z`);
-  return d.toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short", timeZone: "America/Santiago" });
+function mondayOf(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const dow = d.getUTCDay(); // 0=Dom..6=Sáb
+  const diff = dow === 0 ? -6 : 1 - dow;
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().slice(0, 10);
 }
 
 export default function RegistroHorasPage() {
@@ -22,7 +25,8 @@ export default function RegistroHorasPage() {
   const [sending, setSending] = useState(false);
   const [confirmResend, setConfirmResend] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [pending, setPending] = useState<{ date: string; hasData: boolean; sent: boolean }[]>([]);
+  const [weekStart, setWeekStart] = useState(() => mondayOf(todayIso()));
+  const [week, setWeek] = useState<{ date: string; hasData: boolean; sent: boolean }[]>([]);
 
   const load = useCallback((d: string) => {
     setLoading(true); setError(null);
@@ -35,12 +39,12 @@ export default function RegistroHorasPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const loadPending = useCallback(() => {
-    flowpilotApi.pending(14).then((r) => setPending(r.days)).catch(() => {});
+  const loadWeek = useCallback((ws: string) => {
+    flowpilotApi.pending({ from: ws, to: shiftIso(ws, 4) }).then((r) => setWeek(r.days)).catch(() => {});
   }, []);
 
   useEffect(() => { load(date); }, [date, load]);
-  useEffect(() => { loadPending(); }, [loadPending]);
+  useEffect(() => { loadWeek(weekStart); }, [weekStart, loadWeek]);
 
   const total = rows.reduce((s, r) => s + (Number(r.hours) || 0), 0);
   const allMapped = rows.every((r) => r.mapped);
@@ -60,7 +64,7 @@ export default function RegistroHorasPage() {
       setToast("Día enviado a FlowPilot");
       setTimeout(() => setToast(null), 2500);
       load(date);
-      loadPending();
+      loadWeek(weekStart);
     } catch (e: any) {
       if (e instanceof ApiError && e.status === 409) setNeedsConnect(true);
       else setError(e?.message ?? "Error al enviar");
@@ -83,38 +87,16 @@ export default function RegistroHorasPage() {
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2.5 text-[12px] text-red-800">{error}</div>}
-      {(() => {
-        const pendientes = pending.filter((d) => d.hasData && !d.sent);
-        if (pendientes.length === 0) return (
-          <div className="mb-4 inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] text-emerald-800">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            Estás al día — sin días pendientes de cargar (últimas 2 semanas)
-          </div>
-        );
-        return (
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/70 px-4 py-3">
-            <div className="flex items-center gap-2 text-[12px] font-semibold text-amber-800 mb-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
-              {pendientes.length} día{pendientes.length !== 1 ? "s" : ""} con trabajo registrado sin enviar a FlowPilot
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {pendientes.map((d) => (
-                <button
-                  key={d.date}
-                  onClick={() => setDate(d.date)}
-                  className={`text-[11px] font-medium px-2.5 py-1 rounded-md border transition ${
-                    d.date === date
-                      ? "bg-amber-500 text-white border-amber-500"
-                      : "bg-white text-amber-800 border-amber-300 hover:border-amber-500"
-                  }`}
-                >
-                  {fmtShort(d.date)}
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
+      <WeekStrip
+        weekStart={weekStart}
+        week={week}
+        selected={date}
+        today={todayIso()}
+        onPrev={() => setWeekStart((w) => shiftIso(w, -7))}
+        onNext={() => setWeekStart((w) => shiftIso(w, 7))}
+        onThis={() => setWeekStart(mondayOf(todayIso()))}
+        onPick={(d) => setDate(d)}
+      />
 
       {isSent && (
         <div className="mb-4 inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] text-emerald-800">
@@ -164,6 +146,61 @@ export default function RegistroHorasPage() {
         />
       )}
       {toast && <div className="fixed bottom-6 right-6 z-50 bg-gray-900 text-white text-xs rounded-md px-3.5 py-2.5">{toast}</div>}
+    </div>
+  );
+}
+
+function WeekStrip({
+  weekStart, week, selected, today, onPrev, onNext, onThis, onPick,
+}: {
+  weekStart: string;
+  week: { date: string; hasData: boolean; sent: boolean }[];
+  selected: string;
+  today: string;
+  onPrev: () => void; onNext: () => void; onThis: () => void; onPick: (d: string) => void;
+}) {
+  const byDate = new Map(week.map((d) => [d.date, d]));
+  const days = Array.from({ length: 5 }, (_, i) => shiftIso(weekStart, i));
+  const DOW = ["Lun", "Mar", "Mié", "Jue", "Vie"];
+  const monthLabel = new Date(`${weekStart}T12:00:00Z`).toLocaleDateString("es-CL", { month: "long", year: "numeric", timeZone: "America/Santiago" });
+
+  return (
+    <div className="mb-5 rounded-lg border border-gray-200 bg-white p-3">
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+          Calendario de carga · <span className="normal-case text-gray-700 first-letter:uppercase">{monthLabel}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={onPrev} aria-label="Semana anterior" className="w-6 h-6 rounded text-gray-500 hover:bg-gray-100">‹</button>
+          <button onClick={onThis} className="px-2 h-6 text-[11px] text-gray-600 rounded hover:bg-gray-100">Esta semana</button>
+          <button onClick={onNext} aria-label="Semana siguiente" className="w-6 h-6 rounded text-gray-500 hover:bg-gray-100">›</button>
+        </div>
+      </div>
+      <div className="grid grid-cols-5 gap-1.5">
+        {days.map((d, i) => {
+          const st = byDate.get(d);
+          const isFuture = d > today;
+          const dayNum = Number(d.slice(8, 10));
+          let cls = "border-gray-200 bg-white"; let label = "Sin datos"; let dot = "bg-gray-300"; let txt = "text-gray-400";
+          if (!st) { cls = "border-dashed border-gray-200 bg-gray-50"; label = "No laborable"; dot = "bg-gray-200"; txt = "text-gray-300"; }
+          else if (st.sent) { cls = "border-emerald-200 bg-emerald-50"; label = "Cargado"; dot = "bg-emerald-500"; txt = "text-emerald-700"; }
+          else if (st.hasData) { cls = "border-amber-300 bg-amber-50"; label = "Pendiente"; dot = "bg-amber-500"; txt = "text-amber-700"; }
+          else if (isFuture) { cls = "border-gray-100 bg-white"; label = "—"; dot = "bg-gray-200"; txt = "text-gray-300"; }
+          const sel = d === selected ? "ring-2 ring-[#2E5FA3] ring-offset-1" : "";
+          return (
+            <button key={d} onClick={() => onPick(d)} className={`flex flex-col items-center gap-1 rounded-md border px-1 py-2 transition hover:shadow-sm ${cls} ${sel}`}>
+              <span className="text-[9px] uppercase tracking-wider text-gray-400">{DOW[i]}</span>
+              <span className={`text-lg font-bold leading-none ${txt}`}>{dayNum}</span>
+              <span className={`flex items-center gap-1 text-[9px] font-semibold ${txt}`}><span className={`w-1.5 h-1.5 rounded-full ${dot}`} />{label}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center gap-3 text-[10px] text-gray-400">
+        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Cargado</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Pendiente</span>
+        <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-300" />Sin datos</span>
+      </div>
     </div>
   );
 }

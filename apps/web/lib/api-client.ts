@@ -263,8 +263,12 @@ export const flowpilotApi = {
     apiClient<FlowpilotDayPreview>(`/api/flowpilot/preview?date=${date}`),
   sync: (date: string, entries: { kind: string; description: string; hours: number }[]) =>
     apiClient<{ ok: boolean; entryIds?: number[] }>(`/api/flowpilot/sync`, { method: "POST", body: JSON.stringify({ date, entries }) }),
-  pending: (days = 14) =>
-    apiClient<{ days: { date: string; hasData: boolean; sent: boolean }[] }>(`/api/flowpilot/pending?days=${days}`),
+  pending: (params: { from?: string; to?: string; days?: number } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.from && params.to) { qs.set("from", params.from); qs.set("to", params.to); }
+    else qs.set("days", String(params.days ?? 14));
+    return apiClient<{ days: { date: string; hasData: boolean; sent: boolean }[]; from: string; to: string; today: string }>(`/api/flowpilot/pending?${qs.toString()}`);
+  },
 };
 
 export interface FlowpilotPreviewEntry {
