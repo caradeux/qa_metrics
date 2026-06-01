@@ -3,8 +3,15 @@ import type {
   FlowpilotEntryInput, FlowpilotEntry,
 } from "./types.js";
 
-function firstCookie(setCookie: string | null): string {
-  return (setCookie ?? "").split(";")[0]?.trim() ?? "";
+function extractSessionCookie(headers: Headers): string {
+  // Headers.getSetCookie() returns ALL Set-Cookie values (Node >=18.14).
+  const all = headers.getSetCookie?.() ?? [];
+  const session = all.find((c) => c.startsWith("session="));
+  if (session) return session.split(";")[0]?.trim() ?? "";
+  // Fallback: single-value header (e.g. test mocks using headers.set).
+  const single = headers.get("set-cookie");
+  if (single && single.startsWith("session=")) return single.split(";")[0]?.trim() ?? "";
+  return "";
 }
 
 export class FlowpilotClient {
@@ -12,7 +19,7 @@ export class FlowpilotClient {
 
   async login(email: string, password: string): Promise<FlowpilotSession> {
     const g = await fetch(`${this.baseUrl}/auth/login`, { redirect: "manual" });
-    const initCookie = firstCookie(g.headers.get("set-cookie"));
+    const initCookie = extractSessionCookie(g.headers);
     const html = await g.text();
     const csrf = html.match(/name="csrf_token"[^>]*value="([^"]+)"/)?.[1] ?? "";
 
@@ -28,7 +35,7 @@ export class FlowpilotClient {
     if (p.status !== 302) {
       throw new Error("FlowPilot login falló (credenciales inválidas o flujo cambiado)");
     }
-    const authCookie = firstCookie(p.headers.get("set-cookie")) || initCookie;
+    const authCookie = extractSessionCookie(p.headers) || initCookie;
     return { cookie: authCookie };
   }
 
@@ -75,8 +82,7 @@ export class FlowpilotClient {
       method: "POST", headers: this.headers(session, true), body: JSON.stringify(body),
     });
     if (r.status !== 201) {
-      const txt = await r.text();
-      throw new Error(`FlowPilot createEntry → ${r.status}: ${txt.slice(0, 200)}`);
+      throw new Error(`FlowPilot createEntry falló (HTTP ${r.status})`);
     }
     const json = (await r.json()) as { data: any };
     const d = json.data;

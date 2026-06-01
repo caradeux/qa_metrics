@@ -30,6 +30,22 @@ describe("FlowpilotClient.login", () => {
     expect(String(postInit.body)).toContain("submit=");
   });
 
+  it("elige la cookie 'session' aunque venga después de otras Set-Cookie", async () => {
+    const multiHeaders = new Headers();
+    multiHeaders.append("set-cookie", "csrftoken=abc; Path=/");
+    multiHeaders.append("set-cookie", "session=authcookie; Path=/; HttpOnly");
+    const getRes = new Response('<input name="csrf_token" value="TOK">', {
+      headers: new Headers({ "set-cookie": "session=init; Path=/" }),
+    });
+    const postRes = new Response("", { status: 302, headers: multiHeaders });
+    const fetchMock = vi.fn().mockResolvedValueOnce(getRes).mockResolvedValueOnce(postRes);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new FlowpilotClient("https://fp.test");
+    const session = await client.login("a@b.cl", "secret");
+    expect(session.cookie).toBe("session=authcookie");
+  });
+
   it("lanza si el POST login no redirige (credenciales inválidas)", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(res('<input name="csrf_token" value="TOK">', { setCookie: "session=init" }))

@@ -4,6 +4,7 @@ import * as authService from "../services/auth.service.js";
 import { authMiddleware, AuthRequest, invalidateAuthCache } from "../middleware/auth.js";
 import { setAuthCookies, clearAuthCookies, REFRESH_COOKIE } from "../lib/cookies.js";
 import { captureCredentialOnLogin } from "../services/flowpilot-credential.service.js";
+import { logger } from "../middleware/logger.js";
 
 const router = Router();
 
@@ -15,8 +16,8 @@ router.post("/login", async (req: Request, res: Response, next: NextFunction) =>
     // no debe bloquear el login si falla).
     try {
       await captureCredentialOnLogin(result.user.id, result.user.role?.name ?? "", password);
-    } catch {
-      // log y continuar — la captura no debe interrumpir el login
+    } catch (err) {
+      logger.warn({ err }, "flowpilot: captura de credencial falló (no bloquea login)");
     }
     setAuthCookies(res, result.accessToken, result.refreshToken);
     res.json({ user: result.user, accessToken: result.accessToken, refreshToken: result.refreshToken });
