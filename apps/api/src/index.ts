@@ -27,6 +27,7 @@ import internalRoutes from "./routes/internal.routes.js";
 import activityCategoriesRoutes from "./routes/activity-categories.routes.js";
 import activitiesRoutes from "./routes/activities.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
+import flowpilotRoutes from "./routes/flowpilot.routes.js";
 
 const app = express();
 
@@ -84,6 +85,7 @@ app.use("/api/date-change-logs", auditRoutes);
 app.use("/api/activity-categories", activityCategoriesRoutes);
 app.use("/api/activities", activitiesRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/flowpilot", flowpilotRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
