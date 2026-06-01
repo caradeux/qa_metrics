@@ -7,6 +7,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { STATUSES, statusMap, ComplexityBadge } from "@/components/stories/StatusBadge";
+import { StatusStepperCompact } from "@/components/stories/StatusStepper";
 import { fmtDateShortUtc, fmtDateUtc } from "@/lib/dates";
 
 interface TesterLite { id: string; name: string }
@@ -52,6 +53,20 @@ const complexityLabels: Record<string, string> = { LOW: "Baja", MEDIUM: "Media",
 const PHASE_LABEL: Record<string, string> = { ANALYSIS: "Análisis", TEST_DESIGN: "Diseño", EXECUTION: "Ejecución" };
 
 const fmtDate = fmtDateUtc;
+
+// Color representativo de la HU = estado más avanzado (mayor `step`) entre sus
+// asignaciones. Se usa para teñir la cabecera con una tonalidad tenue.
+function storyAccentColor(story: Story): string | null {
+  let best: { step: number; color: string } | null = null;
+  for (const c of story.cycles) {
+    for (const a of c.assignments) {
+      const meta = statusMap[a.status];
+      if (!meta) continue;
+      if (!best || meta.step > best.step) best = { step: meta.step, color: meta.color };
+    }
+  }
+  return best?.color ?? null;
+}
 
 function daysBetween(startIso: string, endIso: string): number {
   const s = new Date(startIso).getTime();
@@ -456,6 +471,7 @@ function StoryCard({
   })();
   const [expanded, setExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
+  const accent = storyAccentColor(story);
 
   async function copyEstimation() {
     const text = buildEstimationText(story, projectName, clientName);
@@ -478,7 +494,10 @@ function StoryCard({
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-gray-50/80 to-white">
+      <div
+        className={`flex items-center justify-between px-4 py-3 border-b border-gray-100 ${accent ? "" : "bg-gradient-to-r from-gray-50/80 to-white"}`}
+        style={accent ? { backgroundColor: `${accent}26`, borderLeft: `3px solid ${accent}` } : undefined}
+      >
         <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-3 flex-1 text-left">
           <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
           <span className="text-xs font-mono text-gray-500">{story.externalId || "-"}</span>
@@ -556,7 +575,12 @@ function StoryCard({
                     <tbody>
                       {cycle.assignments.map((a, idx) => {
                         const daysInState = a.daysInStatus ?? null;
-                        const inStateRed = daysInState !== null && daysInState > 7;
+                        // Resalta cuando lleva muchos días en el mismo estado.
+                        const stateTone =
+                          daysInState === null ? "text-gray-500"
+                            : daysInState > 14 ? "text-red-600 font-bold"
+                              : daysInState > 7 ? "text-amber-600 font-bold"
+                                : "text-gray-500";
                         const startD = new Date(a.startDate);
                         const endD = a.endDate ? new Date(a.endDate) : null;
                         const endForCalc = endD ?? new Date();
@@ -569,17 +593,20 @@ function StoryCard({
                           <tr key={a.id} className={`border-t border-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}>
                             <td className="px-3 py-1.5">{a.tester?.name || <span className="text-gray-400">-</span>}</td>
                             <td className="px-3 py-1.5">
-                              {canChangeStatus ? (
-                                <select
-                                  value={a.status}
-                                  onChange={e => onChangeStatus(a.id, e.target.value)}
-                                  className="px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-white text-gray-700 focus:border-[#4A90D9] outline-none cursor-pointer"
-                                >
-                                  {STATUSES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
-                                </select>
-                              ) : (
-                                <span>{statusMap[a.status]?.label || a.status}</span>
-                              )}
+                              <div className="flex flex-col gap-1.5 items-start">
+                                <StatusStepperCompact value={a.status} />
+                                {canChangeStatus ? (
+                                  <select
+                                    value={a.status}
+                                    onChange={e => onChangeStatus(a.id, e.target.value)}
+                                    className="px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-white text-gray-700 focus:border-[#4A90D9] outline-none cursor-pointer"
+                                  >
+                                    {STATUSES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
+                                  </select>
+                                ) : (
+                                  <span className="text-[10px] text-gray-500">{statusMap[a.status]?.label || a.status}</span>
+                                )}
+                              </div>
                             </td>
                             <td className="px-3 py-1.5 text-gray-500">
                               {fmtDateShortUtc(startD)}
@@ -588,7 +615,10 @@ function StoryCard({
                             <td className="px-3 py-1.5 text-center font-mono text-gray-700">
                               {duration}d{open ? <span className="ml-0.5 text-[9px] text-gray-400">(en curso)</span> : ""}
                             </td>
-                            <td className={`px-3 py-1.5 text-center font-mono ${inStateRed ? "text-red-600 font-bold" : "text-gray-500"}`}>
+                            <td
+                              className={`px-3 py-1.5 text-center font-mono ${stateTone}`}
+                              title={daysInState !== null && daysInState > 7 ? `${daysInState} días en el mismo estado` : undefined}
+                            >
                               {daysInState !== null ? `${daysInState}d` : "-"}
                             </td>
                             {cycle.id === firstCycleId && (

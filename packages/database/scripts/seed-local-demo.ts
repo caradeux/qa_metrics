@@ -254,7 +254,6 @@ async function main() {
     | "WAITING_QA_DEPLOY"
     | "EXECUTION"
     | "RETURNED_TO_DEV"
-    | "WAITING_UAT"
     | "UAT"
     | "PRODUCTION"
     | "ON_HOLD"
@@ -264,7 +263,6 @@ async function main() {
     "EXECUTION",
     "EXECUTION",
     "EXECUTION",
-    "WAITING_UAT",
     "UAT",
     "PRODUCTION",
     "RETURNED_TO_DEV",

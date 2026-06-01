@@ -188,7 +188,6 @@ const STATUS_LABEL: Record<string, string> = {
   WAITING_QA_DEPLOY: "Esperando despliegue QA",
   EXECUTION: "En ejecución",
   RETURNED_TO_DEV: "Devuelta a desarrollo",
-  WAITING_UAT: "Esperando UAT",
   UAT: "UAT",
   PRODUCTION: "En producción",
   ON_HOLD: "En pausa",

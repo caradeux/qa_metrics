@@ -123,7 +123,6 @@ const STATUS_LABEL: Record<string, string> = {
   WAITING_QA_DEPLOY: "Pdte. Instalación QA",
   EXECUTION: "En Curso",
   RETURNED_TO_DEV: "Devuelto a Desarrollo",
-  WAITING_UAT: "Pdte. Aprobación",
   UAT: "Pdte. Aprobación",
   PRODUCTION: "Completado",
   ON_HOLD: "Detenido",
@@ -173,7 +172,6 @@ function detectMismatchesForCell(
         return { fields: ["Diseñados"], reason: "La HU está 'Devuelta a Desarrollo'. Cargaste diseño — revisar." };
       }
       return null;
-    case "WAITING_UAT":
     case "UAT":
       if (hasDesigned) {
         return { fields: ["Diseñados"], reason: "La HU está pendiente de aprobación del usuario. Cargaste diseño — ¿corresponde?" };

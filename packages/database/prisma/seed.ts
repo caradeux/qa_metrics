@@ -295,7 +295,7 @@ async function main() {
     cycleId: string;
     startDate: Date;
     endDate?: Date | null;
-    status: "REGISTERED" | "ANALYSIS" | "TEST_DESIGN" | "WAITING_QA_DEPLOY" | "EXECUTION" | "RETURNED_TO_DEV" | "WAITING_UAT" | "UAT" | "PRODUCTION";
+    status: "REGISTERED" | "ANALYSIS" | "TEST_DESIGN" | "WAITING_QA_DEPLOY" | "EXECUTION" | "RETURNED_TO_DEV" | "UAT" | "PRODUCTION";
     notes?: string;
   }) {
     const existing = await prisma.testerAssignment.findUnique({
@@ -321,7 +321,7 @@ async function main() {
     { t: testers1[1], s: stories2[4], status: "ANALYSIS" as const, start: "2026-04-01", end: "2026-04-25" },
     { t: testers1[2], s: stories1[2], status: "PRODUCTION" as const, start: "2026-01-12", end: "2026-02-14" },
     { t: testers1[2], s: stories2[5], status: "UAT" as const, start: "2026-03-05", end: "2026-04-12", notes: "En revision por el cliente" },
-    { t: testers1[2], s: stories2[6], status: "WAITING_UAT" as const, start: "2026-03-20", end: "2026-04-18" },
+    { t: testers1[2], s: stories2[6], status: "UAT" as const, start: "2026-03-20", end: "2026-04-18" },
   ];
 
   const createdAssignments: { testerId: string; id: string }[] = [];

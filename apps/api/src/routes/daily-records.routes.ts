@@ -111,7 +111,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
   const isAnalyst = req.user?.role?.name === "QA_ANALYST";
 
   // Get assignments overlapping the week. By default ACTIVE statuses + RETURNED_TO_DEV
-  // + WAITING_UAT / UAT (en UAT los QA siguen ejecutando pruebas y registrando bugs
+  // + UAT (en UAT los QA siguen ejecutando pruebas y registrando bugs
   // que aparecen durante la validación del usuario).
   // QA_ANALYST además incluye PRODUCTION para permitir cargar datos durante los
   // primeros 7 días tras el pase a producción (catch-up de registros, bugs
@@ -119,7 +119,6 @@ router.get("/", async (req: AuthRequest, res: Response) => {
   const baseStatuses: AssignmentStatus[] = [
     ...ACTIVE_STATUSES,
     "RETURNED_TO_DEV",
-    "WAITING_UAT",
     "UAT",
   ];
   const defaultStatuses: AssignmentStatus[] = isAnalyst

@@ -7,14 +7,13 @@ export const STATUSES = [
   { value: "WAITING_QA_DEPLOY", label: "Esperando Ambientación QA", short: "AMB", color: "#ea580c", bg: "bg-orange-50 text-orange-700 border-orange-200", dot: "bg-orange-500", step: 4 },
   { value: "EXECUTION", label: "En Ejecucion", short: "EJE", color: "#0891b2", bg: "bg-cyan-50 text-cyan-700 border-cyan-200", dot: "bg-cyan-500", step: 5 },
   { value: "RETURNED_TO_DEV", label: "Devuelto a Dev", short: "DEV", color: "#ef4444", bg: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500", step: 5 },
-  { value: "WAITING_UAT", label: "Espera UAT", short: "ESP", color: "#f59e0b", bg: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500", step: 6 },
-  { value: "UAT", label: "En UAT", short: "UAT", color: "#d946ef", bg: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200", dot: "bg-fuchsia-500", step: 7 },
-  { value: "PRODUCTION", label: "Produccion", short: "PRD", color: "#10b981", bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500", step: 8 },
-  { value: "ON_HOLD", label: "Detenido", short: "HOLD", color: "#64748b", bg: "bg-slate-100 text-slate-700 border-slate-200", dot: "bg-slate-500", step: 9 },
+  { value: "UAT", label: "En UAT", short: "UAT", color: "#d946ef", bg: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200", dot: "bg-fuchsia-500", step: 6 },
+  { value: "PRODUCTION", label: "Produccion", short: "PRD", color: "#10b981", bg: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500", step: 7 },
+  { value: "ON_HOLD", label: "Detenido", short: "HOLD", color: "#64748b", bg: "bg-slate-100 text-slate-700 border-slate-200", dot: "bg-slate-500", step: 8 },
 ] as const;
 
 export const ACTIVE_STATUSES = ["REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY", "EXECUTION"] as const;
-export const IDLE_STATUSES = ["RETURNED_TO_DEV", "WAITING_UAT", "UAT", "PRODUCTION", "ON_HOLD"] as const;
+export const IDLE_STATUSES = ["RETURNED_TO_DEV", "UAT", "PRODUCTION", "ON_HOLD"] as const;
 export function isActiveStatus(s: string): boolean {
   return (ACTIVE_STATUSES as readonly string[]).includes(s);
 }

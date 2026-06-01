@@ -105,7 +105,7 @@ describe("buildReportSpec — integridad de datos HU (diseño/ejecución/defecto
           include: {
             assignments: {
               where: {
-                status: { in: ["REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY", "EXECUTION", "RETURNED_TO_DEV", "WAITING_UAT", "UAT"] },
+                status: { in: ["REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY", "EXECUTION", "RETURNED_TO_DEV", "UAT"] },
               },
               include: {
                 dailyRecords: {
@@ -146,7 +146,7 @@ describe("buildReportSpec — integridad de datos HU (diseño/ejecución/defecto
         const count = await prisma.testerAssignment.count({
           where: {
             storyId: h.storyId,
-            status: { in: ["REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY", "EXECUTION", "RETURNED_TO_DEV", "WAITING_UAT", "UAT"] },
+            status: { in: ["REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY", "EXECUTION", "RETURNED_TO_DEV", "UAT"] },
           },
         });
         expect(count).toBeGreaterThan(0);

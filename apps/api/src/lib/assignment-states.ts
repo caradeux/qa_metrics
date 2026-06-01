@@ -8,7 +8,6 @@ export const ACTIVE_STATUSES = [
 
 export const IDLE_STATUSES = [
   "RETURNED_TO_DEV",
-  "WAITING_UAT",
   "UAT",
   "PRODUCTION",
   "ON_HOLD",

@@ -23,7 +23,6 @@ const EXCLUDED_STATUSES: AssignmentStatus[] = [
   AssignmentStatus.ON_HOLD,
   AssignmentStatus.PRODUCTION,
   AssignmentStatus.UAT,
-  AssignmentStatus.WAITING_UAT,
 ];
 
 export interface MissingAssignment {

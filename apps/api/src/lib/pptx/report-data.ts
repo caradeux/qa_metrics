@@ -4,7 +4,7 @@ import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "..
 
 const ACTIVE_OR_UAT = [
   "REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY",
-  "EXECUTION", "RETURNED_TO_DEV", "WAITING_UAT", "UAT",
+  "EXECUTION", "RETURNED_TO_DEV", "UAT",
 ] as const;
 
 export async function buildProjectScope(
@@ -137,7 +137,6 @@ const STATUS_LABEL: Record<string, string> = {
   WAITING_QA_DEPLOY: "Pdte. Instalación QA",
   EXECUTION: "En Curso",
   RETURNED_TO_DEV: "Devuelto a Desarrollo",
-  WAITING_UAT: "Pdte. Aprobación",
   UAT: "En UAT",
   PRODUCTION: "En Producción",
   ON_HOLD: "Detenido",
@@ -502,10 +501,10 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
   let husFirstCycle = 0;
   let husMultipleCycles = 0;
   // "Avance de la semana" = HUs que alcanzaron ejecución o más
-  // (EXECUTION/WAITING_UAT/UAT/PRODUCTION) sobre total de HUs del reporte.
+  // (EXECUTION/UAT/PRODUCTION) sobre total de HUs del reporte.
   let husAtOrPastExecution = 0;
   let husTotal = 0;
-  const AT_OR_PAST_EXECUTION = new Set(["EXECUTION", "WAITING_UAT", "UAT", "PRODUCTION"]);
+  const AT_OR_PAST_EXECUTION = new Set(["EXECUTION", "UAT", "PRODUCTION"]);
   for (const p of projects) {
     for (const h of p.hus) {
       husTotal++;

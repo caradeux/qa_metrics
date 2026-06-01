@@ -348,7 +348,7 @@ router.post(
 
 // GET /weekly-pptx — Avance Semanal QA en PPTX (auto-generado desde los datos)
 // Query: ?weekStart=YYYY-MM-DD (opcional, default lunes de la semana actual)
-// Incluye proyectos con asignaciones activas o en UAT/WAITING_UAT
+// Incluye proyectos con asignaciones activas o en UAT
 router.get(
   "/weekly-pptx",
   requirePermission("reports", "read") as any,

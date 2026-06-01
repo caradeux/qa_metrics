@@ -398,7 +398,7 @@ router.get(
         rejectedAssignments: rejected,
         devDeliveryLeadTime, // días promedio entre ciclo N y ciclo N+1 (tiempo que dev tarda en entregar correcciones)
         devDeliverySamples: gaps.length,
-        leadTime, // { REGISTERED: N, ANALYSIS: N, ..., WAITING_UAT: N, ... } en días promedio
+        leadTime, // { REGISTERED: N, ANALYSIS: N, ..., UAT: N, ... } en días promedio
         projectCount: projectMetrics.length,
         testerCount: projectMetrics.reduce((s, p) => s + p.testerCount, 0),
         defectsBySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
@@ -610,7 +610,6 @@ router.get(
       "WAITING_QA_DEPLOY",
       "EXECUTION",
       "RETURNED_TO_DEV",
-      "WAITING_UAT",
       "UAT",
       "ON_HOLD",
       "PRODUCTION",

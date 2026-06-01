@@ -15,7 +15,6 @@ const STATUSES = [
   { value: "WAITING_QA_DEPLOY", label: "Esperando Ambientación QA", short: "AMB", color: "#ea580c" },
   { value: "EXECUTION", label: "En Ejecucion", short: "EJE", color: "#0891b2" },
   { value: "RETURNED_TO_DEV", label: "Devuelto a Dev", short: "DEV", color: "#ef4444" },
-  { value: "WAITING_UAT", label: "Espera UAT", short: "ESP", color: "#f59e0b" },
   { value: "UAT", label: "En UAT", short: "UAT", color: "#d946ef" },
   { value: "PRODUCTION", label: "Produccion", short: "PRD", color: "#10b981" },
   { value: "ON_HOLD", label: "Detenido", short: "HOLD", color: "#64748b" },

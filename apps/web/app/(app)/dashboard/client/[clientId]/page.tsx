@@ -143,7 +143,6 @@ export default function ClientDashboard({ params }: { params: Promise<{ clientId
                 WAITING_QA_DEPLOY: { label: "Amb. QA", color: "#ea580c" },
                 EXECUTION: { label: "Ejecución", color: "#0891b2" },
                 RETURNED_TO_DEV: { label: "Devuelto", color: "#ef4444" },
-                WAITING_UAT: { label: "Espera UAT", color: "#f59e0b" },
                 UAT: { label: "UAT", color: "#d946ef" },
                 PRODUCTION: { label: "Producción", color: "#10b981" },
                 ON_HOLD: { label: "Detenido", color: "#64748b" },

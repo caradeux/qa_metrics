@@ -58,7 +58,7 @@ describe("findTestersWithMissingRecords", () => {
         expect(a).toHaveProperty("projectId");
         expect(a).toHaveProperty("projectName");
         // Must not contain excluded statuses
-        expect(["ON_HOLD", "PRODUCTION", "UAT", "WAITING_UAT"]).not.toContain(a.status);
+        expect(["ON_HOLD", "PRODUCTION", "UAT"]).not.toContain(a.status);
       }
     }
   });

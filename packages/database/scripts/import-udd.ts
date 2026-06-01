@@ -8,7 +8,7 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: proc
 // PDF states → AssignmentStatus
 function mapStatus(pdf: string): any {
   const map: Record<string, string> = {
-    "Pdte. Aprobación": "WAITING_UAT",
+    "Pdte. Aprobación": "UAT",
     "Pdte. Instalación QA": "WAITING_QA_DEPLOY",
     "UAT": "UAT",
     "En Traspaso": "REGISTERED",

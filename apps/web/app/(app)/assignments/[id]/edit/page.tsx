@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 import { ReasonDialog } from "@/components/ui/ReasonDialog";
+import { StatusStepper } from "@/components/stories/StatusStepper";
 
 interface Assignment {
   id: string; startDate: string; endDate: string | null;
@@ -11,19 +12,6 @@ interface Assignment {
   tester: { id: string; name: string; project: { name: string; client: { name: string } } };
   story: { id: string; title: string };
 }
-
-const STATUSES = [
-  { value: "REGISTERED", label: "Inicio" },
-  { value: "ANALYSIS", label: "En Analisis" },
-  { value: "TEST_DESIGN", label: "Diseno de Casos" },
-  { value: "WAITING_QA_DEPLOY", label: "Esperando Ambientación QA" },
-  { value: "EXECUTION", label: "En Ejecucion" },
-  { value: "RETURNED_TO_DEV", label: "Devuelto a Dev" },
-  { value: "WAITING_UAT", label: "Espera UAT" },
-  { value: "UAT", label: "En UAT" },
-  { value: "PRODUCTION", label: "Produccion" },
-  { value: "ON_HOLD", label: "Detenido" },
-];
 
 function originalDateOf(info: Assignment | null): string {
   if (!info?.endDate) return "";
@@ -103,10 +91,10 @@ export default function EditAssignmentPage({ params }: { params: Promise<{ id: s
       )}
       <form onSubmit={handleSubmit} className="space-y-5 bg-card p-6 rounded-xl border border-border">
         <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Estado</label>
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className={inp}>
-            {STATUSES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
+          <label className="block text-sm font-medium text-foreground mb-3">Estado</label>
+          <div className="rounded-lg border border-border bg-white px-4 py-4">
+            <StatusStepper value={status} onChange={setStatus} />
+          </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">Fecha Fin</label>

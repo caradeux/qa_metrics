@@ -205,7 +205,6 @@ const STATUS_BAND_MAP: Record<string, OccupationBandLabel | null> = {
   EXECUTION: null,                  // clasifica por fase (activo)
   WAITING_QA_DEPLOY: "En manos de desarrollo",
   RETURNED_TO_DEV: "En manos de desarrollo",
-  WAITING_UAT: "Esperando aprobación cliente",
   UAT: "Esperando aprobación cliente",
   PRODUCTION: null,                 // no consume capacidad
   ON_HOLD: "Detenido",

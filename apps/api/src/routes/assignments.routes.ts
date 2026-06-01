@@ -11,7 +11,7 @@ import {
 } from "../validators/assignment.validator.js";
 import { updatePhasesSchema } from "../validators/assignment-phase.validator.js";
 import { ZodError } from "zod";
-import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../lib/access.js";
+import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds, projectScopeFilter } from "../lib/access.js";
 import { isWorkday } from "../lib/workdays.js";
 import {
   dateChanged,
@@ -22,6 +22,13 @@ import {
 
 const router = Router();
 router.use(authMiddleware as any);
+
+function daysSince(date: Date): number {
+  return Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
+}
+
+// Umbral (en días) para marcar una asignación como "estancada" en su estado.
+const STUCK_DAYS = 14;
 
 async function canAccessAssignmentProject(req: AuthRequest, projectId: string): Promise<boolean> {
   if (isClientPm(req)) {
@@ -139,6 +146,70 @@ router.get(
       res.json(assignments);
     } catch (err) {
       res.status(500).json({ error: "Error al obtener asignaciones" });
+    }
+  }
+);
+
+// GET /attention — temas que requieren gestión del equipo, acotados al scope del rol.
+// Marca asignaciones: Devuelto a Dev, Detenido, >STUCK_DAYS días en el mismo estado,
+// o vencidas (fecha fin pasada y aún no en Producción).
+router.get(
+  "/attention",
+  requirePermission("assignments", "read") as any,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const scope = await projectScopeFilter(req);
+      const assignments = await prisma.testerAssignment.findMany({
+        where: {
+          tester: { project: scope },
+          status: { not: "PRODUCTION" }, // las completadas no requieren gestión
+        },
+        include: {
+          tester: {
+            select: {
+              name: true,
+              project: { select: { id: true, name: true, client: { select: { name: true } } } },
+            },
+          },
+          story: { select: { id: true, title: true, externalId: true } },
+          statusLogs: { orderBy: { changedAt: "desc" }, take: 1, select: { changedAt: true } },
+        },
+      });
+
+      const now = Date.now();
+      const items = assignments
+        .map((a) => {
+          const lastLog = a.statusLogs[0];
+          const days = daysSince(lastLog ? lastLog.changedAt : a.updatedAt);
+          const reasons: string[] = [];
+          if (a.status === "RETURNED_TO_DEV") reasons.push("returned");
+          if (a.status === "ON_HOLD") reasons.push("on_hold");
+          if (days > STUCK_DAYS) reasons.push("stuck");
+          if (a.endDate && new Date(a.endDate).getTime() < now) reasons.push("overdue");
+          if (reasons.length === 0) return null;
+          return {
+            assignmentId: a.id,
+            storyId: a.story.id,
+            storyTitle: a.story.title,
+            externalId: a.story.externalId,
+            projectId: a.tester.project.id,
+            projectName: a.tester.project.name,
+            clientName: a.tester.project.client.name,
+            testerName: a.tester.name,
+            status: a.status,
+            daysInStatus: days,
+            endDate: a.endDate,
+            reasons,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+
+      // Más severos primero: más motivos, luego más días en estado.
+      items.sort((x, y) => y.reasons.length - x.reasons.length || y.daysInStatus - x.daysInStatus);
+
+      res.json({ count: items.length, items });
+    } catch (err) {
+      res.status(500).json({ error: "Error al obtener temas de gestión" });
     }
   }
 );
