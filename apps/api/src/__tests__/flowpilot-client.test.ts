@@ -118,4 +118,16 @@ describe("FlowpilotClient catálogos y entradas", () => {
     expect(String(url)).toContain("/api/time-entries/35220");
     expect(init.method).toBe("DELETE");
   });
+
+  it("listTaskTypes parsea {task_types:[{id,name}]} desde /api/task_types", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      res(JSON.stringify({ task_types: [{ id: 3, name: "QA" }, { id: 20, name: "vacacion" }], success: true }))
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FlowpilotClient("https://fp.test");
+    const out = await client.listTaskTypes(session);
+    expect(out).toEqual([{ id: 3, name: "QA" }, { id: 20, name: "vacacion" }]);
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/api/task_types");
+  });
 });

@@ -8,13 +8,14 @@ export function decryptPassword(enc: string): string {
   return decrypt(enc);
 }
 
-// Roles que cargan horas en FlowPilot (capturan credencial al login).
-const HOUR_LOGGING_ROLES = new Set(["QA_ANALYST"]);
+// Roles que cargan/gestionan horas en FlowPilot (capturan credencial al login).
+// ADMIN/QA_LEAD la necesitan para usar el proxy de catálogos en la homologación.
+const FLOWPILOT_CAPTURE_ROLES = new Set(["QA_ANALYST", "QA_LEAD", "ADMIN"]);
 
 export async function captureCredentialOnLogin(
   userId: string, roleName: string, plainPassword: string,
 ): Promise<void> {
-  if (!HOUR_LOGGING_ROLES.has(roleName)) return;
+  if (!FLOWPILOT_CAPTURE_ROLES.has(roleName)) return;
   const passwordEnc = encrypt(plainPassword);
   await prisma.flowpilotCredential.upsert({
     where: { userId },

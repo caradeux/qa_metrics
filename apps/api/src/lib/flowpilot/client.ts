@@ -64,6 +64,13 @@ export class FlowpilotClient {
     return this.getCatalog(session, `/api/projects/by-client/${clientId}`);
   }
 
+  async listTaskTypes(session: FlowpilotSession): Promise<FlowpilotCatalogItem[]> {
+    const r = await fetch(`${this.baseUrl}/api/task_types`, { headers: this.headers(session) });
+    if (!r.ok) throw new Error(`FlowPilot /api/task_types → ${r.status}`);
+    const json = (await r.json()) as { task_types?: FlowpilotCatalogItem[] };
+    return json.task_types ?? [];
+  }
+
   async createEntry(session: FlowpilotSession, input: FlowpilotEntryInput): Promise<FlowpilotEntry> {
     const body = {
       entity_type: input.entityType,
