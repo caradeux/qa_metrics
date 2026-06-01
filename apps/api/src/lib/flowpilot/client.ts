@@ -3,6 +3,11 @@ import type {
   FlowpilotEntryInput, FlowpilotEntry,
 } from "./types.js";
 
+// Se lanza cuando FlowPilot rechaza el login (usuario/clave inválidos): el POST
+// redirige de vuelta a /auth/login en lugar de a /index. El router lo mapea a 409
+// con un mensaje claro para el usuario.
+export class FlowpilotInvalidCredentialError extends Error {}
+
 function extractSessionCookie(headers: Headers): string {
   // Headers.getSetCookie() returns ALL Set-Cookie values (Node >=18.14).
   const all = headers.getSetCookie?.() ?? [];
@@ -33,7 +38,15 @@ export class FlowpilotClient {
       redirect: "manual",
     });
     if (p.status !== 302) {
-      throw new Error("FlowPilot login falló (credenciales inválidas o flujo cambiado)");
+      throw new Error("FlowPilot login falló (flujo de login cambiado)");
+    }
+    // FlowPilot redirige a /index si autenticó, o de vuelta a /auth/login si el
+    // usuario/clave son inválidos. Distinguimos por el header Location.
+    const location = p.headers.get("location") ?? "";
+    if (location.includes("/auth/login")) {
+      throw new FlowpilotInvalidCredentialError(
+        "Credencial de FlowPilot inválida — verifica tu usuario y clave de FlowPilot."
+      );
     }
     const authCookie = extractSessionCookie(p.headers) || initCookie;
     return { cookie: authCookie };

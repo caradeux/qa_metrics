@@ -3,6 +3,8 @@ import { ZodError } from "zod";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { getSession, flowpilotClient, FlowpilotNoCredentialError } from "../services/flowpilot-session.service.js";
+import { FlowpilotInvalidCredentialError } from "../lib/flowpilot/client.js";
+import { setCredential } from "../services/flowpilot-credential.service.js";
 import { upsertMappingSchema } from "../validators/flowpilot.validator.js";
 
 const router = Router();
@@ -22,13 +24,63 @@ async function withCatalog<T>(req: AuthRequest, res: Response, fn: (session: any
     const session = await getSession(req.user!.id);
     res.json({ data: await fn(session) });
   } catch (e) {
-    if (e instanceof FlowpilotNoCredentialError) {
-      res.status(409).json({ error: e.message });
+    // Sin credencial o credencial inválida → 409 con code para que el front
+    // ofrezca el modal "Conectar con FlowPilot".
+    if (e instanceof FlowpilotNoCredentialError || e instanceof FlowpilotInvalidCredentialError) {
+      res.status(409).json({ error: e.message, code: "FLOWPILOT_AUTH" });
       return;
     }
     res.status(502).json({ error: "Error consultando FlowPilot", detail: (e as Error).message });
   }
 }
+
+// Conectar / re-conectar la credencial FlowPilot del usuario actual.
+// Valida el usuario+clave contra FlowPilot y, si autentica, la guarda cifrada.
+// Disponible para cualquier usuario autenticado (conecta SU propia cuenta).
+router.post("/connection", async (req: AuthRequest, res) => {
+  const password = (req.body ?? {}).password;
+  if (typeof password !== "string" || password.length === 0) {
+    res.status(400).json({ error: "password requerido" });
+    return;
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.id },
+    select: { email: true },
+  });
+  if (!user) { res.status(404).json({ error: "usuario no encontrado" }); return; }
+
+  try {
+    await flowpilotClient.login(user.email, password); // valida contra FlowPilot
+  } catch (e) {
+    if (e instanceof FlowpilotInvalidCredentialError) {
+      res.status(401).json({ valid: false, error: e.message });
+      return;
+    }
+    res.status(502).json({ valid: false, error: "No se pudo contactar a FlowPilot" });
+    return;
+  }
+
+  await setCredential(req.user!.id, password);
+  await prisma.flowpilotConnection.upsert({
+    where: { userId: req.user!.id },
+    create: { userId: req.user!.id, valid: true, lastValidatedAt: new Date() },
+    update: { valid: true, lastValidatedAt: new Date() },
+  });
+  res.json({ valid: true, email: user.email });
+});
+
+// Estado de la conexión del usuario actual.
+router.get("/connection", async (req: AuthRequest, res) => {
+  const [conn, user] = await Promise.all([
+    prisma.flowpilotConnection.findUnique({ where: { userId: req.user!.id } }),
+    prisma.user.findUnique({ where: { id: req.user!.id }, select: { email: true } }),
+  ]);
+  res.json({
+    email: user?.email ?? null,
+    valid: conn?.valid ?? false,
+    lastValidatedAt: conn?.lastValidatedAt ?? null,
+  });
+});
 
 router.get("/catalog/clients", async (req: AuthRequest, res) => {
   if (!requireAdmin(req, res)) return;

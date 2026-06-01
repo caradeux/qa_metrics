@@ -24,6 +24,17 @@ export async function captureCredentialOnLogin(
   });
 }
 
+// Guarda/actualiza explícitamente la credencial FlowPilot de un usuario
+// (flujo "Conectar con FlowPilot", independiente del login de qa_metrics).
+export async function setCredential(userId: string, plainPassword: string): Promise<void> {
+  const passwordEnc = encrypt(plainPassword);
+  await prisma.flowpilotCredential.upsert({
+    where: { userId },
+    create: { userId, passwordEnc },
+    update: { passwordEnc },
+  });
+}
+
 export async function getDecryptedPassword(userId: string): Promise<string | null> {
   const cred = await prisma.flowpilotCredential.findUnique({ where: { userId } });
   return cred ? decrypt(cred.passwordEnc) : null;

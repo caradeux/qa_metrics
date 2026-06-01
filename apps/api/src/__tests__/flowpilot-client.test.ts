@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { FlowpilotClient } from "../lib/flowpilot/client.js";
+import { FlowpilotClient, FlowpilotInvalidCredentialError } from "../lib/flowpilot/client.js";
 
 function res(body: string, init: { status?: number; setCookie?: string } = {}) {
   const headers = new Headers();
@@ -46,7 +46,7 @@ describe("FlowpilotClient.login", () => {
     expect(session.cookie).toBe("session=authcookie");
   });
 
-  it("lanza si el POST login no redirige (credenciales inválidas)", async () => {
+  it("lanza si el POST login no redirige (flujo cambiado)", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(res('<input name="csrf_token" value="TOK">', { setCookie: "session=init" }))
       .mockResolvedValueOnce(res("Credenciales inválidas", { status: 200 }));
@@ -54,6 +54,21 @@ describe("FlowpilotClient.login", () => {
 
     const client = new FlowpilotClient("https://fp.test");
     await expect(client.login("a@b.cl", "bad")).rejects.toThrow(/login/i);
+  });
+
+  it("lanza FlowpilotInvalidCredentialError si el 302 redirige a /auth/login", async () => {
+    const getRes = new Response('<input name="csrf_token" value="TOK">', {
+      headers: new Headers({ "set-cookie": "session=init; Path=/" }),
+    });
+    const postRes = new Response("", {
+      status: 302,
+      headers: new Headers({ location: "/auth/login" }),
+    });
+    const fetchMock = vi.fn().mockResolvedValueOnce(getRes).mockResolvedValueOnce(postRes);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new FlowpilotClient("https://fp.test");
+    await expect(client.login("a@b.cl", "bad")).rejects.toBeInstanceOf(FlowpilotInvalidCredentialError);
   });
 });
 
