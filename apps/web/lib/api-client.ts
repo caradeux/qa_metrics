@@ -196,3 +196,40 @@ export const occupationApi = {
     return apiClient<OccupationRow[]>(`/api/reports/occupation?${qs.toString()}`);
   },
 };
+
+// ---------- FlowPilot homologación ----------
+
+export interface FlowpilotCatalogItem { id: number; name: string; }
+
+export interface FlowpilotMapping {
+  id: string;
+  userId: string;
+  kind: string;
+  entityType: "contract" | "project";
+  clientId: number;
+  clientName: string;
+  contractId: number | null;
+  projectId: number | null;
+  entityName: string;
+  taskTypeId: number;
+  taskTypeName: string;
+}
+
+export type FlowpilotMappingInput = Omit<FlowpilotMapping, "id">;
+
+export const flowpilotApi = {
+  clients: (entityType: "contract" | "project") =>
+    apiClient<{ data: FlowpilotCatalogItem[] }>(`/api/flowpilot/catalog/clients?entityType=${entityType}`).then((r) => r.data),
+  contracts: (clientId: number) =>
+    apiClient<{ data: FlowpilotCatalogItem[] }>(`/api/flowpilot/catalog/contracts?clientId=${clientId}`).then((r) => r.data),
+  projects: (clientId: number) =>
+    apiClient<{ data: FlowpilotCatalogItem[] }>(`/api/flowpilot/catalog/projects?clientId=${clientId}`).then((r) => r.data),
+  taskTypes: () =>
+    apiClient<{ data: FlowpilotCatalogItem[] }>(`/api/flowpilot/catalog/task-types`).then((r) => r.data),
+  listMappings: (userId: string) =>
+    apiClient<FlowpilotMapping[]>(`/api/flowpilot/mappings?userId=${userId}`),
+  upsertMapping: (data: FlowpilotMappingInput) =>
+    apiClient<FlowpilotMapping>(`/api/flowpilot/mappings`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteMapping: (id: string) =>
+    apiClient<void>(`/api/flowpilot/mappings/${id}`, { method: "DELETE" }),
+};

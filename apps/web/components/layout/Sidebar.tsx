@@ -197,6 +197,7 @@ export function Sidebar() {
         title: "Admin",
         items: [
           { label: "Carga diaria", href: "/admin/carga-diaria", icon: iconShieldCheck },
+          { label: "Homologación FlowPilot", href: "/admin/flowpilot-homologacion", icon: iconClock },
         ],
       });
     }
