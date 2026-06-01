@@ -40,3 +40,66 @@ describe("FlowpilotClient.login", () => {
     await expect(client.login("a@b.cl", "bad")).rejects.toThrow(/login/i);
   });
 });
+
+describe("FlowpilotClient catálogos y entradas", () => {
+  beforeEach(() => vi.restoreAllMocks());
+  const session = { cookie: "session=authcookie" };
+
+  it("listClientsByEntityType parsea {data:[{id,name}]}", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      res(JSON.stringify({ data: [{ id: 36, name: "UDD" }], success: true }))
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FlowpilotClient("https://fp.test");
+    const out = await client.listClientsByEntityType(session, "contract");
+    expect(out).toEqual([{ id: 36, name: "UDD" }]);
+    const [url] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/api/clients-by-entity-type?entity_type=contract");
+  });
+
+  it("createEntry hace POST JSON y devuelve la entrada creada", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      res(JSON.stringify({
+        data: { id: 35220, client_id: 36, client_name: "UDD", date: "2026-06-01",
+                description: "X", hours_worked: 4, task_type_name: "QA" },
+        success: true,
+      }), { status: 201 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FlowpilotClient("https://fp.test");
+    const entry = await client.createEntry(session, {
+      entityType: "contract", clientId: 36, taskTypeId: 3, date: "2026-06-01",
+      hoursWorked: 4, description: "X", contractId: 84, projectId: null,
+    });
+    expect(entry.id).toBe(35220);
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String(init.body));
+    expect(body).toMatchObject({
+      entity_type: "contract", client_id: "36", task_type_id: "3",
+      contract_id: "84", project_id: null, hours_worked: 4, description: "X",
+    });
+    expect(init.headers["X-Requested-With"]).toBe("XMLHttpRequest");
+  });
+
+  it("createEntry lanza si status != 201", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      res(JSON.stringify({ success: false, message: "error" }), { status: 400 })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FlowpilotClient("https://fp.test");
+    await expect(client.createEntry(session, {
+      entityType: "project", clientId: 18, taskTypeId: 20, date: "2026-06-01",
+      hoursWorked: 8, description: "Vac", contractId: null, projectId: 54,
+    })).rejects.toThrow();
+  });
+
+  it("deleteEntry hace DELETE al id", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(res("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FlowpilotClient("https://fp.test");
+    await client.deleteEntry(session, 35220);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/api/time-entries/35220");
+    expect(init.method).toBe("DELETE");
+  });
+});
