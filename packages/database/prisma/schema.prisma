@@ -52,6 +52,10 @@ model User {
   managedProjects   Project[]  @relation("ProjectManagerOfProject")
   dateChangeLogs    DateChangeLog[]
   createdActivities Activity[]
+  flowpilotCredential FlowpilotCredential? @relation("UserFlowpilotCredential")
+  flowpilotConnection FlowpilotConnection? @relation("UserFlowpilotConnection")
+  flowpilotMappings   FlowpilotMapping[]   @relation("UserFlowpilotMappings")
+  flowpilotSyncLogs   FlowpilotSyncLog[]   @relation("UserFlowpilotSyncLogs")
 }
 
 model Client {
@@ -245,7 +249,6 @@ enum AssignmentStatus {
   WAITING_QA_DEPLOY
   EXECUTION
   RETURNED_TO_DEV
-  WAITING_UAT
   UAT
   PRODUCTION
   ON_HOLD
@@ -290,4 +293,60 @@ model Activity {
   @@index([testerId, startAt])
   @@index([testerId, endAt])
   @@index([assignmentId])
+}
+
+model FlowpilotCredential {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation("UserFlowpilotCredential", fields: [userId], references: [id], onDelete: Cascade)
+  passwordEnc String
+  capturedAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model FlowpilotConnection {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation("UserFlowpilotConnection", fields: [userId], references: [id], onDelete: Cascade)
+  flowpilotUserId Int?
+  enabled         Boolean   @default(true)
+  valid           Boolean   @default(false)
+  lastValidatedAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model FlowpilotMapping {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation("UserFlowpilotMappings", fields: [userId], references: [id], onDelete: Cascade)
+  kind         String
+  entityType   String
+  clientId     Int
+  clientName   String
+  contractId   Int?
+  projectId    Int?
+  entityName   String
+  taskTypeId   Int
+  taskTypeName String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, kind])
+  @@index([userId])
+}
+
+model FlowpilotSyncLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserFlowpilotSyncLogs", fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime @db.Date
+  entryIds    Int[]
+  hoursTotal  Float
+  status      String
+  payloadHash String
+  sentAt      DateTime @default(now())
+
+  @@unique([userId, date])
+  @@index([userId])
 }
