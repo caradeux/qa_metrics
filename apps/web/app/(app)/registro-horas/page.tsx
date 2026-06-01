@@ -16,6 +16,7 @@ export default function RegistroHorasPage() {
   const [error, setError] = useState<string | null>(null);
   const [needsConnect, setNeedsConnect] = useState(false);
   const [sending, setSending] = useState(false);
+  const [confirmResend, setConfirmResend] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback((d: string) => {
@@ -34,6 +35,7 @@ export default function RegistroHorasPage() {
   const total = rows.reduce((s, r) => s + (Number(r.hours) || 0), 0);
   const allMapped = rows.every((r) => r.mapped);
   const overCap = total > 8 + 1e-9;
+  const isSent = data?.sync?.status === "SENT";
   const canSend = !sending && rows.length > 0 && allMapped && !overCap;
 
   const setHours = (i: number, v: number) =>
@@ -70,7 +72,12 @@ export default function RegistroHorasPage() {
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2.5 text-[12px] text-red-800">{error}</div>}
-      {data?.sync?.status === "SENT" && <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-[12px] text-emerald-800">Ya enviado ({data.sync.hoursTotal}h). Reenviar reemplaza lo anterior.</div>}
+      {isSent && (
+        <div className="mb-4 inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] text-emerald-800">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          Ya enviado a FlowPilot ({data!.sync!.hoursTotal}h)
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-1.5">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />)}</div>
@@ -93,8 +100,8 @@ export default function RegistroHorasPage() {
             <div className={`text-sm font-semibold ${overCap ? "text-red-600" : "text-gray-700"}`}>
               Total: {total.toFixed(1)} / 8h {overCap && "· supera la jornada"}
             </div>
-            <button onClick={send} disabled={!canSend} className="bg-[#2E5FA3] text-white text-sm rounded-md px-4 py-2 disabled:opacity-40 hover:bg-[#264f88]">
-              {sending ? "Enviando…" : "Enviar a FlowPilot"}
+            <button onClick={() => { if (isSent) setConfirmResend(true); else send(); }} disabled={!canSend} className="bg-[#2E5FA3] text-white text-sm rounded-md px-4 py-2 disabled:opacity-40 hover:bg-[#264f88]">
+              {sending ? "Enviando…" : isSent ? "Reenviar a FlowPilot" : "Enviar a FlowPilot"}
             </button>
           </div>
           {!allMapped && rows.length > 0 && <div className="mt-2 text-[12px] text-amber-700">Hay entradas sin homologar — pide a un admin configurarlas en Homologación FlowPilot.</div>}
@@ -104,7 +111,61 @@ export default function RegistroHorasPage() {
       {needsConnect && (
         <ConnectModal onClose={() => setNeedsConnect(false)} onConnected={() => { setNeedsConnect(false); load(date); }} />
       )}
+      {confirmResend && (
+        <ConfirmResendModal
+          previousHours={data?.sync?.hoursTotal ?? 0}
+          newHours={total}
+          onCancel={() => setConfirmResend(false)}
+          onConfirm={() => { setConfirmResend(false); send(); }}
+        />
+      )}
       {toast && <div className="fixed bottom-6 right-6 z-50 bg-gray-900 text-white text-xs rounded-md px-3.5 py-2.5">{toast}</div>}
+    </div>
+  );
+}
+
+function ConfirmResendModal({
+  previousHours, newHours, onCancel, onConfirm,
+}: {
+  previousHours: number; newHours: number; onCancel: () => void; onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 animate-in fade-in" onClick={onCancel}>
+      <div
+        className="bg-white rounded-xl shadow-2xl w-[460px] overflow-hidden border-t-4 border-amber-500 animate-in zoom-in-95"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Encabezado de advertencia */}
+        <div className="flex items-start gap-3 px-5 pt-5">
+          <div className="w-11 h-11 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">¿Reenviar este día?</h2>
+            <p className="text-[12px] text-amber-700 font-medium mt-0.5">Este día YA fue registrado en FlowPilot</p>
+          </div>
+        </div>
+
+        <div className="px-5 py-4">
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
+            Para evitar <span className="font-semibold">doble registro</span>, al reenviar se{" "}
+            <span className="font-semibold">eliminan</span> las {previousHours}h ya cargadas y se{" "}
+            <span className="font-semibold">reemplazan</span> por las {newHours.toFixed(1)}h actuales.
+            La acción no se puede deshacer.
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 pb-5">
+          <button onClick={onCancel} className="text-sm font-medium px-4 py-2 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button onClick={onConfirm} className="text-sm font-semibold px-4 py-2 rounded-md bg-amber-600 text-white hover:bg-amber-700 shadow-sm">
+            Sí, reemplazar y reenviar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
