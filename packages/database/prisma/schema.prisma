@@ -350,3 +350,11 @@ model FlowpilotSyncLog {
   @@unique([userId, date])
   @@index([userId])
 }
+
+// Configuración editable de la integración FlowPilot (fila única, id="singleton").
+// Si no existe, se usa FLOWPILOT_BASE_URL del entorno como fallback.
+model FlowpilotSetting {
+  id        String   @id
+  baseUrl   String
+  updatedAt DateTime @updatedAt
+}

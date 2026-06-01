@@ -206,6 +206,7 @@ export function Sidebar() {
 
     // Configuración (última)
     const config: NavItem[] = [];
+    config.push({ label: "FlowPilot (URL)", href: "/settings/flowpilot", icon: iconClock });
     if (can("roles", "read")) {
       config.push({ label: "Roles y Permisos", href: "/settings/roles", icon: iconGear });
     }

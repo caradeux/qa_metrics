@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { ZodError } from "zod";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
-import { getSession, flowpilotClient, FlowpilotNoCredentialError } from "../services/flowpilot-session.service.js";
+import { getSession, buildClient, getBaseUrl, setBaseUrl, ENV_BASE_URL, FlowpilotNoCredentialError } from "../services/flowpilot-session.service.js";
 import { FlowpilotInvalidCredentialError } from "../lib/flowpilot/client.js";
 import { setCredential } from "../services/flowpilot-credential.service.js";
 import { upsertMappingSchema } from "../validators/flowpilot.validator.js";
@@ -22,10 +22,10 @@ function requireAdmin(req: AuthRequest, res: Response): boolean {
   return true;
 }
 
-async function withCatalog<T>(req: AuthRequest, res: Response, fn: (session: any) => Promise<T>) {
+async function withCatalog<T>(req: AuthRequest, res: Response, fn: (client: any, session: any) => Promise<T>) {
   try {
-    const session = await getSession(req.user!.id);
-    res.json({ data: await fn(session) });
+    const { client, session } = await getSession(req.user!.id);
+    res.json({ data: await fn(client, session) });
   } catch (e) {
     // Sin credencial o credencial inválida → 409 con code para que el front
     // ofrezca el modal "Conectar con FlowPilot".
@@ -53,7 +53,8 @@ router.post("/connection", async (req: AuthRequest, res) => {
   if (!user) { res.status(404).json({ error: "usuario no encontrado" }); return; }
 
   try {
-    await flowpilotClient.login(user.email, password); // valida contra FlowPilot
+    const client = await buildClient();
+    await client.login(user.email, password); // valida contra FlowPilot
   } catch (e) {
     if (e instanceof FlowpilotInvalidCredentialError) {
       res.status(401).json({ valid: false, error: e.message });
@@ -88,26 +89,47 @@ router.get("/connection", async (req: AuthRequest, res) => {
 router.get("/catalog/clients", async (req: AuthRequest, res) => {
   if (!requireAdmin(req, res)) return;
   const entityType = req.query.entityType === "project" ? "project" : "contract";
-  await withCatalog(req, res, (s) => flowpilotClient.listClientsByEntityType(s, entityType));
+  await withCatalog(req, res, (c, s) => c.listClientsByEntityType(s, entityType));
 });
 
 router.get("/catalog/contracts", async (req: AuthRequest, res) => {
   if (!requireAdmin(req, res)) return;
   const clientId = Number(req.query.clientId);
   if (!clientId) { res.status(400).json({ error: "clientId requerido" }); return; }
-  await withCatalog(req, res, (s) => flowpilotClient.listContractsByClient(s, clientId));
+  await withCatalog(req, res, (c, s) => c.listContractsByClient(s, clientId));
 });
 
 router.get("/catalog/projects", async (req: AuthRequest, res) => {
   if (!requireAdmin(req, res)) return;
   const clientId = Number(req.query.clientId);
   if (!clientId) { res.status(400).json({ error: "clientId requerido" }); return; }
-  await withCatalog(req, res, (s) => flowpilotClient.listProjectsByClient(s, clientId));
+  await withCatalog(req, res, (c, s) => c.listProjectsByClient(s, clientId));
 });
 
 router.get("/catalog/task-types", async (req: AuthRequest, res) => {
   if (!requireAdmin(req, res)) return;
-  await withCatalog(req, res, (s) => flowpilotClient.listTaskTypes(s));
+  await withCatalog(req, res, (c, s) => c.listTaskTypes(s));
+});
+
+// Configuración de la integración (URL base de FlowPilot). Solo ADMIN/QA_LEAD.
+router.get("/config", async (req: AuthRequest, res) => {
+  if (!requireAdmin(req, res)) return;
+  const baseUrl = await getBaseUrl();
+  res.json({ baseUrl, envDefault: ENV_BASE_URL, isCustom: baseUrl !== ENV_BASE_URL });
+});
+
+router.put("/config", async (req: AuthRequest, res) => {
+  if (!requireAdmin(req, res)) return;
+  const baseUrl = String((req.body ?? {}).baseUrl ?? "").trim().replace(/\/+$/, "");
+  try {
+    const u = new URL(baseUrl);
+    if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("protocolo");
+  } catch {
+    res.status(400).json({ error: "URL inválida (ej. https://flowpilot.biz)" });
+    return;
+  }
+  await setBaseUrl(baseUrl);
+  res.json({ baseUrl, envDefault: ENV_BASE_URL, isCustom: baseUrl !== ENV_BASE_URL });
 });
 
 router.get("/mappings", async (req: AuthRequest, res) => {
@@ -253,8 +275,8 @@ router.post("/sync", async (req: AuthRequest, res) => {
     res.json({ ok: true, unchanged: true, entryIds: prev.entryIds }); return;
   }
 
-  let session;
-  try { session = await getSession(req.user!.id); }
+  let client, session;
+  try { ({ client, session } = await getSession(req.user!.id)); }
   catch (e) {
     if (e instanceof FlowpilotNoCredentialError || e instanceof FlowpilotInvalidCredentialError) {
       res.status(409).json({ error: e.message, code: "FLOWPILOT_AUTH" }); return;
@@ -262,16 +284,14 @@ router.post("/sync", async (req: AuthRequest, res) => {
     res.status(502).json({ error: "No se pudo contactar a FlowPilot" }); return;
   }
 
-  // Si había envío previo, borrar esas entradas antes de recrear (FlowPilot no deduplica).
-  if (prev && prev.entryIds.length) {
-    for (const id of prev.entryIds) { try { await flowpilotClient.deleteEntry(session, id); } catch { /* continuar */ } }
-  }
-
+  // Crear PRIMERO las entradas nuevas; recién después borrar las anteriores.
+  // Así, si el proceso se interrumpe, en el peor caso quedan duplicadas
+  // (recuperable) en vez de perderse.
   const createdIds: number[] = [];
   try {
     for (const e of entries) {
       const m = e.m!; // garantizado por la validación previa (entries.some(!e.m) → 400)
-      const created = await flowpilotClient.createEntry(session, {
+      const created = await client.createEntry(session, {
         entityType: m.entityType as "contract" | "project",
         clientId: m.clientId, taskTypeId: m.taskTypeId,
         date, hoursWorked: e.hours, description: e.description,
@@ -286,6 +306,12 @@ router.post("/sync", async (req: AuthRequest, res) => {
       update: { entryIds: createdIds, hoursTotal: total, status: "PARTIAL", payloadHash },
     });
     res.status(502).json({ error: "Falló el envío parcial a FlowPilot", created: createdIds.length }); return;
+  }
+
+  // Borrar las entradas del envío anterior (FlowPilot no deduplica). Best-effort:
+  // si falla, las nuevas ya están y el SyncLog apuntará a ellas.
+  if (prev && prev.entryIds.length) {
+    for (const id of prev.entryIds) { try { await client.deleteEntry(session, id); } catch { /* continuar */ } }
   }
 
   await prisma.flowpilotSyncLog.upsert({

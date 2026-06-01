@@ -269,6 +269,10 @@ export const flowpilotApi = {
     else qs.set("days", String(params.days ?? 14));
     return apiClient<{ days: { date: string; hasData: boolean; sent: boolean }[]; from: string; to: string; today: string }>(`/api/flowpilot/pending?${qs.toString()}`);
   },
+  getConfig: () =>
+    apiClient<{ baseUrl: string; envDefault: string; isCustom: boolean }>(`/api/flowpilot/config`),
+  setConfig: (baseUrl: string) =>
+    apiClient<{ baseUrl: string; envDefault: string; isCustom: boolean }>(`/api/flowpilot/config`, { method: "PUT", body: JSON.stringify({ baseUrl }) }),
 };
 
 export interface FlowpilotPreviewEntry {
