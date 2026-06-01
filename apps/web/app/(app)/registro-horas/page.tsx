@@ -26,7 +26,7 @@ export default function RegistroHorasPage() {
   const [needsConnect, setNeedsConnect] = useState(false);
   const [sending, setSending] = useState(false);
   const [confirmResend, setConfirmResend] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<{ count: number; hours: number; date: string } | null>(null);
   const [monthDays, setMonthDays] = useState<{ date: string; hasData: boolean; sent: boolean }[]>([]);
   const monthKey = date.slice(0, 7);
 
@@ -67,10 +67,10 @@ export default function RegistroHorasPage() {
 
   const send = async () => {
     setSending(true); setError(null);
+    const hoursSent = total;
     try {
-      await flowpilotApi.sync(date, rows.map((r) => ({ kind: r.kind, description: r.description, hours: r.hours })));
-      setToast("Día enviado a FlowPilot");
-      setTimeout(() => setToast(null), 2500);
+      const res = await flowpilotApi.sync(date, rows.map((r) => ({ kind: r.kind, description: r.description, hours: r.hours })));
+      setSyncResult({ count: res.entryIds?.length ?? rows.length, hours: hoursSent, date });
       load(date);
       loadMonth(monthKey);
     } catch (e: any) {
@@ -165,7 +165,44 @@ export default function RegistroHorasPage() {
           onConfirm={() => { setConfirmResend(false); send(); }}
         />
       )}
-      {toast && <div className="fixed bottom-6 right-6 z-50 bg-gray-900 text-white text-xs rounded-md px-3.5 py-2.5">{toast}</div>}
+      {syncResult && (
+        <SyncSuccessModal
+          count={syncResult.count}
+          hours={syncResult.hours}
+          date={syncResult.date}
+          onClose={() => setSyncResult(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function SyncSuccessModal({
+  count, hours, date, onClose,
+}: {
+  count: number; hours: number; date: string; onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 animate-in fade-in" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-[440px] overflow-hidden border-t-4 border-emerald-500 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 pt-6 pb-2 text-center">
+          <div className="w-14 h-14 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          <h2 className="mt-4 text-lg font-bold text-gray-900">¡Registros creados en FlowPilot!</h2>
+          <p className="mt-1 text-sm text-gray-600 first-letter:uppercase">
+            Se {count === 1 ? "creó" : "crearon"} <span className="font-semibold">{count} {count === 1 ? "registro" : "registros"}</span>{" "}
+            ({hours.toFixed(1)}h) para el {formatLongDate(date)}.
+          </p>
+        </div>
+        <div className="px-5 py-4 flex justify-center">
+          <button onClick={onClose} className="text-sm font-semibold px-5 py-2 rounded-md bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm">
+            Listo
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
