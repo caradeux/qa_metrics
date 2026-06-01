@@ -197,6 +197,29 @@ export const occupationApi = {
   },
 };
 
+// ---------- Temas que requieren gestión (popup de bienvenida) ----------
+
+export type AttentionReason = "returned" | "on_hold" | "stuck" | "overdue";
+
+export interface AttentionItem {
+  assignmentId: string;
+  storyId: string;
+  storyTitle: string;
+  externalId: string | null;
+  projectId: string;
+  projectName: string;
+  clientName: string;
+  testerName: string | null;
+  status: string;
+  daysInStatus: number;
+  endDate: string | null;
+  reasons: AttentionReason[];
+}
+
+export const attentionApi = {
+  list: () => apiClient<{ count: number; items: AttentionItem[] }>("/api/assignments/attention"),
+};
+
 // ---------- FlowPilot homologación ----------
 
 export interface FlowpilotCatalogItem { id: number; name: string; }
@@ -218,6 +241,10 @@ export interface FlowpilotMapping {
 export type FlowpilotMappingInput = Omit<FlowpilotMapping, "id">;
 
 export const flowpilotApi = {
+  connectionStatus: () =>
+    apiClient<{ email: string | null; valid: boolean; lastValidatedAt: string | null }>(`/api/flowpilot/connection`),
+  connect: (password: string) =>
+    apiClient<{ valid: boolean; email?: string }>(`/api/flowpilot/connection`, { method: "POST", body: JSON.stringify({ password }) }),
   clients: (entityType: "contract" | "project") =>
     apiClient<{ data: FlowpilotCatalogItem[] }>(`/api/flowpilot/catalog/clients?entityType=${entityType}`).then((r) => r.data),
   contracts: (clientId: number) =>

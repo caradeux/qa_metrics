@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { apiClient, flowpilotApi, type FlowpilotMapping, type FlowpilotCatalogItem } from "@/lib/api-client";
+import { apiClient, flowpilotApi, ApiError, type FlowpilotMapping, type FlowpilotCatalogItem } from "@/lib/api-client";
 import { useAuth } from "@/hooks/useAuth";
 
 interface UserLite { id: string; name: string; email: string; role?: { name: string } }
@@ -16,6 +16,8 @@ export default function FlowpilotHomologacionPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Partial<FlowpilotMapping> | null>(null);
+  const [needsConnect, setNeedsConnect] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     apiClient<UserLite[]>("/api/users")
@@ -84,9 +86,19 @@ export default function FlowpilotHomologacionPage() {
         <MappingEditor
           initial={editing}
           userId={userId}
+          reloadKey={reloadKey}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); loadMappings(userId); }}
           onError={setError}
+          onAuthError={() => setNeedsConnect(true)}
+        />
+      )}
+
+      {needsConnect && (
+        <FlowpilotConnectModal
+          email={user?.email ?? ""}
+          onClose={() => setNeedsConnect(false)}
+          onConnected={() => { setNeedsConnect(false); setReloadKey((k) => k + 1); }}
         />
       )}
     </div>
@@ -94,13 +106,15 @@ export default function FlowpilotHomologacionPage() {
 }
 
 function MappingEditor({
-  initial, userId, onClose, onSaved, onError,
+  initial, userId, reloadKey, onClose, onSaved, onError, onAuthError,
 }: {
   initial: Partial<FlowpilotMapping>;
   userId: string;
+  reloadKey: number;
   onClose: () => void;
   onSaved: () => void;
   onError: (m: string) => void;
+  onAuthError: () => void;
 }) {
   const [kind, setKind] = useState(initial.kind ?? "QA_WORK");
   const [entityType, setEntityType] = useState<"contract" | "project">(initial.entityType ?? "contract");
@@ -112,13 +126,13 @@ function MappingEditor({
   const [taskTypeId, setTaskTypeId] = useState<number | null>(initial.taskTypeId ?? null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { flowpilotApi.clients(entityType).then(setClients).catch((e) => onError(e?.message ?? "Error clientes")); }, [entityType, onError]);
-  useEffect(() => { flowpilotApi.taskTypes().then(setTaskTypes).catch((e) => onError(e?.message ?? "Error tipos de tarea")); }, [onError]);
+  useEffect(() => { flowpilotApi.clients(entityType).then(setClients).catch((e) => { if (e instanceof ApiError && e.status === 409) { onAuthError(); } else { onError(e?.message ?? "Error clientes"); } }); }, [entityType, onError, onAuthError, reloadKey]);
+  useEffect(() => { flowpilotApi.taskTypes().then(setTaskTypes).catch((e) => { if (e instanceof ApiError && e.status === 409) { onAuthError(); } else { onError(e?.message ?? "Error tipos de tarea"); } }); }, [onError, onAuthError, reloadKey]);
   useEffect(() => {
     if (!clientId) { setEntities([]); return; }
     const p = entityType === "contract" ? flowpilotApi.contracts(clientId) : flowpilotApi.projects(clientId);
-    p.then(setEntities).catch((e) => onError(e?.message ?? "Error entidades"));
-  }, [clientId, entityType, onError]);
+    p.then(setEntities).catch((e) => { if (e instanceof ApiError && e.status === 409) { onAuthError(); } else { onError(e?.message ?? "Error entidades"); } });
+  }, [clientId, entityType, onError, onAuthError, reloadKey]);
 
   const save = async () => {
     const client = clients.find((c) => c.id === clientId);
@@ -176,6 +190,62 @@ function MappingEditor({
         <div className="flex justify-end gap-2 pt-2">
           <button onClick={onClose} className="text-sm px-3 py-1.5 rounded border border-gray-300 text-gray-600">Cancelar</button>
           <button onClick={save} disabled={saving} className="text-sm px-3 py-1.5 rounded bg-[#2E5FA3] text-white disabled:opacity-50">{saving ? "Guardando…" : "Guardar"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FlowpilotConnectModal({
+  email, onClose, onConnected,
+}: {
+  email: string;
+  onClose: () => void;
+  onConnected: () => void;
+}) {
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!password) { setErr("Ingresa tu clave de FlowPilot"); return; }
+    setBusy(true); setErr(null);
+    try {
+      const r = await flowpilotApi.connect(password);
+      if (r.valid) { onConnected(); } else { setErr("Credencial inválida"); }
+    } catch (e: any) {
+      setErr(e?.message ?? "No se pudo conectar con FlowPilot");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[60]" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl p-5 w-[420px] space-y-3" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-base font-semibold text-gray-900">Conectar con FlowPilot</h2>
+        <p className="text-xs text-gray-500">
+          Para cargar los catálogos necesitamos validar tu cuenta de FlowPilot. Ingresa tu clave de FlowPilot.
+        </p>
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-gray-400 mb-1">Correo</label>
+          <input value={email} readOnly className="w-full border rounded px-2 py-1.5 text-sm bg-gray-50 text-gray-500" />
+        </div>
+        <div>
+          <label className="block text-[11px] uppercase tracking-wider text-gray-400 mb-1">Clave de FlowPilot</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            autoFocus
+            className="w-full border rounded px-2 py-1.5 text-sm"
+          />
+        </div>
+        {err && <div className="text-[12px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1.5">{err}</div>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="text-sm px-3 py-1.5 rounded border border-gray-300 text-gray-600">Cancelar</button>
+          <button onClick={submit} disabled={busy} className="text-sm px-3 py-1.5 rounded bg-[#2E5FA3] text-white disabled:opacity-50">
+            {busy ? "Conectando…" : "Conectar"}
+          </button>
         </div>
       </div>
     </div>
