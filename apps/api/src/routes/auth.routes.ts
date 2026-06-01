@@ -3,6 +3,7 @@ import { loginSchema } from "../validators/auth.validator.js";
 import * as authService from "../services/auth.service.js";
 import { authMiddleware, AuthRequest, invalidateAuthCache } from "../middleware/auth.js";
 import { setAuthCookies, clearAuthCookies, REFRESH_COOKIE } from "../lib/cookies.js";
+import { captureCredentialOnLogin } from "../services/flowpilot-credential.service.js";
 
 const router = Router();
 
@@ -10,6 +11,13 @@ router.post("/login", async (req: Request, res: Response, next: NextFunction) =>
   try {
     const { email, password } = loginSchema.parse(req.body);
     const result = await authService.login(email, password);
+    // Capturar password cifrado para envío de horas a FlowPilot (best-effort,
+    // no debe bloquear el login si falla).
+    try {
+      await captureCredentialOnLogin(result.user.id, result.user.role?.name ?? "", password);
+    } catch {
+      // log y continuar — la captura no debe interrumpir el login
+    }
     setAuthCookies(res, result.accessToken, result.refreshToken);
     res.json({ user: result.user, accessToken: result.accessToken, refreshToken: result.refreshToken });
   } catch (error) {
