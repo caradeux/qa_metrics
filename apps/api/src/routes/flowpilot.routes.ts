@@ -7,6 +7,7 @@ import { FlowpilotInvalidCredentialError } from "../lib/flowpilot/client.js";
 import { setCredential } from "../services/flowpilot-credential.service.js";
 import { upsertMappingSchema } from "../validators/flowpilot.validator.js";
 import { buildDayPreview } from "../lib/flowpilot/day-entries.js";
+import { workdaysInRange, toUtcDateOnly } from "../lib/workdays.js";
 import crypto from "node:crypto";
 
 const router = Router();
@@ -149,6 +150,47 @@ router.delete("/mappings/:id", async (req: AuthRequest, res) => {
 });
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MS_DAY = 24 * 60 * 60 * 1000;
+
+// Días hábiles recientes con su estado de carga: con datos / enviado.
+// Permite al analista ver qué días tiene pendientes de enviar a FlowPilot.
+router.get("/pending", async (req: AuthRequest, res) => {
+  const days = Math.min(60, Math.max(1, Number(req.query.days) || 14));
+  const today = toUtcDateOnly(new Date());
+  const from = new Date(today.getTime() - (days - 1) * MS_DAY);
+
+  const testers = await prisma.tester.findMany({ where: { userId: req.user!.id }, select: { id: true } });
+  const testerIds = testers.map((t) => t.id);
+
+  const [workdays, records, activities, logs] = await Promise.all([
+    workdaysInRange(from, today),
+    prisma.dailyRecord.findMany({
+      where: { testerId: { in: testerIds }, date: { gte: from, lte: today } },
+      select: { date: true },
+    }),
+    prisma.activity.findMany({
+      where: { testerId: { in: testerIds }, startAt: { gte: from, lt: new Date(today.getTime() + MS_DAY) } },
+      select: { startAt: true },
+    }),
+    prisma.flowpilotSyncLog.findMany({
+      where: { userId: req.user!.id, status: "SENT", date: { gte: from, lte: today } },
+      select: { date: true },
+    }),
+  ]);
+
+  const iso = (d: Date) => toUtcDateOnly(d).toISOString().slice(0, 10);
+  const dataDates = new Set<string>();
+  for (const r of records) dataDates.add(iso(r.date));
+  for (const a of activities) dataDates.add(iso(a.startAt));
+  const sentDates = new Set(logs.map((l) => iso(l.date)));
+
+  const out = workdays.map((d) => {
+    const k = iso(d);
+    return { date: k, hasData: dataDates.has(k), sent: sentDates.has(k) };
+  });
+  res.json({ days: out });
+});
+
 
 // Preview del día del usuario actual (no envía nada).
 router.get("/preview", async (req: AuthRequest, res) => {

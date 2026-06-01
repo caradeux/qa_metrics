@@ -263,6 +263,8 @@ export const flowpilotApi = {
     apiClient<FlowpilotDayPreview>(`/api/flowpilot/preview?date=${date}`),
   sync: (date: string, entries: { kind: string; description: string; hours: number }[]) =>
     apiClient<{ ok: boolean; entryIds?: number[] }>(`/api/flowpilot/sync`, { method: "POST", body: JSON.stringify({ date, entries }) }),
+  pending: (days = 14) =>
+    apiClient<{ days: { date: string; hasData: boolean; sent: boolean }[] }>(`/api/flowpilot/pending?days=${days}`),
 };
 
 export interface FlowpilotPreviewEntry {

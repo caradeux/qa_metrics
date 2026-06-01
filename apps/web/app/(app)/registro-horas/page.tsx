@@ -7,6 +7,10 @@ function todayIso() { return new Date().toISOString().slice(0, 10); }
 function shiftIso(iso: string, d: number) {
   const x = new Date(`${iso}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10);
 }
+function fmtShort(iso: string) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  return d.toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short", timeZone: "America/Santiago" });
+}
 
 export default function RegistroHorasPage() {
   const [date, setDate] = useState(todayIso());
@@ -18,6 +22,7 @@ export default function RegistroHorasPage() {
   const [sending, setSending] = useState(false);
   const [confirmResend, setConfirmResend] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ date: string; hasData: boolean; sent: boolean }[]>([]);
 
   const load = useCallback((d: string) => {
     setLoading(true); setError(null);
@@ -30,7 +35,12 @@ export default function RegistroHorasPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const loadPending = useCallback(() => {
+    flowpilotApi.pending(14).then((r) => setPending(r.days)).catch(() => {});
+  }, []);
+
   useEffect(() => { load(date); }, [date, load]);
+  useEffect(() => { loadPending(); }, [loadPending]);
 
   const total = rows.reduce((s, r) => s + (Number(r.hours) || 0), 0);
   const allMapped = rows.every((r) => r.mapped);
@@ -50,6 +60,7 @@ export default function RegistroHorasPage() {
       setToast("Día enviado a FlowPilot");
       setTimeout(() => setToast(null), 2500);
       load(date);
+      loadPending();
     } catch (e: any) {
       if (e instanceof ApiError && e.status === 409) setNeedsConnect(true);
       else setError(e?.message ?? "Error al enviar");
@@ -72,6 +83,39 @@ export default function RegistroHorasPage() {
       </div>
 
       {error && <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-2.5 text-[12px] text-red-800">{error}</div>}
+      {(() => {
+        const pendientes = pending.filter((d) => d.hasData && !d.sent);
+        if (pendientes.length === 0) return (
+          <div className="mb-4 inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] text-emerald-800">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Estás al día — sin días pendientes de cargar (últimas 2 semanas)
+          </div>
+        );
+        return (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/70 px-4 py-3">
+            <div className="flex items-center gap-2 text-[12px] font-semibold text-amber-800 mb-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+              {pendientes.length} día{pendientes.length !== 1 ? "s" : ""} con trabajo registrado sin enviar a FlowPilot
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {pendientes.map((d) => (
+                <button
+                  key={d.date}
+                  onClick={() => setDate(d.date)}
+                  className={`text-[11px] font-medium px-2.5 py-1 rounded-md border transition ${
+                    d.date === date
+                      ? "bg-amber-500 text-white border-amber-500"
+                      : "bg-white text-amber-800 border-amber-300 hover:border-amber-500"
+                  }`}
+                >
+                  {fmtShort(d.date)}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {isSent && (
         <div className="mb-4 inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12px] text-emerald-800">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
