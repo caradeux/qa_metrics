@@ -7,6 +7,11 @@ function todayIso() { return new Date().toISOString().slice(0, 10); }
 function shiftIso(iso: string, d: number) {
   const x = new Date(`${iso}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10);
 }
+function formatLongDate(iso: string) {
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString("es-CL", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "America/Santiago",
+  });
+}
 function mondayOf(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   const dow = d.getUTCDay(); // 0=Dom..6=Sáb
@@ -107,6 +112,18 @@ export default function RegistroHorasPage() {
 
       {loading ? (
         <div className="space-y-1.5">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-12 bg-gray-100 rounded animate-pulse" />)}</div>
+      ) : data?.isNonBusinessDay ? (
+        <div className="rounded-md border border-dashed border-amber-200 bg-amber-50/50 px-6 py-16 text-center">
+          <div className="w-12 h-12 mx-auto rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="mt-4 text-base font-semibold text-amber-900">Día no laborable</h2>
+          <p className="mt-1 text-xs text-amber-800/80 max-w-sm mx-auto first-letter:uppercase">
+            {formatLongDate(date)} es feriado o fin de semana. No se espera carga del equipo, por lo que no se muestran registros.
+          </p>
+        </div>
       ) : (
         <>
           <div className="space-y-1.5">

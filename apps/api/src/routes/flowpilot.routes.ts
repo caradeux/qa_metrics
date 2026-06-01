@@ -7,7 +7,7 @@ import { FlowpilotInvalidCredentialError } from "../lib/flowpilot/client.js";
 import { setCredential } from "../services/flowpilot-credential.service.js";
 import { upsertMappingSchema } from "../validators/flowpilot.validator.js";
 import { buildDayPreview } from "../lib/flowpilot/day-entries.js";
-import { workdaysInRange, toUtcDateOnly } from "../lib/workdays.js";
+import { workdaysInRange, toUtcDateOnly, isWorkday } from "../lib/workdays.js";
 import crypto from "node:crypto";
 
 const router = Router();
@@ -207,9 +207,16 @@ router.get("/pending", async (req: AuthRequest, res) => {
 router.get("/preview", async (req: AuthRequest, res) => {
   const date = req.query.date as string | undefined;
   if (!date || !DATE_RE.test(date)) { res.status(400).json({ error: "date=YYYY-MM-DD requerido" }); return; }
-  const preview = await buildDayPreview(req.user!.id, date);
-  const log = await prisma.flowpilotSyncLog.findUnique({ where: { userId_date: { userId: req.user!.id, date: new Date(`${date}T00:00:00`) } } });
-  res.json({ ...preview, sync: log ? { status: log.status, sentAt: log.sentAt, hoursTotal: log.hoursTotal } : null });
+  const [preview, workday, log] = await Promise.all([
+    buildDayPreview(req.user!.id, date),
+    isWorkday(date),
+    prisma.flowpilotSyncLog.findUnique({ where: { userId_date: { userId: req.user!.id, date: new Date(`${date}T00:00:00`) } } }),
+  ]);
+  res.json({
+    ...preview,
+    isNonBusinessDay: !workday,
+    sync: log ? { status: log.status, sentAt: log.sentAt, hoursTotal: log.hoursTotal } : null,
+  });
 });
 
 // Envía el día a FlowPilot. Body: { date, entries: [{kind, description, hours}] }.

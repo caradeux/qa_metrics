@@ -278,6 +278,7 @@ export interface FlowpilotPreviewEntry {
 export interface FlowpilotDayPreview {
   date: string; capacityHours: number; totalHours: number;
   allMapped: boolean; withinCap: boolean;
+  isNonBusinessDay: boolean;
   entries: FlowpilotPreviewEntry[];
   sync: { status: string; sentAt: string; hoursTotal: number } | null;
 }
