@@ -6,6 +6,8 @@ import { getSession, flowpilotClient, FlowpilotNoCredentialError } from "../serv
 import { FlowpilotInvalidCredentialError } from "../lib/flowpilot/client.js";
 import { setCredential } from "../services/flowpilot-credential.service.js";
 import { upsertMappingSchema } from "../validators/flowpilot.validator.js";
+import { buildDayPreview } from "../lib/flowpilot/day-entries.js";
+import crypto from "node:crypto";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -144,6 +146,94 @@ router.delete("/mappings/:id", async (req: AuthRequest, res) => {
   if (!requireAdmin(req, res)) return;
   await prisma.flowpilotMapping.deleteMany({ where: { id: req.params.id as string } });
   res.status(204).send();
+});
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Preview del día del usuario actual (no envía nada).
+router.get("/preview", async (req: AuthRequest, res) => {
+  const date = req.query.date as string | undefined;
+  if (!date || !DATE_RE.test(date)) { res.status(400).json({ error: "date=YYYY-MM-DD requerido" }); return; }
+  const preview = await buildDayPreview(req.user!.id, date);
+  const log = await prisma.flowpilotSyncLog.findUnique({ where: { userId_date: { userId: req.user!.id, date: new Date(`${date}T00:00:00`) } } });
+  res.json({ ...preview, sync: log ? { status: log.status, sentAt: log.sentAt, hoursTotal: log.hoursTotal } : null });
+});
+
+// Envía el día a FlowPilot. Body: { date, entries: [{kind, description, hours}] }.
+// Idempotente: si ya se envió y el contenido cambió, borra las entradas previas y recrea.
+router.post("/sync", async (req: AuthRequest, res) => {
+  const date = (req.body ?? {}).date;
+  const rawEntries = (req.body ?? {}).entries;
+  if (!date || !DATE_RE.test(date) || !Array.isArray(rawEntries)) {
+    res.status(400).json({ error: "date y entries requeridos" }); return;
+  }
+  // Re-resolver destinos desde la homologación (no confiar en el cliente para el destino).
+  const mappings = await prisma.flowpilotMapping.findMany({ where: { userId: req.user!.id } });
+  const mapByKind = new Map(mappings.map((m) => [m.kind, m]));
+
+  const entries = rawEntries.map((e: any) => ({
+    kind: String(e.kind),
+    description: String(e.description ?? "").trim(),
+    hours: Number(e.hours),
+    m: mapByKind.get(String(e.kind)),
+  }));
+  if (entries.some((e) => !e.description)) { res.status(400).json({ error: "Toda entrada requiere descripción" }); return; }
+  if (entries.some((e) => !(e.hours > 0))) { res.status(400).json({ error: "Horas inválidas" }); return; }
+  if (entries.some((e) => !e.m)) { res.status(400).json({ error: "Hay entradas sin homologar; pide a un admin homologar su tipo." }); return; }
+  const total = entries.reduce((s, e) => s + e.hours, 0);
+  if (total > 8 + 1e-9) { res.status(400).json({ error: `El total (${total}h) supera las 8h diarias.` }); return; }
+
+  const payloadHash = crypto.createHash("sha256")
+    .update(JSON.stringify(entries.map((e) => ({ k: e.kind, d: e.description, h: e.hours }))))
+    .digest("hex");
+
+  const dateObj = new Date(`${date}T00:00:00`);
+  const prev = await prisma.flowpilotSyncLog.findUnique({ where: { userId_date: { userId: req.user!.id, date: dateObj } } });
+  if (prev && prev.status === "SENT" && prev.payloadHash === payloadHash) {
+    res.json({ ok: true, unchanged: true, entryIds: prev.entryIds }); return;
+  }
+
+  let session;
+  try { session = await getSession(req.user!.id); }
+  catch (e) {
+    if (e instanceof FlowpilotNoCredentialError || e instanceof FlowpilotInvalidCredentialError) {
+      res.status(409).json({ error: e.message, code: "FLOWPILOT_AUTH" }); return;
+    }
+    res.status(502).json({ error: "No se pudo contactar a FlowPilot" }); return;
+  }
+
+  // Si había envío previo, borrar esas entradas antes de recrear (FlowPilot no deduplica).
+  if (prev && prev.entryIds.length) {
+    for (const id of prev.entryIds) { try { await flowpilotClient.deleteEntry(session, id); } catch { /* continuar */ } }
+  }
+
+  const createdIds: number[] = [];
+  try {
+    for (const e of entries) {
+      const m = e.m!; // garantizado por la validación previa (entries.some(!e.m) → 400)
+      const created = await flowpilotClient.createEntry(session, {
+        entityType: m.entityType as "contract" | "project",
+        clientId: m.clientId, taskTypeId: m.taskTypeId,
+        date, hoursWorked: e.hours, description: e.description,
+        contractId: m.contractId, projectId: m.projectId,
+      });
+      createdIds.push(created.id);
+    }
+  } catch (err) {
+    await prisma.flowpilotSyncLog.upsert({
+      where: { userId_date: { userId: req.user!.id, date: dateObj } },
+      create: { userId: req.user!.id, date: dateObj, entryIds: createdIds, hoursTotal: total, status: "PARTIAL", payloadHash },
+      update: { entryIds: createdIds, hoursTotal: total, status: "PARTIAL", payloadHash },
+    });
+    res.status(502).json({ error: "Falló el envío parcial a FlowPilot", created: createdIds.length }); return;
+  }
+
+  await prisma.flowpilotSyncLog.upsert({
+    where: { userId_date: { userId: req.user!.id, date: dateObj } },
+    create: { userId: req.user!.id, date: dateObj, entryIds: createdIds, hoursTotal: total, status: "SENT", payloadHash },
+    update: { entryIds: createdIds, hoursTotal: total, status: "SENT", payloadHash },
+  });
+  res.json({ ok: true, entryIds: createdIds, hoursTotal: total });
 });
 
 export default router;
