@@ -157,6 +157,7 @@ export function Sidebar() {
       operacion.push({ label: "Asignaciones", href: "/assignments", icon: iconUsers });
     }
     operacion.push({ label: "Registro Diario", href: "/equipo", icon: iconClipboard });
+    operacion.push({ label: "Registro de Horas", href: "/registro-horas", icon: iconClock });
     if (operacion.length > 0) {
       sections.push({ key: "operacion", title: "Operación", items: operacion });
     }
