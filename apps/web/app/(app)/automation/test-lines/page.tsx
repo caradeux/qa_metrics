@@ -80,17 +80,25 @@ export default function TestLinesPage() {
           <h1 className="text-lg font-semibold text-gray-900 tracking-tight">Líneas de Prueba</h1>
           <p className="text-xs text-gray-400 mt-0.5">{lines.length} en el proyecto seleccionado</p>
         </div>
-        {can("test-lines", "create") && projectId && (
+        <div className="flex items-center gap-2">
           <Link
-            href={`/automation/test-lines/new?projectId=${projectId}`}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] transition-all duration-200 uppercase tracking-wider shadow-sm hover:shadow-md"
+            href="/projects/new?modality=AUTOMATION"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-[#2E5FA3] border border-[#2E5FA3]/30 rounded-md hover:bg-[#2E5FA3]/5 transition uppercase tracking-wider"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Nueva Línea
+            ＋ Proyecto de automatización
           </Link>
-        )}
+          {can("test-lines", "create") && projectId && (
+            <Link
+              href={`/automation/test-lines/new?projectId=${projectId}`}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] transition-all duration-200 uppercase tracking-wider shadow-sm hover:shadow-md"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Nueva Línea
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="mb-5 flex flex-wrap items-center gap-3">
@@ -126,7 +134,15 @@ export default function TestLinesPage() {
         </div>
       </div>
 
-      {!clientId ? (
+      {clients.length === 0 ? (
+        <div className="text-center py-20">
+          <p className="text-sm text-gray-400 mb-3">No hay proyectos de automatización todavía.</p>
+          <Link href="/projects/new?modality=AUTOMATION" className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] transition uppercase tracking-wider">
+            Crear proyecto de automatización
+          </Link>
+          <p className="text-xs text-gray-400 mt-3">¿El cliente aún no existe? <Link href="/clients/new" className="text-[#2E5FA3] hover:underline">Créalo primero</Link>.</p>
+        </div>
+      ) : !clientId ? (
         <div className="text-center py-20 text-sm text-gray-400">Selecciona un cliente para empezar.</div>
       ) : !projectId ? (
         <div className="text-center py-20 text-sm text-gray-400">Selecciona un proyecto del cliente para ver sus líneas de prueba.</div>

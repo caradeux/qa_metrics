@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   apiClient,
   automationTestLinesApi,
@@ -107,7 +108,14 @@ export default function AutomationAssignmentsPage() {
         </div>
       </div>
 
-      {!projectId ? (
+      {clients.length === 0 ? (
+        <div className="text-center py-20">
+          <p className="text-sm text-gray-400 mb-3">No hay proyectos de automatización todavía.</p>
+          <Link href="/projects/new?modality=AUTOMATION" className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-white bg-[#1F3864] rounded-md hover:bg-[#2E5FA3] transition uppercase tracking-wider">
+            Crear proyecto de automatización
+          </Link>
+        </div>
+      ) : !projectId ? (
         <div className="text-center py-20 text-sm text-gray-400">Selecciona un cliente y proyecto.</div>
       ) : loading ? (
         <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-gray-100 rounded-md animate-pulse" />)}</div>
