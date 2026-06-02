@@ -446,6 +446,32 @@ export const automationTestersApi = {
     apiClient<ProjectTester[]>(`/api/testers?projectId=${projectId}`),
 };
 
+// Gestión del equipo de automatización (analistas) de un proyecto.
+export interface AnalystUserOption {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface ProjectAnalyst {
+  id: string;
+  name: string;
+  allocation: number;
+  userId: string | null;
+  user: { id: string; name: string; email: string } | null;
+  _count: { records: number; automationAssignments: number };
+}
+
+export const automationTeamApi = {
+  analysts: (projectId: string) =>
+    apiClient<ProjectAnalyst[]>(`/api/testers?projectId=${projectId}`),
+  analystUsers: () =>
+    apiClient<AnalystUserOption[]>(`/api/users?role=QA_ANALYST`),
+  add: (data: { name: string; projectId: string; userId?: string | null; allocation?: number }) =>
+    apiClient<ProjectAnalyst>(`/api/testers`, { method: "POST", body: JSON.stringify(data) }),
+  remove: (id: string) => apiClient<void>(`/api/testers/${id}`, { method: "DELETE" }),
+};
+
 // Define el responsable ACTIVE de una línea, preservando el historial:
 // - desactiva (status DONE) cualquier otra asignación ACTIVE de la línea (no borra registros),
 // - reactiva o crea la asignación del nuevo responsable.

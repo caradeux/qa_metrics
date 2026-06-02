@@ -69,7 +69,10 @@ export default function NewTestLinePage() {
             ))}
           </select>
           {testers.length === 0 && (
-            <p className="mt-1 text-xs text-amber-600">Este proyecto no tiene analistas. Agrégalos en la gestión del proyecto.</p>
+            <p className="mt-1 text-xs text-amber-600">
+              Este proyecto no tiene analistas.{" "}
+              <a href="/automation/analistas" className="underline hover:text-amber-800">Agrégalos en Analistas Auto.</a>
+            </p>
           )}
         </div>
         <div>

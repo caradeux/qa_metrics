@@ -98,7 +98,8 @@ router.get("/", requirePermission("testers", "read") as any, async (req: AuthReq
         ...(projectId ? { projectId } : { project: projectsWhere }),
       },
       include: {
-        _count: { select: { records: true } },
+        _count: { select: { records: true, automationAssignments: true } },
+        user: { select: { id: true, name: true, email: true } },
         project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
       },
       orderBy: [{ project: { name: "asc" } }, { name: "asc" }],
