@@ -45,6 +45,7 @@ model User {
   role         Role     @relation(fields: [roleId], references: [id])
   active       Boolean  @default(true)
   allowOverallocation Boolean @default(false)
+  isAutomation Boolean @default(false)   // marca: analista habilitado para QA Automatización
   refreshToken String?
   createdAt    DateTime @default(now())
   clients           Client[]

@@ -432,8 +432,8 @@ async function main() {
   const passAnalystAuto = await bcrypt.hash("Analyst2024!", 10);
   const autoEngineerUser = await prisma.user.upsert({
     where: { email: "auto.engineer@qametrics.com" },
-    update: { roleId: qaAnalystRole.id, active: true, name: "Auto Engineer" },
-    create: { email: "auto.engineer@qametrics.com", password: passAnalystAuto, name: "Auto Engineer", roleId: qaAnalystRole.id },
+    update: { roleId: qaAnalystRole.id, active: true, name: "Auto Engineer", isAutomation: true },
+    create: { email: "auto.engineer@qametrics.com", password: passAnalystAuto, name: "Auto Engineer", roleId: qaAnalystRole.id, isAutomation: true },
   });
   await prisma.tester.update({ where: { id: autoTester1.id }, data: { userId: autoEngineerUser.id } });
 
