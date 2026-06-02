@@ -111,6 +111,9 @@ export function Sidebar() {
       { label: "Asignaciones", href: "/assignments", icon: iconUsers },
       { label: "Proyectos", href: "/projects", icon: iconFolder },
     );
+    if (can("automation-assignments", "read")) {
+      work.push({ label: "Registro Automatización", href: "/automation/registro-semanal", icon: iconChartBar });
+    }
     sections.push({ key: "work", items: work });
 
     if (can("reports", "read") || can("reports-occupation", "read") || can("reports-stories", "read")) {
@@ -169,6 +172,14 @@ export function Sidebar() {
       gestion.push({ label: "Usuarios", href: "/users", icon: iconUserSingle });
     }
     sections.push({ key: "gestion", title: "Gestión", items: gestion });
+
+    // QA Automation
+    const automationItems: NavItem[] = [];
+    if (can("test-lines", "read")) automationItems.push({ label: "Líneas de Prueba", href: "/automation/test-lines", icon: iconClipboard });
+    if (can("automation-assignments", "read")) automationItems.push({ label: "Registro Automatización", href: "/automation/registro-semanal", icon: iconChartBar });
+    if (automationItems.length > 0) {
+      sections.push({ key: "automation", title: "QA Automation", items: automationItems });
+    }
 
     if (can("reports", "read") || can("reports-occupation", "read") || can("reports-stories", "read")) {
       const reportItems: NavItem[] = [];
