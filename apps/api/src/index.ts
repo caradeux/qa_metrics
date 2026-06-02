@@ -29,6 +29,7 @@ import activitiesRoutes from "./routes/activities.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import flowpilotRoutes from "./routes/flowpilot.routes.js";
 import testLinesRoutes from "./routes/test-lines.routes.js";
+import automationAssignmentsRoutes from "./routes/automation-assignments.routes.js";
 
 const app = express();
 
@@ -88,6 +89,7 @@ app.use("/api/activities", activitiesRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/flowpilot", flowpilotRoutes);
 app.use("/api/test-lines", testLinesRoutes);
+app.use("/api/automation-assignments", automationAssignmentsRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
