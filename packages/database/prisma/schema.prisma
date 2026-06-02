@@ -83,6 +83,7 @@ model Project {
   createdAt  DateTime    @default(now())
   testers    Tester[]
   stories    UserStory[]
+  testLines  TestLine[]
 
   @@index([clientId])
   @@index([projectManagerId])
@@ -99,6 +100,7 @@ model Tester {
   records     DailyRecord[]
   assignments TesterAssignment[]
   activities  Activity[]
+  automationAssignments AutomationAssignment[]
 
   @@index([projectId])
 }
@@ -216,6 +218,7 @@ enum DateChangeEntityType {
 enum Modality {
   AZURE_DEVOPS
   MANUAL
+  AUTOMATION
 }
 
 enum Complexity {
@@ -255,6 +258,13 @@ enum AssignmentStatus {
   ON_HOLD
 }
 
+enum AutomationStatus {
+  ACTIVE        // building / extending the suite
+  MAINTENANCE   // only refactor / fixes
+  PAUSED
+  DONE
+}
+
 model ActivityCategory {
   id         String                    @id @default(cuid())
   name       String                    @unique
@@ -279,6 +289,7 @@ model Activity {
   testerId     String
   categoryId   String
   assignmentId String?
+  testLineId   String?
   startAt      DateTime
   endAt        DateTime
   notes        String?
@@ -289,11 +300,13 @@ model Activity {
   tester     Tester            @relation(fields: [testerId], references: [id], onDelete: Cascade)
   category   ActivityCategory  @relation(fields: [categoryId], references: [id])
   assignment TesterAssignment? @relation(fields: [assignmentId], references: [id])
+  testLine   TestLine?         @relation(fields: [testLineId], references: [id])
   createdBy  User              @relation(fields: [createdById], references: [id])
 
   @@index([testerId, startAt])
   @@index([testerId, endAt])
   @@index([assignmentId])
+  @@index([testLineId])
 }
 
 model FlowpilotCredential {
@@ -358,4 +371,63 @@ model FlowpilotSetting {
   id        String   @id
   baseUrl   String
   updatedAt DateTime @updatedAt
+}
+
+// ── QA Automation track ──────────────────────────────────────────────
+// Sibling hierarchy to UserStory→TestCycle→TesterAssignment→DailyRecord.
+// The unit of work is a Test Line (suite), not a User Story.
+
+model TestLine {
+  id          String                 @id @default(cuid())
+  externalId  String?
+  name        String                 // e.g. "Regresión Checkout", "Smoke API Pagos"
+  complexity  Complexity             @default(MEDIUM)
+  projectId   String
+  project     Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignments AutomationAssignment[]
+  activities  Activity[]
+
+  @@index([projectId])
+}
+
+model AutomationAssignment {
+  id         String             @id @default(cuid())
+  testerId   String
+  tester     Tester             @relation(fields: [testerId], references: [id], onDelete: Cascade)
+  testLineId String
+  testLine   TestLine           @relation(fields: [testLineId], references: [id], onDelete: Cascade)
+  startDate  DateTime
+  endDate    DateTime?
+  status     AutomationStatus   @default(ACTIVE)
+  notes      String?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  records    AutomationRecord[]
+
+  @@unique([testerId, testLineId])
+  @@index([testerId])
+  @@index([testLineId])
+}
+
+model AutomationRecord {
+  id                String               @id @default(cuid())
+  testerId          String
+  assignmentId      String
+  assignment        AutomationAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  date              DateTime             @db.Date
+  scriptsCreated    Int                  @default(0)
+  scriptsRefactored Int                  @default(0)
+  scriptsFixed      Int                  @default(0)
+  execTotal         Int                  @default(0)
+  execPassed        Int                  @default(0)
+  execFailed        Int                  @default(0)
+  notes             String?
+  source            String               @default("MANUAL")
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@unique([assignmentId, date])
+  @@index([assignmentId])
+  @@index([testerId])
+  @@index([date])
 }
