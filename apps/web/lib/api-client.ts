@@ -411,6 +411,35 @@ export const automationRecordsApi = {
     }),
 };
 
+export interface AutomationWeekMetric {
+  weekStart: string;
+  scriptsCreated: number;
+  scriptsRefactored: number;
+  scriptsFixed: number;
+  execTotal: number;
+  execPassed: number;
+  execFailed: number;
+  passRatePct: number;
+}
+
+export interface AutomationMetrics {
+  weeks: AutomationWeekMetric[];
+  totals: {
+    scriptsCreated: number;
+    scriptsRefactored: number;
+    scriptsFixed: number;
+    execTotal: number;
+    execPassed: number;
+    execFailed: number;
+  };
+  passRatePct: number;
+}
+
+export const automationMetricsApi = {
+  get: (projectId: string, from: string, to: string) =>
+    apiClient<AutomationMetrics>(`/api/automation-metrics?projectId=${projectId}&from=${from}&to=${to}`),
+};
+
 // Lista los testers (analistas QA automatizadores) de un proyecto, para el selector de responsable.
 export const automationTestersApi = {
   byProject: (projectId: string) =>

@@ -175,6 +175,7 @@ export function Sidebar() {
 
     // QA Automation
     const automationItems: NavItem[] = [];
+    if (can("test-lines", "read")) automationItems.push({ label: "Dashboard Auto.", href: "/automation/dashboard", icon: iconDashboard });
     if (can("test-lines", "read")) automationItems.push({ label: "Líneas de Prueba", href: "/automation/test-lines", icon: iconClipboard });
     if (can("automation-assignments", "read")) automationItems.push({ label: "Asignaciones Auto.", href: "/automation/asignaciones", icon: iconUsers });
     if (can("automation-assignments", "read")) automationItems.push({ label: "Registro Automatización", href: "/automation/registro-semanal", icon: iconChartBar });
