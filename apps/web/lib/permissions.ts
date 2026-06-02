@@ -19,6 +19,10 @@ export const RESOURCES = [
   "holidays",
   "activities",
   "activity-categories",
+  "flowpilot-control",
+  "flowpilot-mappings",
+  "flowpilot-config",
+  "flowpilot-hours",
 ] as const;
 
 export const ACTIONS = ["create", "read", "update", "delete"] as const;
@@ -47,6 +51,10 @@ export const RESOURCE_LABELS: Record<Resource, string> = {
   holidays: "Feriados",
   activities: "Actividades",
   "activity-categories": "Categorías de actividad",
+  "flowpilot-control": "Control FlowPilot",
+  "flowpilot-mappings": "Homologación FlowPilot",
+  "flowpilot-config": "Configuración FlowPilot (URL)",
+  "flowpilot-hours": "Registro de Horas",
 };
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -55,5 +63,14 @@ export const ACTION_LABELS: Record<Action, string> = {
   update: "Editar",
   delete: "Eliminar",
 };
+
+// Agrupación de recursos por dominio, para que la matriz de permisos sea escaneable.
+// Cualquier recurso no listado aquí se agrupa automáticamente en "Otros".
+export const RESOURCE_GROUPS: { title: string; resources: Resource[] }[] = [
+  { title: "Gestión", resources: ["users", "roles", "clients", "projects", "stories", "story-status", "cycles", "testers", "assignments", "phases"] },
+  { title: "Registros y actividades", resources: ["records", "activities", "activity-categories", "holidays"] },
+  { title: "Vistas y reportes", resources: ["dashboard", "gantt", "reports", "reports-occupation", "reports-stories", "audit"] },
+  { title: "FlowPilot", resources: ["flowpilot-control", "flowpilot-mappings", "flowpilot-config", "flowpilot-hours"] },
+];
 
 export const permKey = (r: string, a: string) => `${r}:${a}`;

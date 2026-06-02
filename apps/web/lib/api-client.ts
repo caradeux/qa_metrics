@@ -269,6 +269,8 @@ export const flowpilotApi = {
     else qs.set("days", String(params.days ?? 14));
     return apiClient<{ days: { date: string; hasData: boolean; sent: boolean }[]; from: string; to: string; today: string }>(`/api/flowpilot/pending?${qs.toString()}`);
   },
+  adminMonth: (month: string) =>
+    apiClient<FlowpilotMonthData>(`/api/flowpilot/admin/month?month=${month}`),
   getConfig: () =>
     apiClient<{ baseUrl: string; envDefault: string; isCustom: boolean }>(`/api/flowpilot/config`),
   setConfig: (baseUrl: string) =>
@@ -285,4 +287,20 @@ export interface FlowpilotDayPreview {
   isNonBusinessDay: boolean;
   entries: FlowpilotPreviewEntry[];
   sync: { status: string; sentAt: string; hoursTotal: number } | null;
+}
+
+// Estado de una celda del heatmap mensual del panel de control admin.
+export type FlowpilotDayStatus = "sent" | "missing" | "partial" | "future" | "off";
+export interface FlowpilotMonthDay { day: number; date: string; isBusinessDay: boolean; isHoliday: boolean; }
+export interface FlowpilotMonthRow {
+  userId: string; userName: string; userEmail: string;
+  statusByDay: Record<number, FlowpilotDayStatus>;
+  missingCount: number;
+}
+export interface FlowpilotMonthData {
+  month: string;          // "YYYY-MM"
+  today: string;          // ISO YYYY-MM-DD
+  days: FlowpilotMonthDay[];
+  rows: FlowpilotMonthRow[];
+  summary: { analysts: number; onTrack: number; totalMissing: number; businessDaysToDate: number };
 }

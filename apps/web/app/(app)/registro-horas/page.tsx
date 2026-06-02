@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { flowpilotApi, ApiError, type FlowpilotDayPreview, type FlowpilotPreviewEntry } from "@/lib/api-client";
+import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 function shiftIso(iso: string, d: number) {
@@ -18,6 +20,8 @@ function daysInMonth(monthKey: string): number {
 }
 
 export default function RegistroHorasPage() {
+  const { user } = useAuth();
+  const { can } = usePermissions();
   const [date, setDate] = useState(todayIso());
   const [data, setData] = useState<FlowpilotDayPreview | null>(null);
   const [rows, setRows] = useState<FlowpilotPreviewEntry[]>([]);
@@ -78,6 +82,10 @@ export default function RegistroHorasPage() {
       else setError(e?.message ?? "Error al enviar");
     } finally { setSending(false); }
   };
+
+  if (user && !can("flowpilot-hours", "read")) {
+    return <div className="max-w-md mx-auto mt-24 text-center text-sm text-gray-500">No tienes permiso para el registro de horas.</div>;
+  }
 
   return (
     <div>

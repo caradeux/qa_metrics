@@ -98,6 +98,7 @@ async function main() {
     "reports", "reports-occupation", "reports-stories",
     "audit",
     "holidays",
+    "flowpilot-control", "flowpilot-mappings", "flowpilot-config", "flowpilot-hours",
   ];
   const actions = ["create", "read", "update", "delete"];
   const permissions: Record<string, { id: string }> = {};
@@ -129,6 +130,14 @@ async function main() {
   for (const action of actions) {
     await linkRolePermission(qaLeadRole.id, permissions[`holidays:${action}`].id);
   }
+  // FlowPilot: QA_LEAD monitorea (control), homologa, ve la URL y registra sus horas.
+  // No cambia la URL (config:update queda solo en ADMIN).
+  await linkRolePermission(qaLeadRole.id, permissions["flowpilot-control:read"].id);
+  await linkRolePermission(qaLeadRole.id, permissions["flowpilot-config:read"].id);
+  for (const action of ["read", "update"] as const) {
+    await linkRolePermission(qaLeadRole.id, permissions[`flowpilot-mappings:${action}`].id);
+    await linkRolePermission(qaLeadRole.id, permissions[`flowpilot-hours:${action}`].id);
+  }
 
   // QA_ANALYST
   const analystReadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "dashboard", "gantt", "reports", "reports-occupation", "reports-stories", "audit", "holidays"];
@@ -147,6 +156,10 @@ async function main() {
   }
   // Pero las categorías solo las lee (las mutan ADMIN/QA_LEAD)
   await linkRolePermission(qaAnalystRole.id, permissions["activity-categories:read"].id);
+  // FlowPilot: el analista registra y envía SUS propias horas.
+  for (const action of ["read", "update"] as const) {
+    await linkRolePermission(qaAnalystRole.id, permissions[`flowpilot-hours:${action}`].id);
+  }
 
   // CLIENT_PM: read-only
   const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "activity-categories", "dashboard", "gantt", "reports", "reports-occupation", "reports-stories"];

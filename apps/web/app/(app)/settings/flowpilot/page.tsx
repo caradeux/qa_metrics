@@ -3,9 +3,12 @@
 import { useEffect, useState } from "react";
 import { flowpilotApi } from "@/lib/api-client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function FlowpilotSettingsPage() {
   const { user } = useAuth();
+  const { can } = usePermissions();
+  const canUpdate = can("flowpilot-config", "update");
   const [baseUrl, setBaseUrl] = useState("");
   const [envDefault, setEnvDefault] = useState("");
   const [isCustom, setIsCustom] = useState(false);
@@ -21,9 +24,8 @@ export default function FlowpilotSettingsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const isAdmin = user && (user.role?.name === "ADMIN" || user.role?.name === "QA_LEAD");
-  if (user && !isAdmin) {
-    return <div className="max-w-md mx-auto mt-24 text-center text-sm text-gray-500">Acceso restringido a ADMIN/QA_LEAD.</div>;
+  if (user && !can("flowpilot-config", "read")) {
+    return <div className="max-w-md mx-auto mt-24 text-center text-sm text-gray-500">No tienes permiso para ver la configuración de FlowPilot.</div>;
   }
 
   const save = async () => {
@@ -57,8 +59,9 @@ export default function FlowpilotSettingsPage() {
             <input
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
+              disabled={!canUpdate}
               placeholder="https://flowpilot.biz"
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:border-[#4A90D9] outline-none"
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:border-[#4A90D9] outline-none disabled:bg-gray-50 disabled:text-gray-500"
             />
             <p className="mt-1.5 text-[11px] text-gray-400">
               Ej. producción: <span className="font-mono">https://flowpilot.biz</span> · QA:{" "}
@@ -73,20 +76,24 @@ export default function FlowpilotSettingsPage() {
             <span className="text-gray-400">Default entorno: <span className="font-mono">{envDefault}</span></span>
           </div>
 
-          <div className="flex items-center gap-3 pt-1">
-            <button onClick={save} disabled={saving || !baseUrl.trim()} className="bg-[#2E5FA3] text-white text-sm rounded-md px-4 py-2 disabled:opacity-40 hover:bg-[#264f88]">
-              {saving ? "Guardando…" : "Guardar"}
-            </button>
-            {isCustom && (
-              <button
-                onClick={() => { setBaseUrl(envDefault); }}
-                className="text-sm text-gray-500 hover:text-gray-700"
-              >
-                Restaurar default del entorno
+          {canUpdate ? (
+            <div className="flex items-center gap-3 pt-1">
+              <button onClick={save} disabled={saving || !baseUrl.trim()} className="bg-[#2E5FA3] text-white text-sm rounded-md px-4 py-2 disabled:opacity-40 hover:bg-[#264f88]">
+                {saving ? "Guardando…" : "Guardar"}
               </button>
-            )}
-            {saved && <span className="text-[12px] text-emerald-600 font-medium">✓ Guardado</span>}
-          </div>
+              {isCustom && (
+                <button
+                  onClick={() => { setBaseUrl(envDefault); }}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Restaurar default del entorno
+                </button>
+              )}
+              {saved && <span className="text-[12px] text-emerald-600 font-medium">✓ Guardado</span>}
+            </div>
+          ) : (
+            <p className="text-[11px] text-gray-400 pt-1">Solo lectura. Se requiere permiso de edición para cambiar la URL.</p>
+          )}
 
           <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
             Al cambiar la URL, los analistas deberán reconectar su cuenta de FlowPilot (sus credenciales se validan contra el nuevo sistema). La homologación usa los catálogos en vivo del sistema configurado.
