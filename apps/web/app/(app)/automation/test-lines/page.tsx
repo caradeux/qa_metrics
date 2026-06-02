@@ -142,7 +142,7 @@ export default function TestLinesPage() {
                 <th className="px-5 py-3 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wider">Nombre</th>
                 <th className="px-5 py-3 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wider">ID Externo</th>
                 <th className="px-5 py-3 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wider">Complejidad</th>
-                <th className="px-5 py-3 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wider">Asignaciones</th>
+                <th className="px-5 py-3 text-left text-[11px] font-medium text-gray-400 uppercase tracking-wider">Responsable</th>
                 <th className="px-5 py-3 text-right text-[11px] font-medium text-gray-400 uppercase tracking-wider">Acciones</th>
               </tr>
             </thead>
@@ -152,7 +152,11 @@ export default function TestLinesPage() {
                   <td className="px-5 py-3.5 font-medium text-sm text-gray-900">{line.name}</td>
                   <td className="px-5 py-3.5 text-xs text-gray-500 font-mono">{line.externalId ?? "—"}</td>
                   <td className="px-5 py-3.5 text-xs text-gray-700">{COMPLEXITY_LABEL[line.complexity] ?? line.complexity}</td>
-                  <td className="px-5 py-3.5 font-mono text-sm text-gray-700">{line._count?.assignments ?? 0}</td>
+                  <td className="px-5 py-3.5 text-sm">
+                    {line.assignments?.[0]?.tester?.name
+                      ? <span className="text-gray-900">{line.assignments[0].tester.name}</span>
+                      : <span className="text-amber-600 text-xs">Sin asignar</span>}
+                  </td>
                   <td className="px-5 py-3.5 text-right">
                     <div className="inline-flex items-center gap-1">
                       {can("test-lines", "update") && (

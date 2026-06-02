@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { automationTestLinesApi, type Complexity } from "@/lib/api-client";
+import {
+  automationTestLinesApi,
+  automationTestersApi,
+  setLineResponsible,
+  type Complexity,
+  type ProjectTester,
+} from "@/lib/api-client";
 
 export default function NewTestLinePage() {
   const router = useRouter();
@@ -11,21 +17,30 @@ export default function NewTestLinePage() {
   const [name, setName] = useState("");
   const [externalId, setExternalId] = useState("");
   const [complexity, setComplexity] = useState<Complexity>("MEDIUM");
+  const [responsibleId, setResponsibleId] = useState("");
+  const [testers, setTesters] = useState<ProjectTester[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!projectId) return;
+    automationTestersApi.byProject(projectId).then(setTesters).catch(() => setTesters([]));
+  }, [projectId]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!projectId) { setError("Falta el proyecto (vuelve a la lista y selecciónalo)"); return; }
     if (!name.trim()) { setError("El nombre es obligatorio"); return; }
+    if (!responsibleId) { setError("Debes asignar un Analista QA Automatizador responsable"); return; }
     setSaving(true); setError("");
     try {
-      await automationTestLinesApi.create({
+      const line = await automationTestLinesApi.create({
         projectId,
         name: name.trim(),
         complexity,
         externalId: externalId.trim() || null,
       });
+      await setLineResponsible(line.id, responsibleId);
       router.push("/automation/test-lines");
     } catch (err: any) {
       setError(err.message || "Error al guardar");
@@ -43,6 +58,19 @@ export default function NewTestLinePage() {
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} required autoFocus
             className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary"
             placeholder="Ej. Regresión Checkout" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Analista QA Automatizador (responsable)</label>
+          <select value={responsibleId} onChange={(e) => setResponsibleId(e.target.value)} required
+            className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary">
+            <option value="">— Seleccionar analista —</option>
+            {testers.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          {testers.length === 0 && (
+            <p className="mt-1 text-xs text-amber-600">Este proyecto no tiene analistas. Agrégalos en la gestión del proyecto.</p>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">ID Externo (opcional)</label>

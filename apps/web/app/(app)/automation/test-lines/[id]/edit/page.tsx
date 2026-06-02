@@ -2,7 +2,14 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { automationTestLinesApi, type Complexity } from "@/lib/api-client";
+import {
+  automationTestLinesApi,
+  automationTestersApi,
+  automationAssignmentsApi,
+  setLineResponsible,
+  type Complexity,
+  type ProjectTester,
+} from "@/lib/api-client";
 
 export default function EditTestLinePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -10,27 +17,42 @@ export default function EditTestLinePage({ params }: { params: Promise<{ id: str
   const [name, setName] = useState("");
   const [externalId, setExternalId] = useState("");
   const [complexity, setComplexity] = useState<Complexity>("MEDIUM");
+  const [responsibleId, setResponsibleId] = useState("");
+  const [testers, setTesters] = useState<ProjectTester[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    automationTestLinesApi.get(id)
-      .then((line) => {
+    (async () => {
+      try {
+        const line = await automationTestLinesApi.get(id);
         setName(line.name);
         setExternalId(line.externalId ?? "");
         setComplexity(line.complexity);
-      })
-      .catch((err: any) => setError(err.message || "Error al cargar"))
-      .finally(() => setLoading(false));
+        const [projTesters, assignments] = await Promise.all([
+          automationTestersApi.byProject(line.projectId),
+          automationAssignmentsApi.byTestLine(id),
+        ]);
+        setTesters(projTesters);
+        const active = assignments.find((a) => a.status === "ACTIVE");
+        if (active) setResponsibleId(active.testerId);
+      } catch (err: any) {
+        setError(err.message || "Error al cargar");
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [id]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setError("El nombre es obligatorio"); return; }
+    if (!responsibleId) { setError("Debes asignar un Analista QA Automatizador responsable"); return; }
     setSaving(true); setError("");
     try {
       await automationTestLinesApi.update(id, { name: name.trim(), complexity, externalId: externalId.trim() || null });
+      await setLineResponsible(id, responsibleId);
       router.push("/automation/test-lines");
     } catch (err: any) {
       setError(err.message || "Error al guardar");
@@ -49,6 +71,17 @@ export default function EditTestLinePage({ params }: { params: Promise<{ id: str
           <label className="block text-sm font-medium text-foreground mb-1">Nombre</label>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} required
             className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Analista QA Automatizador (responsable)</label>
+          <select value={responsibleId} onChange={(e) => setResponsibleId(e.target.value)} required
+            className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary">
+            <option value="">— Seleccionar analista —</option>
+            {testers.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-400">Al cambiar el responsable, el anterior se marca como finalizado (DONE); sus registros se conservan.</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">ID Externo (opcional)</label>
