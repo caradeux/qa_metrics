@@ -69,4 +69,15 @@ describe("Automation Assignments API", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("GET ?testerId of an out-of-scope project is forbidden for a scoped analyst (no IDOR)", async () => {
+    // tester2@qametrics.com is a QA_ANALYST linked only to a manual project,
+    // NOT to the automation project. It must NOT be able to read the automation
+    // tester's assignments by passing ?testerId=.
+    const analystToken = await loginAs("tester2@qametrics.com");
+    const res = await fetch(`${API_URL}/api/automation-assignments?testerId=${testerId}`, {
+      headers: { Authorization: `Bearer ${analystToken}` },
+    });
+    expect(res.status).toBe(404);
+  });
 });

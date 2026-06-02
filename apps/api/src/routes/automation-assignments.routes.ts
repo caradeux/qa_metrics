@@ -11,18 +11,28 @@ import { ZodError } from "zod";
 const router = Router();
 router.use(authMiddleware as any);
 
-async function userCanAccessTestLine(req: AuthRequest, testLineId: string): Promise<boolean> {
-  const line = await prisma.testLine.findUnique({ where: { id: testLineId }, select: { projectId: true } });
-  if (!line) return false;
+async function userCanAccessProjectId(req: AuthRequest, projectId: string): Promise<boolean> {
   if (isClientPm(req)) {
     const ids = await clientPmProjectIds(req.user!.id);
-    return ids.includes(line.projectId);
+    return ids.includes(projectId);
   }
-  const where: any = { id: line.projectId };
+  const where: any = { id: projectId };
   if (isAnalyst(req)) where.testers = { some: { userId: req.user!.id } };
   else where.client = { userId: req.user!.id };
   const project = await prisma.project.findFirst({ where, select: { id: true } });
   return !!project;
+}
+
+async function userCanAccessTestLine(req: AuthRequest, testLineId: string): Promise<boolean> {
+  const line = await prisma.testLine.findUnique({ where: { id: testLineId }, select: { projectId: true } });
+  if (!line) return false;
+  return userCanAccessProjectId(req, line.projectId);
+}
+
+async function userCanAccessTester(req: AuthRequest, testerId: string): Promise<boolean> {
+  const tester = await prisma.tester.findUnique({ where: { id: testerId }, select: { projectId: true } });
+  if (!tester) return false;
+  return userCanAccessProjectId(req, tester.projectId);
 }
 
 // GET /?testLineId=X  OR  ?testerId=X
@@ -36,6 +46,10 @@ router.get("/", requirePermission("automation-assignments", "read") as any, asyn
     }
     if (testLineId && !(await userCanAccessTestLine(req, testLineId))) {
       res.status(404).json({ error: "Línea de prueba no encontrada" });
+      return;
+    }
+    if (testerId && !(await userCanAccessTester(req, testerId))) {
+      res.status(404).json({ error: "Tester no encontrado" });
       return;
     }
     const list = await prisma.automationAssignment.findMany({

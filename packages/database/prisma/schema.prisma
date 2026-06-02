@@ -101,6 +101,7 @@ model Tester {
   assignments TesterAssignment[]
   activities  Activity[]
   automationAssignments AutomationAssignment[]
+  automationRecords     AutomationRecord[]
 
   @@index([projectId])
 }
@@ -412,6 +413,7 @@ model AutomationAssignment {
 model AutomationRecord {
   id                String               @id @default(cuid())
   testerId          String
+  tester            Tester               @relation(fields: [testerId], references: [id], onDelete: Cascade)
   assignmentId      String
   assignment        AutomationAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   date              DateTime             @db.Date
