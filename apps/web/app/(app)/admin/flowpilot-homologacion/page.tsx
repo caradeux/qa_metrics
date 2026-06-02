@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { apiClient, flowpilotApi, ApiError, type FlowpilotMapping, type FlowpilotCatalogItem } from "@/lib/api-client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface UserLite { id: string; name: string; email: string; role?: { name: string } }
 
@@ -10,6 +11,7 @@ const KIND_OPTIONS = ["QA_WORK", "VACACIONES", "LICENCIA", "FERIADO"];
 
 export default function FlowpilotHomologacionPage() {
   const { user } = useAuth();
+  const { can } = usePermissions();
   const [users, setUsers] = useState<UserLite[]>([]);
   const [userId, setUserId] = useState<string>("");
   const [mappings, setMappings] = useState<FlowpilotMapping[]>([]);
@@ -36,8 +38,8 @@ export default function FlowpilotHomologacionPage() {
 
   useEffect(() => { if (userId) loadMappings(userId); }, [userId, loadMappings]);
 
-  if (user && user.role?.name !== "ADMIN" && user.role?.name !== "QA_LEAD") {
-    return <div className="max-w-md mx-auto mt-24 text-center text-sm text-gray-500">Acceso restringido a ADMIN/QA_LEAD.</div>;
+  if (user && !can("flowpilot-mappings", "read")) {
+    return <div className="max-w-md mx-auto mt-24 text-center text-sm text-gray-500">No tienes permiso para la homologación de FlowPilot.</div>;
   }
 
   return (

@@ -1,26 +1,24 @@
 import { Router, Response } from "express";
 import { ZodError } from "zod";
 import { prisma } from "@qa-metrics/database";
-import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { getSession, buildClient, getBaseUrl, setBaseUrl, ENV_BASE_URL, FlowpilotNoCredentialError } from "../services/flowpilot-session.service.js";
 import { FlowpilotInvalidCredentialError } from "../lib/flowpilot/client.js";
 import { setCredential } from "../services/flowpilot-credential.service.js";
 import { upsertMappingSchema } from "../validators/flowpilot.validator.js";
 import { buildDayPreview } from "../lib/flowpilot/day-entries.js";
-import { workdaysInRange, toUtcDateOnly, isWorkday } from "../lib/workdays.js";
+import { workdaysInRange, toUtcDateOnly, isWorkday, loadHolidaySet } from "../lib/workdays.js";
 import crypto from "node:crypto";
 
 const router = Router();
 router.use(authMiddleware as any);
 
-const ADMIN_ROLES = new Set(["ADMIN", "QA_LEAD"]);
-function requireAdmin(req: AuthRequest, res: Response): boolean {
-  if (!ADMIN_ROLES.has(req.user?.role?.name ?? "")) {
-    res.status(403).json({ error: "Solo ADMIN/QA_LEAD" });
-    return false;
-  }
-  return true;
-}
+// Acceso por permisos (configurables en Roles y Permisos), no por rol hardcodeado:
+//   flowpilot-control  → panel de control admin (read)
+//   flowpilot-mappings → homologación + catálogos (read / update)
+//   flowpilot-config   → URL de la integración (read / update; update solo ADMIN por seed)
+//   flowpilot-hours    → registro y envío de horas del propio analista (read / update)
+const rp = requirePermission;
 
 // La URL de FlowPilot es a donde se envía el password descifrado de cada analista,
 // así que solo se permite https hacia hosts EXACTOS conocidos (+ subdominios de
@@ -64,7 +62,7 @@ async function withCatalog<T>(req: AuthRequest, res: Response, fn: (client: any,
 // Conectar / re-conectar la credencial FlowPilot del usuario actual.
 // Valida el usuario+clave contra FlowPilot y, si autentica, la guarda cifrada.
 // Disponible para cualquier usuario autenticado (conecta SU propia cuenta).
-router.post("/connection", async (req: AuthRequest, res) => {
+router.post("/connection", rp("flowpilot-hours", "update"), async (req: AuthRequest, res) => {
   const password = (req.body ?? {}).password;
   if (typeof password !== "string" || password.length === 0) {
     res.status(400).json({ error: "password requerido" });
@@ -98,7 +96,7 @@ router.post("/connection", async (req: AuthRequest, res) => {
 });
 
 // Estado de la conexión del usuario actual.
-router.get("/connection", async (req: AuthRequest, res) => {
+router.get("/connection", rp("flowpilot-hours", "read"), async (req: AuthRequest, res) => {
   const [conn, user] = await Promise.all([
     prisma.flowpilotConnection.findUnique({ where: { userId: req.user!.id } }),
     prisma.user.findUnique({ where: { id: req.user!.id }, select: { email: true } }),
@@ -110,61 +108,50 @@ router.get("/connection", async (req: AuthRequest, res) => {
   });
 });
 
-router.get("/catalog/clients", async (req: AuthRequest, res) => {
-  if (!requireAdmin(req, res)) return;
+router.get("/catalog/clients", rp("flowpilot-mappings", "read"), async (req: AuthRequest, res) => {
   const entityType = req.query.entityType === "project" ? "project" : "contract";
   await withCatalog(req, res, (c, s) => c.listClientsByEntityType(s, entityType));
 });
 
-router.get("/catalog/contracts", async (req: AuthRequest, res) => {
-  if (!requireAdmin(req, res)) return;
+router.get("/catalog/contracts", rp("flowpilot-mappings", "read"), async (req: AuthRequest, res) => {
   const clientId = Number(req.query.clientId);
   if (!clientId) { res.status(400).json({ error: "clientId requerido" }); return; }
   await withCatalog(req, res, (c, s) => c.listContractsByClient(s, clientId));
 });
 
-router.get("/catalog/projects", async (req: AuthRequest, res) => {
-  if (!requireAdmin(req, res)) return;
+router.get("/catalog/projects", rp("flowpilot-mappings", "read"), async (req: AuthRequest, res) => {
   const clientId = Number(req.query.clientId);
   if (!clientId) { res.status(400).json({ error: "clientId requerido" }); return; }
   await withCatalog(req, res, (c, s) => c.listProjectsByClient(s, clientId));
 });
 
-router.get("/catalog/task-types", async (req: AuthRequest, res) => {
-  if (!requireAdmin(req, res)) return;
+router.get("/catalog/task-types", rp("flowpilot-mappings", "read"), async (req: AuthRequest, res) => {
   await withCatalog(req, res, (c, s) => c.listTaskTypes(s));
 });
 
 // Configuración de la integración (URL base de FlowPilot). Solo ADMIN/QA_LEAD.
-router.get("/config", async (req: AuthRequest, res) => {
-  if (!requireAdmin(req, res)) return;
+router.get("/config", rp("flowpilot-config", "read"), async (req: AuthRequest, res) => {
   const baseUrl = await getBaseUrl();
   res.json({ baseUrl, envDefault: ENV_BASE_URL, isCustom: baseUrl !== ENV_BASE_URL });
 });
 
-router.put("/config", async (req: AuthRequest, res) => {
-  // Cambiar la URL define a dónde se envían las credenciales de TODOS los
-  // analistas → restringido a ADMIN (no QA_LEAD).
-  if (req.user?.role?.name !== "ADMIN") {
-    res.status(403).json({ error: "Solo ADMIN puede cambiar la URL de FlowPilot" });
-    return;
-  }
+// Cambiar la URL define a dónde se envían las credenciales de TODOS los analistas.
+// Por eso flowpilot-config:update se siembra solo en ADMIN (configurable en Roles).
+router.put("/config", rp("flowpilot-config", "update"), async (req: AuthRequest, res) => {
   const v = validateFlowpilotUrl(String((req.body ?? {}).baseUrl ?? "").trim());
   if (!v.ok) { res.status(400).json({ error: v.error }); return; }
   await setBaseUrl(v.origin);
   res.json({ baseUrl: v.origin, envDefault: ENV_BASE_URL, isCustom: v.origin !== ENV_BASE_URL });
 });
 
-router.get("/mappings", async (req: AuthRequest, res) => {
-  if (!requireAdmin(req, res)) return;
+router.get("/mappings", rp("flowpilot-mappings", "read"), async (req: AuthRequest, res) => {
   const userId = req.query.userId as string | undefined;
   if (!userId) { res.status(400).json({ error: "userId requerido" }); return; }
   const rows = await prisma.flowpilotMapping.findMany({ where: { userId }, orderBy: { kind: "asc" } });
   res.json(rows);
 });
 
-router.put("/mappings", async (req: AuthRequest, res) => {
-  if (!requireAdmin(req, res)) return;
+router.put("/mappings", rp("flowpilot-mappings", "update"), async (req: AuthRequest, res) => {
   try {
     const d = upsertMappingSchema.parse(req.body);
     const row = await prisma.flowpilotMapping.upsert({
@@ -188,8 +175,7 @@ router.put("/mappings", async (req: AuthRequest, res) => {
   }
 });
 
-router.delete("/mappings/:id", async (req: AuthRequest, res) => {
-  if (!requireAdmin(req, res)) return;
+router.delete("/mappings/:id", rp("flowpilot-mappings", "update"), async (req: AuthRequest, res) => {
   await prisma.flowpilotMapping.deleteMany({ where: { id: req.params.id as string } });
   res.status(204).send();
 });
@@ -200,7 +186,7 @@ const MS_DAY = 24 * 60 * 60 * 1000;
 // Días hábiles con su estado de carga: con datos / enviado.
 // Acepta un rango (from/to, p.ej. una semana) o, por defecto, los últimos N días.
 // Alimenta el calendario semanal de gestión de la página Registro de Horas.
-router.get("/pending", async (req: AuthRequest, res) => {
+router.get("/pending", rp("flowpilot-hours", "read"), async (req: AuthRequest, res) => {
   const today = toUtcDateOnly(new Date());
   let from: Date;
   let to: Date;
@@ -249,7 +235,7 @@ router.get("/pending", async (req: AuthRequest, res) => {
 
 
 // Preview del día del usuario actual (no envía nada).
-router.get("/preview", async (req: AuthRequest, res) => {
+router.get("/preview", rp("flowpilot-hours", "read"), async (req: AuthRequest, res) => {
   const date = req.query.date as string | undefined;
   if (!date || !DATE_RE.test(date)) { res.status(400).json({ error: "date=YYYY-MM-DD requerido" }); return; }
   const [preview, workday, log] = await Promise.all([
@@ -266,7 +252,7 @@ router.get("/preview", async (req: AuthRequest, res) => {
 
 // Envía el día a FlowPilot. Body: { date, entries: [{kind, description, hours}] }.
 // Idempotente: si ya se envió y el contenido cambió, borra las entradas previas y recrea.
-router.post("/sync", async (req: AuthRequest, res) => {
+router.post("/sync", rp("flowpilot-hours", "update"), async (req: AuthRequest, res) => {
   const date = (req.body ?? {}).date;
   const rawEntries = (req.body ?? {}).entries;
   if (!date || !DATE_RE.test(date) || !Array.isArray(rawEntries)) {
@@ -343,6 +329,81 @@ router.post("/sync", async (req: AuthRequest, res) => {
     update: { entryIds: createdIds, hoursTotal: total, status: "SENT", payloadHash },
   });
   res.json({ ok: true, entryIds: createdIds, hoursTotal: total });
+});
+
+const MONTH_RE = /^\d{4}-\d{2}$/;
+
+// Control admin (solo ADMIN/QA_LEAD): heatmap mensual del equipo de QA.
+// Por cada analista y cada día hábil del mes, indica si las horas ya se
+// enviaron a FlowPilot (SyncLog SENT). Fines de semana y feriados se marcan
+// como no-laborables; los días hábiles aún no vencidos (futuros) no cuentan
+// como faltantes. Pensado para que el admin detecte de un vistazo qué días
+// del mes no han sido cargados.
+router.get("/admin/month", rp("flowpilot-control", "read"), async (req: AuthRequest, res) => {
+  const month = req.query.month as string | undefined;
+  if (!month || !MONTH_RE.test(month)) { res.status(400).json({ error: "month=YYYY-MM requerido" }); return; }
+
+  const [y, m] = month.split("-").map(Number);
+  const monthStart = new Date(Date.UTC(y!, m! - 1, 1));
+  const monthEnd = new Date(Date.UTC(y!, m!, 0)); // día 0 del mes siguiente = último día de este mes
+  const todayUtc = toUtcDateOnly(new Date());
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const todayIso = iso(todayUtc);
+
+  // Grilla de días del mes con flag de día hábil (excluye finde + feriados).
+  const holidaySet = await loadHolidaySet(monthStart, monthEnd);
+  const days: { day: number; date: string; isBusinessDay: boolean; isHoliday: boolean }[] = [];
+  for (const cursor = new Date(monthStart); cursor.getTime() <= monthEnd.getTime(); cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    const dow = cursor.getUTCDay();
+    const isHoliday = holidaySet.has(cursor.getTime());
+    const isBusinessDay = dow !== 0 && dow !== 6 && !isHoliday;
+    days.push({ day: cursor.getUTCDate(), date: iso(cursor), isBusinessDay, isHoliday });
+  }
+  const businessDaysToDate = days.filter((d) => d.isBusinessDay && d.date <= todayIso).length;
+
+  // Analistas = usuarios con al menos un Tester vinculado.
+  const testers = await prisma.tester.findMany({
+    where: { userId: { not: null } },
+    select: { userId: true, user: { select: { id: true, name: true, email: true } } },
+  });
+  const byUser = new Map<string, { id: string; name: string; email: string }>();
+  for (const t of testers) {
+    if (t.userId && t.user && !byUser.has(t.userId)) byUser.set(t.userId, t.user);
+  }
+  const userIds = [...byUser.keys()];
+
+  const logs = await prisma.flowpilotSyncLog.findMany({
+    where: { userId: { in: userIds }, date: { gte: monthStart, lte: monthEnd } },
+    select: { userId: true, date: true, status: true },
+  });
+  // `${userId}|${iso}` → status del SyncLog
+  const logMap = new Map(logs.map((l) => [`${l.userId}|${iso(l.date)}`, l.status]));
+
+  const rows = [...byUser.values()].map((user) => {
+    const statusByDay: Record<number, string> = {};
+    let missingCount = 0;
+    for (const d of days) {
+      if (!d.isBusinessDay) { statusByDay[d.day] = "off"; continue; }
+      const st = logMap.get(`${user.id}|${d.date}`);
+      if (st === "SENT") statusByDay[d.day] = "sent";
+      else if (st === "PARTIAL") statusByDay[d.day] = "partial";
+      else if (d.date > todayIso) statusByDay[d.day] = "future";
+      else { statusByDay[d.day] = "missing"; missingCount++; }
+    }
+    return { userId: user.id, userName: user.name, userEmail: user.email, statusByDay, missingCount };
+  });
+
+  // Peor primero: más días faltantes arriba, luego alfabético.
+  rows.sort((a, b) => (b.missingCount - a.missingCount) || a.userName.localeCompare(b.userName));
+
+  const summary = {
+    analysts: rows.length,
+    onTrack: rows.filter((r) => r.missingCount === 0).length,
+    totalMissing: rows.reduce((acc, r) => acc + r.missingCount, 0),
+    businessDaysToDate,
+  };
+
+  res.json({ month, today: todayIso, days, rows, summary });
 });
 
 export default router;

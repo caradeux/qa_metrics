@@ -103,16 +103,15 @@ export function Sidebar() {
 
   if (isAnalyst) {
     // QA_ANALYST: vista simplificada
-    sections.push({
-      key: "work",
-      items: [
-        { label: "Registro de Horas", href: "/registro-horas", icon: iconClock },
-        { label: "Mi semana", href: "/mi-semana", icon: iconCalendar },
-        { label: "Planificación", href: "/gantt", icon: iconGantt },
-        { label: "Asignaciones", href: "/assignments", icon: iconUsers },
-        { label: "Proyectos", href: "/projects", icon: iconFolder },
-      ],
-    });
+    const work: NavItem[] = [];
+    if (can("flowpilot-hours", "read")) work.push({ label: "Registro de Horas", href: "/registro-horas", icon: iconClock });
+    work.push(
+      { label: "Mi semana", href: "/mi-semana", icon: iconCalendar },
+      { label: "Planificación", href: "/gantt", icon: iconGantt },
+      { label: "Asignaciones", href: "/assignments", icon: iconUsers },
+      { label: "Proyectos", href: "/projects", icon: iconFolder },
+    );
+    sections.push({ key: "work", items: work });
 
     if (can("reports", "read") || can("reports-occupation", "read") || can("reports-stories", "read")) {
       const reportItems: NavItem[] = [];
@@ -157,7 +156,7 @@ export function Sidebar() {
       operacion.push({ label: "Asignaciones", href: "/assignments", icon: iconUsers });
     }
     operacion.push({ label: "Registro Diario", href: "/equipo", icon: iconClipboard });
-    operacion.push({ label: "Registro de Horas", href: "/registro-horas", icon: iconClock });
+    if (can("flowpilot-hours", "read")) operacion.push({ label: "Registro de Horas", href: "/registro-horas", icon: iconClock });
     if (operacion.length > 0) {
       sections.push({ key: "operacion", title: "Operación", items: operacion });
     }
@@ -192,21 +191,19 @@ export function Sidebar() {
       }
     }
 
-    // Admin (solo ADMIN puro, no QA_LEAD)
-    if (roleName === "ADMIN") {
-      sections.push({
-        key: "admin",
-        title: "Admin",
-        items: [
-          { label: "Carga diaria", href: "/admin/carga-diaria", icon: iconShieldCheck },
-          { label: "Homologación FlowPilot", href: "/admin/flowpilot-homologacion", icon: iconClock },
-        ],
-      });
+    // Admin. "Carga diaria" sigue siendo solo-ADMIN; los items de FlowPilot se
+    // muestran según permiso (configurables en Roles y Permisos).
+    const adminItems: NavItem[] = [];
+    if (roleName === "ADMIN") adminItems.push({ label: "Carga diaria", href: "/admin/carga-diaria", icon: iconShieldCheck });
+    if (can("flowpilot-control", "read")) adminItems.push({ label: "Control FlowPilot", href: "/admin/flowpilot-control", icon: iconChartBar });
+    if (can("flowpilot-mappings", "read")) adminItems.push({ label: "Homologación FlowPilot", href: "/admin/flowpilot-homologacion", icon: iconClock });
+    if (adminItems.length > 0) {
+      sections.push({ key: "admin", title: "Admin", items: adminItems });
     }
 
     // Configuración (última)
     const config: NavItem[] = [];
-    config.push({ label: "FlowPilot (URL)", href: "/settings/flowpilot", icon: iconClock });
+    if (can("flowpilot-config", "read")) config.push({ label: "FlowPilot (URL)", href: "/settings/flowpilot", icon: iconClock });
     if (can("roles", "read")) {
       config.push({ label: "Roles y Permisos", href: "/settings/roles", icon: iconGear });
     }
