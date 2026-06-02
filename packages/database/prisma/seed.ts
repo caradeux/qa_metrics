@@ -407,15 +407,24 @@ async function main() {
     return prisma.testLine.create({ data: { name, projectId, complexity } });
   }
 
-  async function ensureLinkedTester(name: string, projectId: string, userId: string) {
-    let t = await prisma.tester.findFirst({ where: { name, projectId } });
-    if (!t) t = await prisma.tester.create({ data: { name, projectId, userId } });
-    else if (t.userId !== userId) t = await prisma.tester.update({ where: { id: t.id }, data: { userId } });
-    return t;
+  // Automation testers are intentionally NOT linked to the manual QA-analyst
+  // users: linking a user to a second Tester row makes GET /api/testers/me
+  // return an array and breaks manual-track expectations. Automation endpoints
+  // are exercised via admin in tests, so no user link is needed. Repair any
+  // pre-existing link left by an earlier seed run.
+  async function ensureAutoTester(name: string, projectId: string) {
+    const existing = await prisma.tester.findFirst({ where: { name, projectId } });
+    if (existing) {
+      if (existing.userId !== null) {
+        return prisma.tester.update({ where: { id: existing.id }, data: { userId: null } });
+      }
+      return existing;
+    }
+    return prisma.tester.create({ data: { name, projectId } });
   }
 
-  const autoTester1 = await ensureLinkedTester("Tester Uno", autoProject.id, tester1User.id);
-  const autoTester2 = await ensureLinkedTester("Tester Dos", autoProject.id, tester2User.id);
+  const autoTester1 = await ensureAutoTester("Tester Uno", autoProject.id);
+  const autoTester2 = await ensureAutoTester("Tester Dos", autoProject.id);
   const testLine1 = await ensureTestLine("Regresión Checkout", autoProject.id, "HIGH");
 
   async function ensureAutoAssignment(testerId: string, testLineId: string, start: string, end: string, status: "ACTIVE" | "MAINTENANCE" | "PAUSED" | "DONE") {
