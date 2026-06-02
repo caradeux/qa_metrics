@@ -18,7 +18,7 @@ router.get("/me", async (req: AuthRequest, res: Response) => {
       projectId: true,
       name: true,
       allocation: true,
-      project: { select: { id: true, name: true, client: { select: { name: true } } } },
+      project: { select: { id: true, name: true, modality: true, client: { select: { name: true } } } },
     },
     orderBy: { project: { name: "asc" } },
   });

@@ -407,11 +407,11 @@ async function main() {
     return prisma.testLine.create({ data: { name, projectId, complexity } });
   }
 
-  // Automation testers are intentionally NOT linked to the manual QA-analyst
-  // users: linking a user to a second Tester row makes GET /api/testers/me
-  // return an array and breaks manual-track expectations. Automation endpoints
-  // are exercised via admin in tests, so no user link is needed. Repair any
-  // pre-existing link left by an earlier seed run.
+  // Automation testers are NOT linked to the MANUAL QA-analyst users: linking a
+  // user to a second Tester row makes GET /api/testers/me return an array and
+  // breaks manual-track expectations. We instead create a DEDICATED automation
+  // engineer user below and link it to autoTester1, so self-service weekly
+  // registration works without polluting any manual user's /me.
   async function ensureAutoTester(name: string, projectId: string) {
     const existing = await prisma.tester.findFirst({ where: { name, projectId } });
     if (existing) {
@@ -425,6 +425,18 @@ async function main() {
 
   const autoTester1 = await ensureAutoTester("Tester Uno", autoProject.id);
   const autoTester2 = await ensureAutoTester("Tester Dos", autoProject.id);
+
+  // Dedicated automation-engineer user for self-service weekly registration.
+  // Linked ONLY to the automation tester, so GET /api/testers/me returns a
+  // single (automation) profile for this user — no manual-track pollution.
+  const passAnalystAuto = await bcrypt.hash("Analyst2024!", 10);
+  const autoEngineerUser = await prisma.user.upsert({
+    where: { email: "auto.engineer@qametrics.com" },
+    update: { roleId: qaAnalystRole.id, active: true, name: "Auto Engineer" },
+    create: { email: "auto.engineer@qametrics.com", password: passAnalystAuto, name: "Auto Engineer", roleId: qaAnalystRole.id },
+  });
+  await prisma.tester.update({ where: { id: autoTester1.id }, data: { userId: autoEngineerUser.id } });
+
   const testLine1 = await ensureTestLine("Regresión Checkout", autoProject.id, "HIGH");
 
   async function ensureAutoAssignment(testerId: string, testLineId: string, start: string, end: string, status: "ACTIVE" | "MAINTENANCE" | "PAUSED" | "DONE") {
