@@ -9,6 +9,8 @@ export const RESOURCES = [
   "testers",
   "assignments",
   "phases",
+  "test-lines",
+  "automation-assignments",
   "records",
   "dashboard",
   "gantt",
@@ -41,6 +43,8 @@ export const RESOURCE_LABELS: Record<Resource, string> = {
   testers: "Testers",
   assignments: "Asignaciones",
   phases: "Fases de Ejecución",
+  "test-lines": "Líneas de Prueba (Automatización)",
+  "automation-assignments": "Asignaciones de Automatización",
   records: "Registros Diarios",
   dashboard: "Dashboard",
   gantt: "Planificación (Gantt)",
@@ -68,6 +72,7 @@ export const ACTION_LABELS: Record<Action, string> = {
 // Cualquier recurso no listado aquí se agrupa automáticamente en "Otros".
 export const RESOURCE_GROUPS: { title: string; resources: Resource[] }[] = [
   { title: "Gestión", resources: ["users", "roles", "clients", "projects", "stories", "story-status", "cycles", "testers", "assignments", "phases"] },
+  { title: "QA Automation", resources: ["test-lines", "automation-assignments"] },
   { title: "Registros y actividades", resources: ["records", "activities", "activity-categories", "holidays"] },
   { title: "Vistas y reportes", resources: ["dashboard", "gantt", "reports", "reports-occupation", "reports-stories", "audit"] },
   { title: "FlowPilot", resources: ["flowpilot-control", "flowpilot-mappings", "flowpilot-config", "flowpilot-hours"] },

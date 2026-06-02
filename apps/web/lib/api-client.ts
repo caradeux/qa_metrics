@@ -304,3 +304,102 @@ export interface FlowpilotMonthData {
   rows: FlowpilotMonthRow[];
   summary: { analysts: number; onTrack: number; totalMissing: number; businessDaysToDate: number };
 }
+
+// ---------- QA Automation ----------
+
+export type Complexity = "LOW" | "MEDIUM" | "HIGH";
+export type AutomationStatus = "ACTIVE" | "MAINTENANCE" | "PAUSED" | "DONE";
+
+export interface TestLine {
+  id: string;
+  externalId: string | null;
+  name: string;
+  complexity: Complexity;
+  projectId: string;
+  _count?: { assignments: number };
+}
+
+export interface AutomationAssignment {
+  id: string;
+  testerId: string;
+  testLineId: string;
+  startDate: string;
+  endDate: string | null;
+  status: AutomationStatus;
+  notes: string | null;
+  testLine?: { id: string; name: string };
+  tester?: { id: string; name: string };
+  _count?: { records: number };
+}
+
+export interface AutomationRecord {
+  date: string;
+  scriptsCreated: number;
+  scriptsRefactored: number;
+  scriptsFixed: number;
+  execTotal: number;
+  execPassed: number;
+  execFailed: number;
+  notes: string | null;
+}
+
+export interface AutomationWeekAssignment {
+  id: string;
+  testLine: { id: string; name: string; externalId: string | null };
+  status: AutomationStatus;
+  startDate: string;
+  endDate: string | null;
+  activeOnDates: string[];
+  records: AutomationRecord[];
+}
+
+export interface AutomationWeekResponse {
+  weekStart: string;
+  days: { date: string; isHoliday: boolean; holidayName: string | null; isFuture: boolean }[];
+  assignments: AutomationWeekAssignment[];
+}
+
+export interface AutomationBulkEntry {
+  assignmentId: string;
+  date: string;
+  scriptsCreated: number;
+  scriptsRefactored: number;
+  scriptsFixed: number;
+  execTotal: number;
+  execPassed: number;
+  execFailed: number;
+  notes?: string | null;
+}
+
+export const automationTestLinesApi = {
+  list: (projectId: string) =>
+    apiClient<TestLine[]>(`/api/test-lines?projectId=${projectId}`),
+  get: (id: string) => apiClient<TestLine>(`/api/test-lines/${id}`),
+  create: (data: { projectId: string; name: string; complexity?: Complexity; externalId?: string | null }) =>
+    apiClient<TestLine>("/api/test-lines", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<{ name: string; complexity: Complexity; externalId: string | null }>) =>
+    apiClient<TestLine>(`/api/test-lines/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  remove: (id: string) => apiClient<void>(`/api/test-lines/${id}`, { method: "DELETE" }),
+};
+
+export const automationAssignmentsApi = {
+  byTestLine: (testLineId: string) =>
+    apiClient<AutomationAssignment[]>(`/api/automation-assignments?testLineId=${testLineId}`),
+  byTester: (testerId: string) =>
+    apiClient<AutomationAssignment[]>(`/api/automation-assignments?testerId=${testerId}`),
+  create: (data: { testerId: string; testLineId: string; startDate: string; endDate?: string | null; status?: AutomationStatus; notes?: string | null }) =>
+    apiClient<AutomationAssignment>("/api/automation-assignments", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<{ status: AutomationStatus; startDate: string; endDate: string | null; notes: string | null }>) =>
+    apiClient<AutomationAssignment>(`/api/automation-assignments/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  remove: (id: string) => apiClient<void>(`/api/automation-assignments/${id}`, { method: "DELETE" }),
+};
+
+export const automationRecordsApi = {
+  week: (testerId: string, weekStart: string) =>
+    apiClient<AutomationWeekResponse>(`/api/automation-records?testerId=${testerId}&weekStart=${weekStart}`),
+  bulk: (testerId: string, entries: AutomationBulkEntry[]) =>
+    apiClient<{ ok: boolean; updated: number }>("/api/automation-records/bulk", {
+      method: "POST",
+      body: JSON.stringify({ testerId, entries }),
+    }),
+};
