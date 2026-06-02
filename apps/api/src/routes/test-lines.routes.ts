@@ -34,7 +34,15 @@ router.get("/", requirePermission("test-lines", "read") as any, async (req: Auth
     }
     const lines = await prisma.testLine.findMany({
       where: { projectId },
-      include: { _count: { select: { assignments: true } } },
+      include: {
+        _count: { select: { assignments: true } },
+        // Responsable actual = asignación ACTIVE (a lo más una por línea por convención de UI).
+        assignments: {
+          where: { status: "ACTIVE" },
+          select: { id: true, testerId: true, tester: { select: { id: true, name: true } } },
+          take: 1,
+        },
+      },
       orderBy: { name: "asc" },
     });
     res.json(lines);

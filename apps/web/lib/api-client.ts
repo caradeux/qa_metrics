@@ -310,6 +310,11 @@ export interface FlowpilotMonthData {
 export type Complexity = "LOW" | "MEDIUM" | "HIGH";
 export type AutomationStatus = "ACTIVE" | "MAINTENANCE" | "PAUSED" | "DONE";
 
+export interface ProjectTester {
+  id: string;
+  name: string;
+}
+
 export interface TestLine {
   id: string;
   externalId: string | null;
@@ -317,6 +322,8 @@ export interface TestLine {
   complexity: Complexity;
   projectId: string;
   _count?: { assignments: number };
+  // Responsable actual (asignación ACTIVE), si existe.
+  assignments?: { id: string; testerId: string; tester: { id: string; name: string } }[];
 }
 
 export interface AutomationAssignment {
@@ -403,3 +410,30 @@ export const automationRecordsApi = {
       body: JSON.stringify({ testerId, entries }),
     }),
 };
+
+// Lista los testers (analistas QA automatizadores) de un proyecto, para el selector de responsable.
+export const automationTestersApi = {
+  byProject: (projectId: string) =>
+    apiClient<ProjectTester[]>(`/api/testers?projectId=${projectId}`),
+};
+
+// Define el responsable ACTIVE de una línea, preservando el historial:
+// - desactiva (status DONE) cualquier otra asignación ACTIVE de la línea (no borra registros),
+// - reactiva o crea la asignación del nuevo responsable.
+export async function setLineResponsible(testLineId: string, testerId: string): Promise<void> {
+  const existing = await automationAssignmentsApi.byTestLine(testLineId);
+  const today = new Date().toISOString().slice(0, 10);
+  for (const a of existing) {
+    if (a.testerId !== testerId && a.status === "ACTIVE") {
+      await automationAssignmentsApi.update(a.id, { status: "DONE", endDate: today });
+    }
+  }
+  const mine = existing.find((a) => a.testerId === testerId);
+  if (mine) {
+    if (mine.status !== "ACTIVE") {
+      await automationAssignmentsApi.update(mine.id, { status: "ACTIVE", endDate: null });
+    }
+  } else {
+    await automationAssignmentsApi.create({ testerId, testLineId, startDate: today, status: "ACTIVE" });
+  }
+}
