@@ -91,6 +91,7 @@ async function main() {
     "users", "roles", "clients", "projects",
     "stories", "story-status", "cycles", "testers",
     "assignments", "phases",
+    "test-lines", "automation-assignments",
     "records",
     "activities",
     "activity-categories",
@@ -115,7 +116,7 @@ async function main() {
   }
 
   // QA_LEAD: todo menos gestionar users/roles (solo lectura)
-  const leadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "activity-categories", "reports", "reports-occupation", "reports-stories"];
+  const leadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "test-lines", "automation-assignments", "records", "activities", "activity-categories", "reports", "reports-occupation", "reports-stories"];
   for (const resource of leadResources) {
     for (const action of actions) {
       await linkRolePermission(qaLeadRole.id, permissions[`${resource}:${action}`].id);
@@ -140,7 +141,7 @@ async function main() {
   }
 
   // QA_ANALYST
-  const analystReadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "dashboard", "gantt", "reports", "reports-occupation", "reports-stories", "audit", "holidays"];
+  const analystReadResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "test-lines", "automation-assignments", "records", "dashboard", "gantt", "reports", "reports-occupation", "reports-stories", "audit", "holidays"];
   for (const resource of analystReadResources) {
     await linkRolePermission(qaAnalystRole.id, permissions[`${resource}:read`].id);
   }
@@ -148,6 +149,7 @@ async function main() {
     await linkRolePermission(qaAnalystRole.id, permissions[`records:${action}`].id);
     await linkRolePermission(qaAnalystRole.id, permissions[`assignments:${action}`].id);
     await linkRolePermission(qaAnalystRole.id, permissions[`phases:${action}`].id);
+    await linkRolePermission(qaAnalystRole.id, permissions[`automation-assignments:${action}`].id);
   }
   await linkRolePermission(qaAnalystRole.id, permissions["story-status:update"].id);
   // QA_ANALYST puede gestionar SUS propias actividades (scope por ruta)
@@ -162,7 +164,7 @@ async function main() {
   }
 
   // CLIENT_PM: read-only
-  const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "records", "activities", "activity-categories", "dashboard", "gantt", "reports", "reports-occupation", "reports-stories"];
+  const clientPmResources = ["clients", "projects", "stories", "cycles", "testers", "assignments", "phases", "test-lines", "automation-assignments", "records", "activities", "activity-categories", "dashboard", "gantt", "reports", "reports-occupation", "reports-stories"];
   for (const resource of clientPmResources) {
     await linkRolePermission(clientPmRole.id, permissions[`${resource}:read`].id);
   }
@@ -395,6 +397,61 @@ async function main() {
       }
     }
   }
+
+  // ── QA Automation fixtures (for integration tests) ──────────────────
+  const autoProject = await ensureProject("Automatización Core Bancario", client1.id, "AUTOMATION" as any);
+
+  async function ensureTestLine(name: string, projectId: string, complexity: "HIGH" | "MEDIUM" | "LOW") {
+    const existing = await prisma.testLine.findFirst({ where: { name, projectId } });
+    if (existing) return existing;
+    return prisma.testLine.create({ data: { name, projectId, complexity } });
+  }
+
+  async function ensureLinkedTester(name: string, projectId: string, userId: string) {
+    let t = await prisma.tester.findFirst({ where: { name, projectId } });
+    if (!t) t = await prisma.tester.create({ data: { name, projectId, userId } });
+    else if (t.userId !== userId) t = await prisma.tester.update({ where: { id: t.id }, data: { userId } });
+    return t;
+  }
+
+  const autoTester1 = await ensureLinkedTester("Tester Uno", autoProject.id, tester1User.id);
+  const autoTester2 = await ensureLinkedTester("Tester Dos", autoProject.id, tester2User.id);
+  const testLine1 = await ensureTestLine("Regresión Checkout", autoProject.id, "HIGH");
+
+  async function ensureAutoAssignment(testerId: string, testLineId: string, start: string, end: string, status: "ACTIVE" | "MAINTENANCE" | "PAUSED" | "DONE") {
+    const existing = await prisma.automationAssignment.findUnique({
+      where: { testerId_testLineId: { testerId, testLineId } },
+    });
+    if (existing) return existing;
+    return prisma.automationAssignment.create({
+      data: { testerId, testLineId, startDate: new Date(start), endDate: new Date(end), status },
+    });
+  }
+
+  const autoAssign1 = await ensureAutoAssignment(autoTester1.id, testLine1.id, "2026-01-05", "2026-12-31", "ACTIVE");
+
+  for (let w = 4; w >= 0; w--) {
+    const monday = startOfWeek(subWeeks(today, w), { weekStartsOn: 1 });
+    for (let d = 0; d < 5; d++) {
+      const date = addDays(monday, d);
+      await prisma.automationRecord.upsert({
+        where: { assignmentId_date: { assignmentId: autoAssign1.id, date } },
+        update: {},
+        create: {
+          testerId: autoTester1.id,
+          assignmentId: autoAssign1.id,
+          date,
+          scriptsCreated: d % 3,
+          scriptsRefactored: (d + 1) % 2,
+          scriptsFixed: d === 4 ? 1 : 0,
+          execTotal: 10,
+          execPassed: 8 + (d % 3),
+          execFailed: 2 - (d % 3),
+        },
+      });
+    }
+  }
+  await ensureAutoAssignment(autoTester2.id, testLine1.id, "2026-01-05", "2026-12-31", "MAINTENANCE");
 
   console.log("Seed completado (idempotente):");
   console.log("- Feriados CL 2026 (skipDuplicates)");
