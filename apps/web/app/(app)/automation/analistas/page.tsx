@@ -104,7 +104,7 @@ export default function AutomationAnalystsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-lg font-semibold text-gray-900 tracking-tight">Analistas de Automatización</h1>
+        <h1 className="text-lg font-semibold text-gray-900 tracking-tight">Asignación Automatizador</h1>
         <p className="text-xs text-gray-400 mt-0.5">Quién automatiza en cada proyecto (asignables como responsables de líneas)</p>
       </div>
 
