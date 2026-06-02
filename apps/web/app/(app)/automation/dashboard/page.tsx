@@ -40,12 +40,11 @@ export default function AutomationDashboardPage() {
   useEffect(() => {
     apiClient<ProjectLite[]>("/api/projects")
       .then((rows) => {
-        const autos = rows.filter((p) => p.modality === "AUTOMATION");
-        setProjects(autos);
-        const clientIds = [...new Set(autos.map((p) => p.client.id))];
+        setProjects(rows);
+        const clientIds = [...new Set(rows.map((p) => p.client.id))];
         if (clientIds.length === 1) {
           setClientId(clientIds[0]);
-          const cp = autos.filter((p) => p.client.id === clientIds[0]);
+          const cp = rows.filter((p) => p.client.id === clientIds[0]);
           if (cp.length === 1) setProjectId(cp[0].id);
         }
       })

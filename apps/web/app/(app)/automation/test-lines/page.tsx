@@ -5,12 +5,14 @@ import Link from "next/link";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { apiClient, automationTestLinesApi, type TestLine } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/usePermissions";
+import { ManualWorkNoticeModal } from "@/components/automation/ManualWorkNoticeModal";
 
 interface ProjectLite {
   id: string;
   name: string;
   modality: string;
   client: { id: string; name: string };
+  _count?: { stories: number; testers: number };
 }
 
 const COMPLEXITY_LABEL: Record<string, string> = { LOW: "Baja", MEDIUM: "Media", HIGH: "Alta" };
@@ -24,22 +26,33 @@ export default function TestLinesPage() {
   const [loading, setLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<TestLine | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [warnProject, setWarnProject] = useState<ProjectLite | null>(null);
 
   useEffect(() => {
+    // Cualquier proyecto del cliente puede recibir automatización (no se filtra por modalidad).
     apiClient<ProjectLite[]>("/api/projects")
       .then((rows) => {
-        const autos = rows.filter((p) => p.modality === "AUTOMATION");
-        setProjects(autos);
-        // Auto-seleccionar cuando no hay ambigüedad: un solo cliente y/o un solo proyecto.
-        const clientIds = [...new Set(autos.map((p) => p.client.id))];
+        setProjects(rows);
+        const clientIds = [...new Set(rows.map((p) => p.client.id))];
         if (clientIds.length === 1) {
           setClientId(clientIds[0]);
-          const cp = autos.filter((p) => p.client.id === clientIds[0]);
+          const cp = rows.filter((p) => p.client.id === clientIds[0]);
           if (cp.length === 1) setProjectId(cp[0].id);
         }
       })
       .catch(() => setProjects([]));
   }, []);
+
+  // Al elegir proyecto: si ya tiene QA Manual (historias), avisa con un modal antes de continuar.
+  function handleSelectProject(id: string) {
+    if (!id) { setProjectId(""); return; }
+    const p = projects.find((x) => x.id === id);
+    if (p && (p._count?.stories ?? 0) > 0) {
+      setWarnProject(p);
+    } else {
+      setProjectId(id);
+    }
+  }
 
   // Cliente → Proyecto → Línea
   const clients = Array.from(
@@ -122,13 +135,15 @@ export default function TestLinesPage() {
           <label className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Proyecto</label>
           <select
             value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
+            onChange={(e) => handleSelectProject(e.target.value)}
             disabled={!clientId}
             className="rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-secondary disabled:bg-gray-50 disabled:text-gray-400"
           >
             <option value="">— Seleccionar proyecto —</option>
             {clientProjects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+              <option key={p.id} value={p.id}>
+                {p.name}{(p._count?.stories ?? 0) > 0 ? " · (tiene QA Manual)" : ""}
+              </option>
             ))}
           </select>
         </div>
@@ -197,6 +212,14 @@ export default function TestLinesPage() {
         title="Eliminar Línea de Prueba"
         message={`Se eliminará "${deleteTarget?.name}" y sus asignaciones/registros permanentemente.`}
         loading={deleting}
+      />
+
+      <ManualWorkNoticeModal
+        open={!!warnProject}
+        projectName={warnProject?.name ?? ""}
+        storyCount={warnProject?._count?.stories ?? 0}
+        onContinue={() => { if (warnProject) setProjectId(warnProject.id); setWarnProject(null); }}
+        onCancel={() => setWarnProject(null)}
       />
     </div>
   );

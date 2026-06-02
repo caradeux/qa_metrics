@@ -12,6 +12,7 @@ interface TesterProfile {
   name: string;
   allocation: number;
   project: { id: string; name: string; modality: string; client: { name: string } };
+  _count?: { assignments: number; automationAssignments: number };
 }
 
 export default function RegistroSemanalAutomationPage() {
@@ -24,7 +25,9 @@ export default function RegistroSemanalAutomationPage() {
   useEffect(() => {
     apiClient<TesterProfile[]>("/api/testers/me")
       .then((rows) => {
-        const autos = rows.filter((t) => t.project.modality === "AUTOMATION");
+        // Un automatizador es un tester con asignaciones de automatización,
+        // sin importar la modalidad del proyecto (un proyecto puede ser mixto).
+        const autos = rows.filter((t) => (t._count?.automationAssignments ?? 0) > 0);
         setTesters(autos);
         if (autos.length === 1) setSelectedTesterId(autos[0].id);
         setLoaded(true);
