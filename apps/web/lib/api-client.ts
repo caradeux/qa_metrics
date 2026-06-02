@@ -451,6 +451,7 @@ export interface AnalystUserOption {
   id: string;
   name: string;
   email: string;
+  isAutomation?: boolean;
 }
 
 export interface ProjectAnalyst {

@@ -20,8 +20,11 @@ export default function NewUserPage() {
   const [password, setPassword] = useState("");
   const [roles, setRoles] = useState<Role[]>([]);
   const [roleId, setRoleId] = useState<string>("");
+  const [isAutomation, setIsAutomation] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const roleName = roles.find((r) => r.id === roleId)?.name;
 
   useEffect(() => {
     apiClient<Role[]>("/api/roles")
@@ -41,7 +44,7 @@ export default function NewUserPage() {
     try {
       await apiClient("/api/users", {
         method: "POST",
-        body: JSON.stringify({ name, email, password, roleId }),
+        body: JSON.stringify({ name, email, password, roleId, isAutomation: roleName === "QA_ANALYST" ? isAutomation : false }),
       });
       router.push("/users");
     } catch (err: any) {
@@ -90,6 +93,15 @@ export default function NewUserPage() {
             })}
           </div>
         </div>
+        {roleName === "QA_ANALYST" && (
+          <label className="flex items-start gap-3 p-3 rounded-lg border border-border bg-[#2E5FA3]/[0.03] cursor-pointer">
+            <input type="checkbox" checked={isAutomation} onChange={(e) => setIsAutomation(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#1F3864]" />
+            <span>
+              <span className="block text-sm font-medium text-foreground">Es automatizador (QA Automatización)</span>
+              <span className="block text-xs text-gray-500 mt-0.5">Habilita asignar a este analista a líneas y tareas de automatización. Si no se marca, solo podrá trabajar en QA Manual.</span>
+            </span>
+          </label>
+        )}
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-3">
           <button type="button" onClick={() => router.push("/users")} className="px-4 py-2 text-sm font-medium text-foreground bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancelar</button>

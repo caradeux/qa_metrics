@@ -97,9 +97,9 @@ export default function AutomationAnalystsPage() {
     load(projectId);
   }
 
-  // Analistas (users) que aún no están en el proyecto
+  // Solo usuarios marcados como automatizadores (restricción) y que aún no están en el proyecto.
   const assignedUserIds = new Set(analysts.map((a) => a.userId).filter(Boolean));
-  const availableUsers = analystUsers.filter((u) => !assignedUserIds.has(u.id));
+  const availableUsers = analystUsers.filter((u) => u.isAutomation && !assignedUserIds.has(u.id));
 
   return (
     <div>
@@ -161,7 +161,10 @@ export default function AutomationAnalystsPage() {
               </div>
               {error && <p className="mt-2 text-sm text-danger">{error}</p>}
               {availableUsers.length === 0 && (
-                <p className="mt-2 text-xs text-gray-400">Todos los analistas QA disponibles ya están en este proyecto. Crea más usuarios en Usuarios.</p>
+                <p className="mt-2 text-xs text-amber-600">
+                  No hay analistas marcados como <span className="font-medium">automatizador</span> disponibles.
+                  Marca la opción "Es automatizador" al crear/editar el usuario en <a href="/users" className="underline hover:text-amber-800">Usuarios</a>.
+                </p>
               )}
             </div>
           )}
