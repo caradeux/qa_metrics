@@ -5,6 +5,9 @@ import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { dailyLoadQuerySchema } from "../validators/admin.validator.js";
 import { toUtcDateOnly } from "../lib/workdays.js";
 import { ACTIVE_STATUSES, type AssignmentStatus } from "../lib/assignment-states.js";
+import { findTestersWithMissingRecords, resolveCcRecipients } from "../lib/daily-alerts.js";
+import { sendMail } from "../lib/mailer.js";
+import { renderDailyAlert } from "../templates/daily-alert.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -283,6 +286,53 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
   });
 
   res.json({ date: dateStr, isNonBusinessDay, rows });
+});
+
+// POST /api/admin/send-daily-reminders?date=YYYY-MM-DD&dryRun=true
+router.post("/send-daily-reminders", async (req: AuthRequest, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+
+  const dateStr =
+    (req.query.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
+  const dryRun = req.query.dryRun === "true";
+  const day = toUtcDateOnly(dateStr);
+
+  const testers = await findTestersWithMissingRecords(day);
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const replyTo = process.env.ALERT_REPLY_TO;
+  const dayLabelStr = day.toLocaleDateString("es-CL", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Santiago",
+  });
+
+  let testersNotified = 0;
+  let assignmentsFlagged = 0;
+  const errors: Array<{ email: string; message: string }> = [];
+
+  for (const t of testers) {
+    try {
+      const projectIds = [...new Set(t.missingAssignments.map((a) => a.projectId))];
+      const cc = await resolveCcRecipients(projectIds);
+      const { subject, html } = renderDailyAlert({
+        testerName: t.testerName,
+        dayLabel: dayLabelStr,
+        missingAssignments: t.missingAssignments,
+        appUrl,
+      });
+      if (!dryRun) {
+        await sendMail({ to: t.email, cc, subject, html, replyTo });
+      }
+      testersNotified++;
+      assignmentsFlagged += t.missingAssignments.length;
+    } catch (err: any) {
+      errors.push({ email: t.email, message: err?.message ?? String(err) });
+    }
+  }
+
+  res.json({ date: dateStr, testersNotified, assignmentsFlagged, errors });
 });
 
 export default router;

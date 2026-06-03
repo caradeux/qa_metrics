@@ -160,6 +160,21 @@ const iconMail = (
   </svg>
 );
 
+const iconMailBulk = (
+  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17 13l2 2 2-2" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19 15v-4" />
+  </svg>
+);
+
+const iconSpinner = (
+  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+  </svg>
+);
+
 type RowStatus = "complete" | "partial" | "none";
 function rowStatus(r: DailyLoadRow): RowStatus {
   const d = r.daily.loaded;
@@ -251,17 +266,45 @@ export default function AdminCargaDiariaPage() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "pending" | "complete">("all");
   const [toast, setToast] = useState<string | null>(null);
+  const [toastError, setToastError] = useState(false);
+  const [sendingReminders, setSendingReminders] = useState(false);
+
+  const showToast = useCallback((msg: string, isError = false) => {
+    setToast(msg);
+    setToastError(isError);
+    setTimeout(() => { setToast(null); setToastError(false); }, 3000);
+  }, []);
 
   const copyToClipboard = useCallback(async (text: string, feedback: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      setToast(feedback);
-      setTimeout(() => setToast(null), 2200);
+      showToast(feedback);
     } catch {
-      setToast("No se pudo copiar al portapapeles");
-      setTimeout(() => setToast(null), 2200);
+      showToast("No se pudo copiar al portapapeles", true);
     }
-  }, []);
+  }, [showToast]);
+
+  const sendReminders = useCallback(async () => {
+    if (!data || sendingReminders) return;
+    setSendingReminders(true);
+    try {
+      const res = await apiClient<{ testersNotified: number; assignmentsFlagged: number; errors: Array<{ email: string; message: string }> }>(
+        `/api/admin/send-daily-reminders?date=${data.date}`,
+        { method: "POST" }
+      );
+      if (res.errors.length > 0) {
+        showToast(`${res.testersNotified} enviados · ${res.errors.length} error(es)`, true);
+      } else if (res.testersNotified === 0) {
+        showToast("Sin pendientes — no se envió ningún correo");
+      } else {
+        showToast(`${res.testersNotified} recordatorio${res.testersNotified !== 1 ? "s" : ""} enviado${res.testersNotified !== 1 ? "s" : ""} (${res.assignmentsFlagged} HU${res.assignmentsFlagged !== 1 ? "s" : ""})`);
+      }
+    } catch (e: any) {
+      showToast(e?.message ?? "Error al enviar recordatorios", true);
+    } finally {
+      setSendingReminders(false);
+    }
+  }, [data, sendingReminders, showToast]);
 
   const fetchData = useCallback(async (d: string) => {
     setLoading(true);
@@ -441,8 +484,23 @@ export default function AdminCargaDiariaPage() {
               Completos <span className="ml-1 text-gray-400">{summary.complete}</span>
             </FilterTab>
           </div>
-          <div className="text-[11px] text-gray-400">
-            {visibleRows.length} de {summary.total} analista{summary.total !== 1 ? "s" : ""}
+          <div className="flex items-center gap-3">
+            {summary.total - summary.complete > 0 && (
+              <button
+                type="button"
+                onClick={sendReminders}
+                disabled={sendingReminders}
+                className="flex items-center gap-1.5 px-3 h-7 text-[11px] font-medium rounded border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+              >
+                {sendingReminders ? iconSpinner : iconMailBulk}
+                {sendingReminders
+                  ? "Enviando…"
+                  : `Recordar pendientes (${summary.total - summary.complete})`}
+              </button>
+            )}
+            <div className="text-[11px] text-gray-400">
+              {visibleRows.length} de {summary.total} analista{summary.total !== 1 ? "s" : ""}
+            </div>
           </div>
         </div>
       )}
@@ -505,8 +563,8 @@ export default function AdminCargaDiariaPage() {
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-2">
-          <div className="bg-gray-900 text-white text-xs font-medium rounded-md shadow-lg px-3.5 py-2.5 flex items-center gap-2">
-            <span className="text-emerald-400">{iconCheck}</span>
+          <div className={`text-white text-xs font-medium rounded-md shadow-lg px-3.5 py-2.5 flex items-center gap-2 ${toastError ? "bg-red-700" : "bg-gray-900"}`}>
+            <span className={toastError ? "text-red-300" : "text-emerald-400"}>{toastError ? iconAlert : iconCheck}</span>
             {toast}
           </div>
         </div>

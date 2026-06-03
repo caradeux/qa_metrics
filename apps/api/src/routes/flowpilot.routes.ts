@@ -8,6 +8,7 @@ import { setCredential } from "../services/flowpilot-credential.service.js";
 import { upsertMappingSchema } from "../validators/flowpilot.validator.js";
 import { buildDayPreview } from "../lib/flowpilot/day-entries.js";
 import { workdaysInRange, toUtcDateOnly, isWorkday, loadHolidaySet } from "../lib/workdays.js";
+import { sendMail } from "../lib/mailer.js";
 import crypto from "node:crypto";
 
 const router = Router();
@@ -404,6 +405,127 @@ router.get("/admin/month", rp("flowpilot-control", "read"), async (req: AuthRequ
   };
 
   res.json({ month, today: todayIso, days, rows, summary });
+});
+
+// POST /api/flowpilot/admin/send-reminders?month=YYYY-MM&dryRun=true
+// Envía correo de recordatorio a analistas con días pendientes en FlowPilot.
+router.post("/admin/send-reminders", rp("flowpilot-control", "read"), async (req: AuthRequest, res) => {
+  const month = req.query.month as string | undefined;
+  const dryRun = req.query.dryRun === "true";
+
+  if (!month || !MONTH_RE.test(month)) {
+    res.status(400).json({ error: "month=YYYY-MM requerido" });
+    return;
+  }
+
+  const [y, m] = month.split("-").map(Number);
+  const monthStart = new Date(Date.UTC(y!, m! - 1, 1));
+  const monthEnd = new Date(Date.UTC(y!, m!, 0));
+  const todayUtc = toUtcDateOnly(new Date());
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const todayIso = iso(todayUtc);
+
+  const holidaySet = await loadHolidaySet(monthStart, monthEnd);
+  const days: { day: number; date: string; isBusinessDay: boolean }[] = [];
+  for (
+    const cursor = new Date(monthStart);
+    cursor.getTime() <= monthEnd.getTime();
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    const dow = cursor.getUTCDay();
+    const isBusinessDay = dow !== 0 && dow !== 6 && !holidaySet.has(cursor.getTime());
+    days.push({ day: cursor.getUTCDate(), date: iso(cursor), isBusinessDay });
+  }
+
+  const testers = await prisma.tester.findMany({
+    where: { userId: { not: null } },
+    select: { userId: true, user: { select: { id: true, name: true, email: true } } },
+  });
+  const byUser = new Map<string, { id: string; name: string; email: string }>();
+  for (const t of testers) {
+    if (t.userId && t.user && !byUser.has(t.userId)) byUser.set(t.userId, t.user);
+  }
+  const userIds = [...byUser.keys()];
+
+  const logs = await prisma.flowpilotSyncLog.findMany({
+    where: { userId: { in: userIds }, date: { gte: monthStart, lte: monthEnd } },
+    select: { userId: true, date: true, status: true },
+  });
+  const logMap = new Map(logs.map((l) => [`${l.userId}|${iso(l.date)}`, l.status]));
+
+  const pending = [...byUser.values()]
+    .map((user) => {
+      const missingDates: string[] = [];
+      for (const d of days) {
+        if (!d.isBusinessDay || d.date > todayIso) continue;
+        const st = logMap.get(`${user.id}|${d.date}`);
+        if (st !== "SENT" && st !== "PARTIAL") missingDates.push(d.date);
+      }
+      return { ...user, missingDates };
+    })
+    .filter((u) => u.missingDates.length > 0);
+
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const replyTo = process.env.ALERT_REPLY_TO;
+  const [mY, mM] = month.split("-");
+  const monthLabel = new Date(Date.UTC(Number(mY), Number(mM) - 1, 1))
+    .toLocaleDateString("es-CL", { month: "long", year: "numeric", timeZone: "UTC" });
+
+  let usersNotified = 0;
+  const errors: Array<{ email: string; message: string }> = [];
+
+  for (const u of pending) {
+    try {
+      const firstName = u.name.split(/\s+/)[0] ?? u.name;
+      const dayList = u.missingDates
+        .map((d) => new Date(`${d}T12:00:00Z`).toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }))
+        .join(", ");
+      const subject = `QA Metrics · Carga de horas pendiente — ${monthLabel}`;
+      const html = `
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
+  <div style="max-width:560px;margin:32px auto;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+    <div style="background:#1F3864;padding:24px 28px;">
+      <span style="color:#ffffff;font-size:16px;font-weight:700;letter-spacing:0.05em;">QA METRICS</span>
+    </div>
+    <div style="padding:28px;">
+      <p style="margin:0 0 16px;font-size:15px;color:#111827;">Hola <strong>${firstName}</strong>,</p>
+      <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">
+        Al revisar el registro de horas en FlowPilot noté que tienes <strong>${u.missingDates.length} día${u.missingDates.length !== 1 ? "s" : ""} sin carga</strong>
+        en <strong>${monthLabel}</strong>:
+      </p>
+      <p style="margin:0 0 20px;font-size:13px;color:#6b7280;background:#f9fafb;border-radius:6px;padding:12px 16px;border-left:3px solid #f59e0b;">
+        ${dayList}
+      </p>
+      <p style="margin:0 0 20px;font-size:14px;color:#374151;line-height:1.6;">
+        Por favor regulariza la información a la brevedad desde la plataforma.
+      </p>
+      <a href="${appUrl}/mi-semana"
+         style="display:inline-block;background:#2E5FA3;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 22px;border-radius:6px;">
+        Ir a Mi Semana →
+      </a>
+    </div>
+    <div style="padding:16px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+      <p style="margin:0;font-size:11px;color:#9ca3af;">
+        Este correo es automático de QA Metrics. Si tienes dudas, responde este mensaje.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+      if (!dryRun) {
+        await sendMail({ to: u.email, subject, html, replyTo });
+      }
+      usersNotified++;
+    } catch (err: any) {
+      errors.push({ email: u.email, message: err?.message ?? String(err) });
+    }
+  }
+
+  res.json({ month, usersNotified, totalPending: pending.length, errors });
 });
 
 export default router;

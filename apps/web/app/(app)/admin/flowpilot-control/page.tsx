@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { flowpilotApi, type FlowpilotMonthData, type FlowpilotDayStatus } from "@/lib/api-client";
+import { flowpilotApi, apiClient, type FlowpilotMonthData, type FlowpilotDayStatus } from "@/lib/api-client";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -44,6 +44,31 @@ export default function FlowpilotControlPage() {
   const [data, setData] = useState<FlowpilotMonthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sendingReminders, setSendingReminders] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const sendReminders = useCallback(async () => {
+    if (!data || sendingReminders) return;
+    setSendingReminders(true);
+    try {
+      const res = await apiClient<{ usersNotified: number; totalPending: number; errors: { email: string; message: string }[] }>(
+        `/api/flowpilot/admin/send-reminders?month=${data.month}`,
+        { method: "POST" }
+      );
+      const msg = res.errors.length > 0
+        ? `${res.usersNotified} enviados · ${res.errors.length} error(es)`
+        : res.usersNotified === 0
+          ? "Sin pendientes — no se envió ningún correo"
+          : `${res.usersNotified} recordatorio${res.usersNotified !== 1 ? "s" : ""} enviado${res.usersNotified !== 1 ? "s" : ""}`;
+      setToast({ msg, ok: res.errors.length === 0 });
+      setTimeout(() => setToast(null), 3500);
+    } catch (e: any) {
+      setToast({ msg: e?.message ?? "Error al enviar recordatorios", ok: false });
+      setTimeout(() => setToast(null), 3500);
+    } finally {
+      setSendingReminders(false);
+    }
+  }, [data, sendingReminders]);
 
   const load = useCallback((mo: string) => {
     setLoading(true); setError(null);
@@ -83,11 +108,33 @@ export default function FlowpilotControlPage() {
             {isThisMonth && <span className="ml-2 text-[#2E5FA3] font-medium">· Mes en curso</span>}
           </p>
         </div>
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
-          <button aria-label="Mes anterior" onClick={() => setMonth((mo) => shiftMonth(mo, -1))} className="w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 active:scale-95">‹</button>
-          <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className="text-[11px] font-mono text-gray-700 px-2 h-7 bg-transparent outline-none" />
-          <button aria-label="Mes siguiente" onClick={() => setMonth((mo) => shiftMonth(mo, 1))} className="w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 active:scale-95">›</button>
-          <button onClick={() => setMonth(currentMonth())} disabled={isThisMonth} className="px-2.5 h-7 text-[11px] font-medium rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-40">Hoy</button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {s && s.totalMissing > 0 && !loading && (
+            <button
+              type="button"
+              onClick={sendReminders}
+              disabled={sendingReminders}
+              className="flex items-center gap-1.5 h-9 px-3 text-[11px] font-medium rounded-lg border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:border-amber-400 disabled:opacity-60 disabled:cursor-not-allowed transition"
+            >
+              {sendingReminders ? (
+                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                </svg>
+              )}
+              {sendingReminders ? "Enviando…" : `Recordar pendientes (${s.analysts - s.onTrack})`}
+            </button>
+          )}
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1 shadow-sm">
+            <button aria-label="Mes anterior" onClick={() => setMonth((mo) => shiftMonth(mo, -1))} className="w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 active:scale-95">‹</button>
+            <input type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className="text-[11px] font-mono text-gray-700 px-2 h-7 bg-transparent outline-none" />
+            <button aria-label="Mes siguiente" onClick={() => setMonth((mo) => shiftMonth(mo, 1))} className="w-7 h-7 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 active:scale-95">›</button>
+            <button onClick={() => setMonth(currentMonth())} disabled={isThisMonth} className="px-2.5 h-7 text-[11px] font-medium rounded-md text-gray-600 hover:bg-gray-100 disabled:opacity-40">Hoy</button>
+          </div>
         </div>
       </div>
 
@@ -177,6 +224,23 @@ export default function FlowpilotControlPage() {
             <Legend sq="bg-orange-500">Sin enviar</Legend>
             <Legend sq="bg-gray-100">Aún no vence</Legend>
             <span className="inline-flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-[3px] bg-red-400 inline-flex items-center justify-center text-white text-[10px] font-bold leading-none">×</span>No laborable (finde / feriado)</span>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <div className={`text-white text-xs font-medium rounded-lg shadow-lg px-4 py-2.5 flex items-center gap-2 ${toast.ok ? "bg-gray-900" : "bg-red-700"}`}>
+            {toast.ok ? (
+              <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+            ) : (
+              <svg className="w-3.5 h-3.5 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+            )}
+            {toast.msg}
           </div>
         </div>
       )}
