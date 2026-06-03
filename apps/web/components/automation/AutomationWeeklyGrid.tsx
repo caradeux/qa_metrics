@@ -13,10 +13,13 @@ type Field =
   | "scriptsCreated" | "scriptsRefactored" | "scriptsFixed"
   | "execTotal" | "execPassed" | "execFailed";
 
+// Todos los campos persisten (las ejecuciones se conservan aunque no se editen aquí).
 const FIELDS: Field[] = [
   "scriptsCreated", "scriptsRefactored", "scriptsFixed",
   "execTotal", "execPassed", "execFailed",
 ];
+// Campos visibles/editables en la grilla (solo producción de scripts).
+const SCRIPT_FIELDS: Field[] = ["scriptsCreated", "scriptsRefactored", "scriptsFixed"];
 
 const FIELD_META: Record<Field, { short: string; label: string; description: string; color: string; icon: React.ReactNode }> = {
   scriptsCreated: {
@@ -194,11 +197,10 @@ export function AutomationWeeklyGrid({ testerId, weekStart }: { testerId: string
       {/* Leyenda */}
       <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
         <span className="font-semibold uppercase tracking-wider text-[10px] text-gray-500">Leyenda</span>
-        {FIELDS.map((f, i) => {
+        {SCRIPT_FIELDS.map((f) => {
           const m = FIELD_META[f];
           return (
             <span key={f} className="inline-flex items-center gap-1.5">
-              {i === 3 && <span className="mx-1 h-3 w-px bg-gray-300" />}
               <span className="inline-flex h-5 w-5 items-center justify-center rounded" style={{ color: m.color, backgroundColor: `${m.color}15` }}>{m.icon}</span>
               <span className="font-semibold" style={{ color: m.color }}>{m.short}</span>
               <span>= {m.label}</span>
@@ -240,24 +242,21 @@ export function AutomationWeeklyGrid({ testerId, weekStart }: { testerId: string
                   return (
                     <td key={day.date} className={`p-1 align-top ${disabled ? "bg-gray-100" : "bg-white"}`}>
                       <div className="flex flex-col gap-1">
-                        {FIELDS.map((field, i) => {
+                        {SCRIPT_FIELDS.map((field) => {
                           const m = FIELD_META[field];
                           return (
-                            <div key={field}>
-                              {i === 3 && <div className="my-1 h-px bg-gray-100" />}
-                              <label className="flex items-center gap-1 text-xs text-gray-600" title={`${m.label} — ${m.description}`}>
-                                <span className="inline-flex w-8 items-center gap-0.5" style={{ color: m.color }}>
-                                  {m.icon}<span className="font-semibold">{m.short}</span>
-                                </span>
-                                <input
-                                  type="number" min={0} inputMode="numeric" disabled={disabled}
-                                  value={cell[field] === 0 ? "" : cell[field]}
-                                  placeholder={disabled ? "" : "0"}
-                                  onChange={(e) => setCell(a.id, day.date, field, Number(e.target.value))}
-                                  className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-xs tabular-nums focus:border-[#2E5FA3] focus:outline-none focus:ring-1 focus:ring-[#2E5FA3]/30 disabled:bg-gray-200 disabled:text-gray-400 disabled:placeholder-transparent"
-                                />
-                              </label>
-                            </div>
+                            <label key={field} className="flex items-center gap-1 text-xs text-gray-600" title={`${m.label} — ${m.description}`}>
+                              <span className="inline-flex w-8 items-center gap-0.5" style={{ color: m.color }}>
+                                {m.icon}<span className="font-semibold">{m.short}</span>
+                              </span>
+                              <input
+                                type="number" min={0} inputMode="numeric" disabled={disabled}
+                                value={cell[field] === 0 ? "" : cell[field]}
+                                placeholder={disabled ? "" : "0"}
+                                onChange={(e) => setCell(a.id, day.date, field, Number(e.target.value))}
+                                className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-xs tabular-nums focus:border-[#2E5FA3] focus:outline-none focus:ring-1 focus:ring-[#2E5FA3]/30 disabled:bg-gray-200 disabled:text-gray-400 disabled:placeholder-transparent"
+                              />
+                            </label>
                           );
                         })}
                         {!disabled && (
@@ -277,17 +276,14 @@ export function AutomationWeeklyGrid({ testerId, weekStart }: { testerId: string
                 })}
                 <td className="sticky right-0 z-10 bg-gradient-to-l from-slate-100 to-slate-50 p-2 align-top border-l-2 border-slate-200" style={{ minWidth: 100 }}>
                   <div className="flex flex-col gap-1">
-                    {FIELDS.map((f, i) => {
+                    {SCRIPT_FIELDS.map((f) => {
                       const m = FIELD_META[f];
                       const val = rowTotals[a.id]![f];
                       const isZero = val === 0;
                       return (
-                        <div key={f}>
-                          {i === 3 && <div className="my-1 h-px bg-slate-200" />}
-                          <div className={`flex items-center justify-between gap-1.5 rounded-md px-2 py-0.5 text-xs ${isZero ? "bg-white/60 text-gray-400" : "bg-white shadow-sm"}`} style={isZero ? {} : { color: m.color, border: `1px solid ${m.color}33` }} title={m.label}>
-                            <span className="inline-flex items-center gap-1">{m.icon}<span className="text-[10px] font-semibold">{m.short}</span></span>
-                            <span className="font-mono text-sm font-bold tabular-nums">{val}</span>
-                          </div>
+                        <div key={f} className={`flex items-center justify-between gap-1.5 rounded-md px-2 py-0.5 text-xs ${isZero ? "bg-white/60 text-gray-400" : "bg-white shadow-sm"}`} style={isZero ? {} : { color: m.color, border: `1px solid ${m.color}33` }} title={m.label}>
+                          <span className="inline-flex items-center gap-1">{m.icon}<span className="text-[10px] font-semibold">{m.short}</span></span>
+                          <span className="font-mono text-sm font-bold tabular-nums">{val}</span>
                         </div>
                       );
                     })}
@@ -300,15 +296,12 @@ export function AutomationWeeklyGrid({ testerId, weekStart }: { testerId: string
               {data.days.map((day) => (
                 <td key={day.date} className="p-2 text-center">
                   <div className="flex flex-col items-stretch gap-1">
-                    {FIELDS.map((f, i) => {
+                    {SCRIPT_FIELDS.map((f) => {
                       const m = FIELD_META[f];
                       return (
-                        <div key={f}>
-                          {i === 3 && <div className="my-1 h-px bg-white/20" />}
-                          <div className="flex items-center justify-between gap-1.5 rounded-md bg-white/10 px-2 py-0.5 text-xs" title={m.label}>
-                            <span className="inline-flex items-center gap-1 opacity-80">{m.icon}<span className="text-[10px] font-semibold">{m.short}</span></span>
-                            <span className="font-mono text-sm font-bold tabular-nums">{dayTotals[day.date]![f]}</span>
-                          </div>
+                        <div key={f} className="flex items-center justify-between gap-1.5 rounded-md bg-white/10 px-2 py-0.5 text-xs" title={m.label}>
+                          <span className="inline-flex items-center gap-1 opacity-80">{m.icon}<span className="text-[10px] font-semibold">{m.short}</span></span>
+                          <span className="font-mono text-sm font-bold tabular-nums">{dayTotals[day.date]![f]}</span>
                         </div>
                       );
                     })}
@@ -318,16 +311,13 @@ export function AutomationWeeklyGrid({ testerId, weekStart }: { testerId: string
               <td className="sticky right-0 z-10 bg-[#1F3864] p-2 border-l-2 border-[#4A90D9]" style={{ minWidth: 100 }}>
                 <div className="flex flex-col gap-1">
                   <div className="text-center text-[9px] uppercase tracking-wider text-white/70 font-bold pb-0.5 border-b border-white/20">Semana</div>
-                  {FIELDS.map((f, i) => {
+                  {SCRIPT_FIELDS.map((f) => {
                     const m = FIELD_META[f];
                     const val = Object.values(rowTotals).reduce((s, r) => s + r[f], 0);
                     return (
-                      <div key={f}>
-                        {i === 3 && <div className="my-1 h-px bg-white/20" />}
-                        <div className="flex items-center justify-between gap-1.5 rounded-md bg-white/15 px-2 py-0.5 text-xs" title={m.label}>
-                          <span className="inline-flex items-center gap-1 opacity-80">{m.icon}<span className="text-[10px] font-semibold">{m.short}</span></span>
-                          <span className="font-mono text-sm font-bold tabular-nums">{val}</span>
-                        </div>
+                      <div key={f} className="flex items-center justify-between gap-1.5 rounded-md bg-white/15 px-2 py-0.5 text-xs" title={m.label}>
+                        <span className="inline-flex items-center gap-1 opacity-80">{m.icon}<span className="text-[10px] font-semibold">{m.short}</span></span>
+                        <span className="font-mono text-sm font-bold tabular-nums">{val}</span>
                       </div>
                     );
                   })}
