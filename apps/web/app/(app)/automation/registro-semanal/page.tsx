@@ -32,7 +32,13 @@ export default function RegistroSemanalAutomationPage() {
         if (autos.length === 1) setSelectedTesterId(autos[0].id);
         setLoaded(true);
       })
-      .catch((e: any) => { setError(e?.message ?? "Error"); setLoaded(true); });
+      .catch((e: any) => {
+        // 404 "not a tester": el usuario no tiene perfil de tester/automatizador.
+        // No es un error: se muestra el estado vacío amable.
+        if (e?.status === 404) setTesters([]);
+        else setError(e?.message ?? "Error");
+        setLoaded(true);
+      });
   }, []);
 
   const tester = testers.find((t) => t.id === selectedTesterId) ?? null;

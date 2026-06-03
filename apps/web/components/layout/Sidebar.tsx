@@ -179,7 +179,7 @@ export function Sidebar() {
     if (can("test-lines", "read")) automationItems.push({ label: "Líneas de Prueba", href: "/automation/test-lines", icon: iconClipboard });
     if (can("testers", "read")) automationItems.push({ label: "Asignación Automatizador", href: "/automation/analistas", icon: iconUserSingle });
     if (can("automation-assignments", "read")) automationItems.push({ label: "Asignaciones Auto.", href: "/automation/asignaciones", icon: iconUsers });
-    if (can("automation-assignments", "read")) automationItems.push({ label: "Registro Automatización", href: "/automation/registro-semanal", icon: iconChartBar });
+    // "Registro Automatización" es self-service (usa /testers/me) → solo para analistas, no admin/lead.
     if (automationItems.length > 0) {
       sections.push({ key: "automation", title: "QA Automation", items: automationItems });
     }
