@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
+
+type ProjectModality = "MANUAL" | "AZURE_DEVOPS" | "AUTOMATION";
 
 interface Client {
   id: string;
@@ -17,11 +19,16 @@ interface PmUser {
 
 export default function NewProjectPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [clients, setClients] = useState<Client[]>([]);
   const [pms, setPms] = useState<PmUser[]>([]);
   const [name, setName] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [modality, setModality] = useState<"MANUAL" | "AZURE_DEVOPS">("MANUAL");
+  const [clientId, setClientId] = useState(searchParams.get("clientId") ?? "");
+  const [modality, setModality] = useState<ProjectModality>(
+    (["MANUAL", "AZURE_DEVOPS", "AUTOMATION"].includes(searchParams.get("modality") ?? "")
+      ? (searchParams.get("modality") as ProjectModality)
+      : "MANUAL")
+  );
   const [projectManagerId, setProjectManagerId] = useState("");
   const [adoOrgUrl, setAdoOrgUrl] = useState("");
   const [adoProject, setAdoProject] = useState("");
@@ -94,6 +101,26 @@ export default function NewProjectPage() {
             className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary"
             placeholder="Nombre del proyecto"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-foreground mb-1">Modalidad</label>
+          <select
+            value={modality}
+            onChange={(e) => setModality(e.target.value as ProjectModality)}
+            className="w-full px-4 py-2.5 rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary"
+          >
+            <option value="MANUAL">QA Manual</option>
+            <option value="AZURE_DEVOPS">Azure DevOps</option>
+            <option value="AUTOMATION">QA Automatización</option>
+          </select>
+          <p className="text-xs text-muted mt-1">
+            {modality === "AUTOMATION"
+              ? "Proyecto de automatización: se gestiona con líneas de prueba y registro de scripts."
+              : modality === "AZURE_DEVOPS"
+              ? "Integración con Azure DevOps."
+              : "QA manual: historias de usuario, ciclos y registro de casos."}
+          </p>
         </div>
 
         <div>

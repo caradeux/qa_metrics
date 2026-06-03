@@ -14,7 +14,7 @@ interface TesterProfile {
   projectId: string;
   name: string;
   allocation: number;
-  project: { id: string; name: string; client: { name: string } };
+  project: { id: string; name: string; modality: string; client: { name: string } };
 }
 
 export default function MiSemanaPage() {
@@ -32,11 +32,14 @@ export default function MiSemanaPage() {
   useEffect(() => {
     apiClient<TesterProfile[]>("/api/testers/me")
       .then((rows) => {
-        setTesters(rows);
+        // Excluir proyectos de automatización: esos se registran en la página
+        // de automatización (grilla de scripts), no en la grilla manual.
+        const manual = rows.filter((t) => t.project.modality !== "AUTOMATION");
+        setTesters(manual);
         // Si tiene solo un proyecto, seleccionamos automáticamente (no hay ambigüedad).
         // Con varios, dejamos vacío para forzar una elección consciente del tester
         // y evitar cargar datos al proyecto equivocado por accidente.
-        if (rows.length === 1) setSelectedTesterId(rows[0].id);
+        if (manual.length === 1) setSelectedTesterId(manual[0].id);
       })
       .catch((e: any) => setError(e?.message ?? "Error"));
   }, []);

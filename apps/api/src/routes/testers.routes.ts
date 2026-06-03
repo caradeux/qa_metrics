@@ -18,7 +18,8 @@ router.get("/me", async (req: AuthRequest, res: Response) => {
       projectId: true,
       name: true,
       allocation: true,
-      project: { select: { id: true, name: true, client: { select: { name: true } } } },
+      project: { select: { id: true, name: true, modality: true, client: { select: { name: true } } } },
+      _count: { select: { assignments: true, automationAssignments: true } },
     },
     orderBy: { project: { name: "asc" } },
   });
@@ -97,7 +98,8 @@ router.get("/", requirePermission("testers", "read") as any, async (req: AuthReq
         ...(projectId ? { projectId } : { project: projectsWhere }),
       },
       include: {
-        _count: { select: { records: true } },
+        _count: { select: { records: true, automationAssignments: true } },
+        user: { select: { id: true, name: true, email: true } },
         project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } },
       },
       orderBy: [{ project: { name: "asc" } }, { name: "asc" }],

@@ -304,3 +304,192 @@ export interface FlowpilotMonthData {
   rows: FlowpilotMonthRow[];
   summary: { analysts: number; onTrack: number; totalMissing: number; businessDaysToDate: number };
 }
+
+// ---------- QA Automation ----------
+
+export type Complexity = "LOW" | "MEDIUM" | "HIGH";
+export type AutomationStatus = "ACTIVE" | "MAINTENANCE" | "PAUSED" | "DONE";
+
+export interface ProjectTester {
+  id: string;
+  name: string;
+}
+
+export interface TestLine {
+  id: string;
+  externalId: string | null;
+  name: string;
+  complexity: Complexity;
+  projectId: string;
+  _count?: { assignments: number };
+  // Responsable actual (asignación ACTIVE), si existe.
+  assignments?: { id: string; testerId: string; tester: { id: string; name: string } }[];
+}
+
+export interface AutomationAssignment {
+  id: string;
+  testerId: string;
+  testLineId: string;
+  startDate: string;
+  endDate: string | null;
+  status: AutomationStatus;
+  notes: string | null;
+  testLine?: { id: string; name: string };
+  tester?: { id: string; name: string };
+  _count?: { records: number };
+}
+
+export interface AutomationRecord {
+  date: string;
+  scriptsCreated: number;
+  scriptsRefactored: number;
+  scriptsFixed: number;
+  execTotal: number;
+  execPassed: number;
+  execFailed: number;
+  notes: string | null;
+}
+
+export interface AutomationWeekAssignment {
+  id: string;
+  testLine: { id: string; name: string; externalId: string | null };
+  status: AutomationStatus;
+  startDate: string;
+  endDate: string | null;
+  activeOnDates: string[];
+  records: AutomationRecord[];
+}
+
+export interface AutomationWeekResponse {
+  weekStart: string;
+  days: { date: string; isHoliday: boolean; holidayName: string | null; isFuture: boolean }[];
+  assignments: AutomationWeekAssignment[];
+}
+
+export interface AutomationBulkEntry {
+  assignmentId: string;
+  date: string;
+  scriptsCreated: number;
+  scriptsRefactored: number;
+  scriptsFixed: number;
+  execTotal: number;
+  execPassed: number;
+  execFailed: number;
+  notes?: string | null;
+}
+
+export const automationTestLinesApi = {
+  list: (projectId: string) =>
+    apiClient<TestLine[]>(`/api/test-lines?projectId=${projectId}`),
+  get: (id: string) => apiClient<TestLine>(`/api/test-lines/${id}`),
+  create: (data: { projectId: string; name: string; complexity?: Complexity; externalId?: string | null }) =>
+    apiClient<TestLine>("/api/test-lines", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<{ name: string; complexity: Complexity; externalId: string | null }>) =>
+    apiClient<TestLine>(`/api/test-lines/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  remove: (id: string) => apiClient<void>(`/api/test-lines/${id}`, { method: "DELETE" }),
+};
+
+export const automationAssignmentsApi = {
+  byTestLine: (testLineId: string) =>
+    apiClient<AutomationAssignment[]>(`/api/automation-assignments?testLineId=${testLineId}`),
+  byTester: (testerId: string) =>
+    apiClient<AutomationAssignment[]>(`/api/automation-assignments?testerId=${testerId}`),
+  create: (data: { testerId: string; testLineId: string; startDate: string; endDate?: string | null; status?: AutomationStatus; notes?: string | null }) =>
+    apiClient<AutomationAssignment>("/api/automation-assignments", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<{ status: AutomationStatus; startDate: string; endDate: string | null; notes: string | null }>) =>
+    apiClient<AutomationAssignment>(`/api/automation-assignments/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  remove: (id: string) => apiClient<void>(`/api/automation-assignments/${id}`, { method: "DELETE" }),
+};
+
+export const automationRecordsApi = {
+  week: (testerId: string, weekStart: string) =>
+    apiClient<AutomationWeekResponse>(`/api/automation-records?testerId=${testerId}&weekStart=${weekStart}`),
+  bulk: (testerId: string, entries: AutomationBulkEntry[]) =>
+    apiClient<{ ok: boolean; updated: number }>("/api/automation-records/bulk", {
+      method: "POST",
+      body: JSON.stringify({ testerId, entries }),
+    }),
+};
+
+export interface AutomationWeekMetric {
+  weekStart: string;
+  scriptsCreated: number;
+  scriptsRefactored: number;
+  scriptsFixed: number;
+  execTotal: number;
+  execPassed: number;
+  execFailed: number;
+  passRatePct: number;
+}
+
+export interface AutomationMetrics {
+  weeks: AutomationWeekMetric[];
+  totals: {
+    scriptsCreated: number;
+    scriptsRefactored: number;
+    scriptsFixed: number;
+    execTotal: number;
+    execPassed: number;
+    execFailed: number;
+  };
+  passRatePct: number;
+}
+
+export const automationMetricsApi = {
+  get: (projectId: string, from: string, to: string) =>
+    apiClient<AutomationMetrics>(`/api/automation-metrics?projectId=${projectId}&from=${from}&to=${to}`),
+};
+
+// Lista los testers (analistas QA automatizadores) de un proyecto, para el selector de responsable.
+export const automationTestersApi = {
+  byProject: (projectId: string) =>
+    apiClient<ProjectTester[]>(`/api/testers?projectId=${projectId}`),
+};
+
+// Gestión del equipo de automatización (analistas) de un proyecto.
+export interface AnalystUserOption {
+  id: string;
+  name: string;
+  email: string;
+  isAutomation?: boolean;
+}
+
+export interface ProjectAnalyst {
+  id: string;
+  name: string;
+  allocation: number;
+  userId: string | null;
+  user: { id: string; name: string; email: string } | null;
+  _count: { records: number; automationAssignments: number };
+}
+
+export const automationTeamApi = {
+  analysts: (projectId: string) =>
+    apiClient<ProjectAnalyst[]>(`/api/testers?projectId=${projectId}`),
+  analystUsers: () =>
+    apiClient<AnalystUserOption[]>(`/api/users?role=QA_ANALYST`),
+  add: (data: { name: string; projectId: string; userId?: string | null; allocation?: number }) =>
+    apiClient<ProjectAnalyst>(`/api/testers`, { method: "POST", body: JSON.stringify(data) }),
+  remove: (id: string) => apiClient<void>(`/api/testers/${id}`, { method: "DELETE" }),
+};
+
+// Define el responsable ACTIVE de una línea, preservando el historial:
+// - desactiva (status DONE) cualquier otra asignación ACTIVE de la línea (no borra registros),
+// - reactiva o crea la asignación del nuevo responsable.
+export async function setLineResponsible(testLineId: string, testerId: string): Promise<void> {
+  const existing = await automationAssignmentsApi.byTestLine(testLineId);
+  const today = new Date().toISOString().slice(0, 10);
+  for (const a of existing) {
+    if (a.testerId !== testerId && a.status === "ACTIVE") {
+      await automationAssignmentsApi.update(a.id, { status: "DONE", endDate: today });
+    }
+  }
+  const mine = existing.find((a) => a.testerId === testerId);
+  if (mine) {
+    if (mine.status !== "ACTIVE") {
+      await automationAssignmentsApi.update(mine.id, { status: "ACTIVE", endDate: null });
+    }
+  } else {
+    await automationAssignmentsApi.create({ testerId, testLineId, startDate: today, status: "ACTIVE" });
+  }
+}

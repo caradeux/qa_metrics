@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiClient } from "@/lib/api-client";
 
 interface Role { id: string; name: string }
-interface User { id: string; email: string; name: string; role: Role | string | null }
+interface User { id: string; email: string; name: string; role: Role | string | null; isAutomation?: boolean }
 
 const ROLE_META: Record<string, { label: string; desc: string; icon: string }> = {
   ADMIN: { label: "Administrador", desc: "Acceso total", icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" },
@@ -23,9 +23,12 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
   const [email, setEmail] = useState("");
   const [roles, setRoles] = useState<Role[]>([]);
   const [roleId, setRoleId] = useState<string>("");
+  const [isAutomation, setIsAutomation] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const roleName = roles.find((r) => r.id === roleId)?.name;
 
   useEffect(() => {
     Promise.all([
@@ -40,6 +43,7 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
           setEmail(u.email);
           const currentRoleId = typeof u.role === "object" && u.role ? u.role.id : rs.find((r) => r.name === u.role)?.id ?? "";
           setRoleId(currentRoleId);
+          setIsAutomation(!!u.isAutomation);
         } else {
           setError("Usuario no encontrado");
         }
@@ -56,7 +60,7 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
     try {
       await apiClient(`/api/users/${id}`, {
         method: "PUT",
-        body: JSON.stringify({ name, email, roleId }),
+        body: JSON.stringify({ name, email, roleId, isAutomation: roleName === "QA_ANALYST" ? isAutomation : false }),
       });
       router.push("/users");
     } catch (err: any) {
@@ -99,6 +103,15 @@ export default function EditUserPage({ params }: { params: Promise<{ id: string 
             })}
           </div>
         </div>
+        {roleName === "QA_ANALYST" && (
+          <label className="flex items-start gap-3 p-3 rounded-lg border border-border bg-[#2E5FA3]/[0.03] cursor-pointer">
+            <input type="checkbox" checked={isAutomation} onChange={(e) => setIsAutomation(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#1F3864]" />
+            <span>
+              <span className="block text-sm font-medium text-foreground">Es automatizador (QA Automatización)</span>
+              <span className="block text-xs text-gray-500 mt-0.5">Habilita asignar a este analista a líneas y tareas de automatización.</span>
+            </span>
+          </label>
+        )}
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-3">
           <button type="button" onClick={() => router.push("/users")} className="px-4 py-2 text-sm font-medium text-foreground bg-gray-100 rounded-lg hover:bg-gray-200 transition">Cancelar</button>

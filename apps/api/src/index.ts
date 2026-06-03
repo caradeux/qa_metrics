@@ -28,6 +28,10 @@ import activityCategoriesRoutes from "./routes/activity-categories.routes.js";
 import activitiesRoutes from "./routes/activities.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import flowpilotRoutes from "./routes/flowpilot.routes.js";
+import testLinesRoutes from "./routes/test-lines.routes.js";
+import automationAssignmentsRoutes from "./routes/automation-assignments.routes.js";
+import automationRecordsRoutes from "./routes/automation-records.routes.js";
+import automationMetricsRoutes from "./routes/automation-metrics.routes.js";
 
 const app = express();
 
@@ -86,6 +90,10 @@ app.use("/api/activity-categories", activityCategoriesRoutes);
 app.use("/api/activities", activitiesRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/flowpilot", flowpilotRoutes);
+app.use("/api/test-lines", testLinesRoutes);
+app.use("/api/automation-assignments", automationAssignmentsRoutes);
+app.use("/api/automation-records", automationRecordsRoutes);
+app.use("/api/automation-metrics", automationMetricsRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
