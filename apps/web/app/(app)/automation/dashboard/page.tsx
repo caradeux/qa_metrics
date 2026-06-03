@@ -73,7 +73,7 @@ export default function AutomationDashboardPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-gray-900 tracking-tight">Dashboard de Automatización</h1>
-        <p className="text-xs text-gray-400 mt-0.5">Producción de scripts y estabilidad de la suite</p>
+        <p className="text-xs text-gray-400 mt-0.5">Producción de scripts por línea de prueba</p>
       </div>
 
       <div className="mb-6 flex flex-wrap items-end gap-3">
@@ -124,9 +124,9 @@ export default function AutomationDashboardPage() {
       ) : (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KpiCard label="Scripts creados" value={t!.scriptsCreated} sub={`${t!.scriptsRefactored} refactor · ${t!.scriptsFixed} corregidos`} />
-            <KpiCard label="Ejecuciones" value={t!.execTotal} sub={`${t!.execPassed} pasaron · ${t!.execFailed} fallaron`} />
-            <KpiCard label="Pass-rate" value={`${metrics.passRatePct}%`} sub="del período" />
+            <KpiCard label="Scripts creados" value={t!.scriptsCreated} />
+            <KpiCard label="Refactorizados" value={t!.scriptsRefactored} />
+            <KpiCard label="Corregidos" value={t!.scriptsFixed} />
             <KpiCard label="Semanas con datos" value={metrics.weeks.length} />
           </div>
 
@@ -139,16 +139,6 @@ export default function AutomationDashboardPage() {
                 { dataKey: "scriptsRefactored", name: "Refactor", color: "#4A90D9" },
                 { dataKey: "scriptsFixed", name: "Corregidos", color: "#f59e0b" },
               ]}
-            />
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-            <h2 className="text-sm font-bold text-[#1F3864] mb-3">Estabilidad (pass-rate %) por semana</h2>
-            <AutomationTrendChart
-              data={metrics.weeks}
-              unit="%"
-              domain={[0, 100]}
-              lines={[{ dataKey: "passRatePct", name: "Pass-rate", color: "#10b981" }]}
             />
           </div>
         </div>
