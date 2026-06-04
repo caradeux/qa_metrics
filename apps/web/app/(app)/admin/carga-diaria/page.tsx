@@ -32,10 +32,16 @@ interface ExpectedAssignment {
   status: string;
 }
 
+interface ClientRef {
+  id: string;
+  name: string;
+}
+
 interface DailyLoadRow {
   userId: string;
   userName: string;
   userEmail: string;
+  clients: ClientRef[];
   daily: {
     loaded: boolean;
     storiesCount: number;
@@ -57,6 +63,7 @@ interface DailyLoadRow {
 interface DailyLoadResponse {
   date: string;
   isNonBusinessDay: boolean;
+  clients: ClientRef[];
   rows: DailyLoadRow[];
 }
 
@@ -265,6 +272,7 @@ export default function AdminCargaDiariaPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "pending" | "complete">("all");
+  const [clientId, setClientId] = useState<string>("all");
   const [toast, setToast] = useState<string | null>(null);
   const [toastError, setToastError] = useState(false);
   const [sendingReminders, setSendingReminders] = useState(false);
@@ -284,12 +292,19 @@ export default function AdminCargaDiariaPage() {
     }
   }, [showToast]);
 
+  // Si el cliente elegido ya no existe en la fecha actual, cae a "all" de forma segura.
+  const effectiveClientId = useMemo(() => {
+    if (clientId === "all" || !data) return "all";
+    return data.clients.some((c) => c.id === clientId) ? clientId : "all";
+  }, [clientId, data]);
+
   const sendReminders = useCallback(async () => {
     if (!data || sendingReminders) return;
     setSendingReminders(true);
     try {
+      const clientQs = effectiveClientId !== "all" ? `&clientId=${encodeURIComponent(effectiveClientId)}` : "";
       const res = await apiClient<{ testersNotified: number; assignmentsFlagged: number; errors: Array<{ email: string; message: string }> }>(
-        `/api/admin/send-daily-reminders?date=${data.date}`,
+        `/api/admin/send-daily-reminders?date=${data.date}${clientQs}`,
         { method: "POST" }
       );
       if (res.errors.length > 0) {
@@ -304,7 +319,7 @@ export default function AdminCargaDiariaPage() {
     } finally {
       setSendingReminders(false);
     }
-  }, [data, sendingReminders, showToast]);
+  }, [data, sendingReminders, showToast, effectiveClientId]);
 
   const fetchData = useCallback(async (d: string) => {
     setLoading(true);
@@ -324,22 +339,27 @@ export default function AdminCargaDiariaPage() {
     fetchData(date);
   }, [date, fetchData]);
 
+  // Filtrado por cliente primero; el resto (KPIs, chips, estado) se calcula sobre este subconjunto.
+  const clientFilteredRows = useMemo(() => {
+    if (!data) return [];
+    if (effectiveClientId === "all") return data.rows;
+    return data.rows.filter((r) => r.clients.some((c) => c.id === effectiveClientId));
+  }, [data, effectiveClientId]);
+
   const summary = useMemo(() => {
-    if (!data) return { dailyOk: 0, actOk: 0, none: 0, total: 0, complete: 0 };
-    const total = data.rows.length;
-    const dailyOk = data.rows.filter((r) => r.daily.loaded).length;
-    const actOk = data.rows.filter((r) => r.activities.loaded).length;
-    const none = data.rows.filter((r) => !r.daily.loaded && !r.activities.loaded).length;
-    const complete = data.rows.filter((r) => r.daily.loaded && r.activities.loaded).length;
+    const total = clientFilteredRows.length;
+    const dailyOk = clientFilteredRows.filter((r) => r.daily.loaded).length;
+    const actOk = clientFilteredRows.filter((r) => r.activities.loaded).length;
+    const none = clientFilteredRows.filter((r) => !r.daily.loaded && !r.activities.loaded).length;
+    const complete = clientFilteredRows.filter((r) => r.daily.loaded && r.activities.loaded).length;
     return { dailyOk, actOk, none, total, complete };
-  }, [data]);
+  }, [clientFilteredRows]);
 
   const visibleRows = useMemo(() => {
-    if (!data) return [];
-    if (filter === "all") return data.rows;
-    if (filter === "pending") return data.rows.filter((r) => !r.daily.loaded || !r.activities.loaded);
-    return data.rows.filter((r) => r.daily.loaded && r.activities.loaded);
-  }, [data, filter]);
+    if (filter === "all") return clientFilteredRows;
+    if (filter === "pending") return clientFilteredRows.filter((r) => !r.daily.loaded || !r.activities.loaded);
+    return clientFilteredRows.filter((r) => r.daily.loaded && r.activities.loaded);
+  }, [clientFilteredRows, filter]);
 
   const isToday = date === todayIso();
 
@@ -473,16 +493,33 @@ export default function AdminCargaDiariaPage() {
       {/* Filter chips + bulk actions */}
       {!loading && data && !data.isNonBusinessDay && summary.total > 0 && (
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <div className="flex bg-gray-100 rounded-md p-0.5">
-            <FilterTab active={filter === "all"} onClick={() => setFilter("all")}>
-              Todos <span className="ml-1 text-gray-400">{summary.total}</span>
-            </FilterTab>
-            <FilterTab active={filter === "pending"} onClick={() => setFilter("pending")}>
-              Pendientes <span className="ml-1 text-gray-400">{summary.total - summary.complete}</span>
-            </FilterTab>
-            <FilterTab active={filter === "complete"} onClick={() => setFilter("complete")}>
-              Completos <span className="ml-1 text-gray-400">{summary.complete}</span>
-            </FilterTab>
+          <div className="flex items-center gap-2 flex-wrap">
+            {data.clients.length > 0 && (
+              <label className="flex items-center gap-1.5 h-8 pl-2.5 pr-1.5 bg-white border border-gray-200 rounded-md shadow-sm">
+                <span className="text-[10px] uppercase tracking-[0.15em] text-gray-400">Cliente</span>
+                <select
+                  value={effectiveClientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  className="text-[11px] font-medium text-gray-700 bg-transparent focus:outline-none cursor-pointer pr-1"
+                >
+                  <option value="all">Todos los clientes</option>
+                  {data.clients.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <div className="flex bg-gray-100 rounded-md p-0.5">
+              <FilterTab active={filter === "all"} onClick={() => setFilter("all")}>
+                Todos <span className="ml-1 text-gray-400">{summary.total}</span>
+              </FilterTab>
+              <FilterTab active={filter === "pending"} onClick={() => setFilter("pending")}>
+                Pendientes <span className="ml-1 text-gray-400">{summary.total - summary.complete}</span>
+              </FilterTab>
+              <FilterTab active={filter === "complete"} onClick={() => setFilter("complete")}>
+                Completos <span className="ml-1 text-gray-400">{summary.complete}</span>
+              </FilterTab>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             {summary.total - summary.complete > 0 && (

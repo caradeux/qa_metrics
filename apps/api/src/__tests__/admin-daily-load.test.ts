@@ -133,6 +133,49 @@ describe("GET /api/admin/daily-load — rows", () => {
   });
 });
 
+describe("GET /api/admin/daily-load — clients", () => {
+  let adminToken: string;
+  beforeAll(async () => {
+    adminToken = await loginAs("admin@qametrics.com");
+  });
+
+  it("expone clients top-level y por row, derivados de los testers del analista", async () => {
+    const r = await fetch(`${API_URL}/api/admin/daily-load?date=2026-04-21`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    const body = await r.json();
+
+    // Top-level clients: array de { id, name } ordenado asc por name.
+    expect(Array.isArray(body.clients)).toBe(true);
+    const names = body.clients.map((c: any) => c.name);
+    expect(names).toEqual([...names].sort((a: string, b: string) => a.localeCompare(b, "es")));
+    for (const c of body.clients) {
+      expect(c).toMatchObject({ id: expect.any(String), name: expect.any(String) });
+    }
+
+    // Cada row trae clients; sus ids son subconjunto del top-level (la unión).
+    const topIds = new Set(body.clients.map((c: any) => c.id));
+    for (const row of body.rows) {
+      expect(Array.isArray(row.clients)).toBe(true);
+      for (const c of row.clients) {
+        expect(topIds.has(c.id)).toBe(true);
+      }
+      // sin ids duplicados por row
+      const ids = row.clients.map((c: any) => c.id);
+      expect(new Set(ids).size).toBe(ids.length);
+    }
+
+    // El top-level es exactamente la unión de los clients de las rows.
+    const unionIds = new Set<string>();
+    for (const row of body.rows) for (const c of row.clients) unionIds.add(c.id);
+    expect([...topIds].sort()).toEqual([...unionIds].sort());
+
+    // tester1 tiene Tester vinculado => al menos un cliente.
+    const tester1 = body.rows.find((r: any) => r.userEmail === "tester1@qametrics.com");
+    expect(tester1.clients.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe("GET /api/admin/daily-load — DailyRecord", () => {
   let adminToken: string;
   let testerId: string;
