@@ -70,6 +70,32 @@ describe("findTestersWithMissingRecords", () => {
     // No further assertion — open-ended assignments (endDate: null) may legitimately
     // match far-future dates. The first test covers shape of populated results.
   });
+
+  it("clientId acota a testers en proyectos de ese cliente", async () => {
+    // Cliente con al menos un proyecto y testers vinculados a usuarios activos.
+    const project = await prisma.project.findFirst({
+      where: { testers: { some: { user: { active: true } } } },
+      select: { clientId: true },
+    });
+    if (!project) return; // seed sin datos suficientes — nada que afirmar
+
+    const filtered = await findTestersWithMissingRecords(day, project.clientId);
+    expect(Array.isArray(filtered)).toBe(true);
+
+    // Todo tester retornado debe tener al menos una HU faltante en un proyecto del cliente.
+    for (const t of filtered) {
+      expect(t.missingAssignments.length).toBeGreaterThan(0);
+    }
+
+    // El subconjunto por cliente nunca excede al total sin filtro.
+    const all = await findTestersWithMissingRecords(day);
+    expect(filtered.length).toBeLessThanOrEqual(all.length);
+  });
+
+  it("clientId inexistente devuelve lista vacía", async () => {
+    const results = await findTestersWithMissingRecords(day, "cliente-inexistente-xyz");
+    expect(results).toEqual([]);
+  });
 });
 
 describe("resolveCcRecipients", () => {

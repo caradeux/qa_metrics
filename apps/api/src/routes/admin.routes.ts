@@ -52,7 +52,12 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
       id: true,
       email: true,
       name: true,
-      testers: { select: { id: true } },
+      testers: {
+        select: {
+          id: true,
+          project: { select: { client: { select: { id: true, name: true } } } },
+        },
+      },
     },
     orderBy: { name: "asc" },
   });
@@ -258,10 +263,19 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
     const d = dailyByUser.get(u.id);
     const a = actByUser.get(u.id);
     const exp = expectedByUser.get(u.id) ?? [];
+    const clientById = new Map<string, string>();
+    for (const t of u.testers) {
+      const c = t.project.client;
+      clientById.set(c.id, c.name);
+    }
+    const clients = [...clientById.entries()]
+      .map(([id, name]) => ({ id, name }))
+      .sort((x, y) => x.name.localeCompare(y.name, "es"));
     return {
       userId: u.id,
       userName: u.name,
       userEmail: u.email,
+      clients,
       daily: d
         ? {
             loaded: true,
@@ -285,7 +299,13 @@ router.get("/daily-load", async (req: AuthRequest, res: Response) => {
     };
   });
 
-  res.json({ date: dateStr, isNonBusinessDay, rows });
+  const clientById = new Map<string, string>();
+  for (const r of rows) for (const c of r.clients) clientById.set(c.id, c.name);
+  const clients = [...clientById.entries()]
+    .map(([id, name]) => ({ id, name }))
+    .sort((x, y) => x.name.localeCompare(y.name, "es"));
+
+  res.json({ date: dateStr, isNonBusinessDay, clients, rows });
 });
 
 // POST /api/admin/send-daily-reminders?date=YYYY-MM-DD&dryRun=true
@@ -295,9 +315,10 @@ router.post("/send-daily-reminders", async (req: AuthRequest, res: Response) => 
   const dateStr =
     (req.query.date as string | undefined) ?? new Date().toISOString().slice(0, 10);
   const dryRun = req.query.dryRun === "true";
+  const clientId = (req.query.clientId as string | undefined) || undefined;
   const day = toUtcDateOnly(dateStr);
 
-  const testers = await findTestersWithMissingRecords(day);
+  const testers = await findTestersWithMissingRecords(day, clientId);
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const replyTo = process.env.ALERT_REPLY_TO;
   const dayLabelStr = day.toLocaleDateString("es-CL", {

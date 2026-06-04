@@ -44,6 +44,7 @@ export interface TesterWithMissing {
 
 export async function findTestersWithMissingRecords(
   day: Date,
+  clientId?: string,
 ): Promise<TesterWithMissing[]> {
   const dayStart = new Date(day);
   dayStart.setUTCHours(0, 0, 0, 0);
@@ -52,6 +53,7 @@ export async function findTestersWithMissingRecords(
   const testers = await prisma.tester.findMany({
     where: {
       user: { active: true },
+      ...(clientId ? { project: { clientId } } : {}),
     },
     select: {
       id: true,
