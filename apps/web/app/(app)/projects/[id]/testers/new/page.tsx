@@ -11,6 +11,7 @@ interface AnalystUser {
   allocationUsed?: number;
   allocationAvailable?: number;
   allowOverallocation?: boolean;
+  specialties?: string[];
 }
 
 export default function NewTesterPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,13 +24,16 @@ export default function NewTesterPage({ params }: { params: Promise<{ id: string
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // Traemos TODOS los analistas (sin filtro de capacidad) para evitar crear testers
-  // "sin cuenta" cuando el analista ya está ocupado al 100%.
+  // Traemos solo los analistas asociados al cliente del proyecto (filtro estricto).
+  // El % de ocupación es solo informativo; no se filtra por capacidad.
   useEffect(() => {
-    apiClient<AnalystUser[]>("/api/users?role=QA_ANALYST")
-      .then(setAnalysts)
+    apiClient<{ client: { id: string } }>(`/api/projects/${projectId}`)
+      .then((p) =>
+        apiClient<AnalystUser[]>(`/api/users?role=QA_ANALYST&clientId=${p.client.id}`)
+          .then(setAnalysts)
+      )
       .catch(() => setAnalysts([]));
-  }, []);
+  }, [projectId]);
 
   function onPickUser(id: string) {
     setUserId(id);
@@ -81,7 +85,7 @@ export default function NewTesterPage({ params }: { params: Promise<{ id: string
                   : ` (${av}% disponible)`;
               return (
                 <option key={a.id} value={a.id}>
-                  {a.name} ({a.email}){overflow}
+                  {a.name} ({a.email}){a.specialties?.length ? ` · ${a.specialties.join(", ")}` : ""}{overflow}
                 </option>
               );
             })}

@@ -24,7 +24,7 @@ interface ClientGroup {
 }
 
 interface QuickListItem { id: string; name: string; extra?: string }
-interface AnalystOpt { id: string; name: string; email: string; allocationAvailable: number }
+interface AnalystOpt { id: string; name: string; email: string; allocationAvailable: number; specialties?: string[] }
 
 export default function ProjectsPage() {
   const [groups, setGroups] = useState<ClientGroup[]>([]);
@@ -50,7 +50,7 @@ export default function ProjectsPage() {
     try {
       const items = await loadQuickItems(project);
       setQuick({ project, kind: "testers", items });
-      apiClient<AnalystOpt[]>(`/api/users?role=QA_ANALYST&minCapacity=50`).then(setAnalysts).catch(() => setAnalysts([]));
+      apiClient<AnalystOpt[]>(`/api/users?role=QA_ANALYST&clientId=${project.client.id}`).then(setAnalysts).catch(() => setAnalysts([]));
     } catch {
       setQuick(q => q ? { ...q, items: [] } : null);
     }
@@ -298,8 +298,8 @@ export default function ProjectsPage() {
                     className="w-full rounded border border-gray-300 p-1.5 text-sm"
                   >
                     <option value="">— Tester sin cuenta —</option>
-                    {analysts.filter(a => a.allocationAvailable >= (draft.allocation ?? 100)).map(a => (
-                      <option key={a.id} value={a.id}>{a.name} — {a.allocationAvailable}% disp.</option>
+                    {analysts.map(a => (
+                      <option key={a.id} value={a.id}>{a.name} — {a.allocationAvailable}% disp.{a.specialties?.length ? ` · ${a.specialties.join(", ")}` : ""}</option>
                     ))}
                   </select>
                   <input
