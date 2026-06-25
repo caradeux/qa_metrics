@@ -86,7 +86,9 @@ router.post("/", requirePermission("users", "create") as any, async (req: AuthRe
         password: hashedPassword,
         name: data.name,
         roleId: data.roleId,
-        isAutomation: data.isAutomation ?? false,
+        specialties: data.specialties ?? [],
+        isAutomation: (data.specialties ?? []).includes("QA_AUTOMATION"),
+        ...(data.clientIds ? { assignedClients: { connect: data.clientIds.map(id => ({ id })) } } : {}),
       },
       select: {
         id: true,
@@ -140,21 +142,27 @@ router.put("/:id", requirePermission("users", "update") as any, async (req: Auth
 
     // Hash password if provided
     const updateData: Record<string, any> = { ...data };
+    delete updateData.clientIds;
+    delete updateData.specialties;
     if (data.password) {
       updateData.password = await bcrypt.hash(data.password, 12);
+    }
+    if (data.specialties !== undefined) {
+      updateData.specialties = data.specialties;
+      updateData.isAutomation = data.specialties.includes("QA_AUTOMATION");
+    }
+    if (data.clientIds !== undefined) {
+      updateData.assignedClients = { set: data.clientIds.map(id => ({ id })) };
     }
 
     const user = await prisma.user.update({
       where: { id },
       data: updateData,
       select: {
-        id: true,
-        email: true,
-        name: true,
-        active: true,
-        isAutomation: true,
-        createdAt: true,
+        id: true, email: true, name: true, active: true,
+        isAutomation: true, specialties: true, createdAt: true,
         role: { select: { id: true, name: true } },
+        assignedClients: { select: { id: true, name: true } },
       },
     });
     invalidateAuthCache();
