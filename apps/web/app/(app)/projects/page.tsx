@@ -36,7 +36,12 @@ export default function ProjectsPage() {
   const [draft, setDraft] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [clientFilter, setClientFilter] = useState<string>("all");
   const { can } = usePermissions();
+
+  // Filtro de empresas (cliente). Solo tiene sentido cuando se ven varias.
+  const displayGroups =
+    clientFilter === "all" ? groups : groups.filter((g) => g.clientName === clientFilter);
 
   async function loadQuickItems(project: Project) {
     const rows = await apiClient<any[]>(`/api/testers?projectId=${project.id}`);
@@ -120,16 +125,33 @@ export default function ProjectsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3">
         <h1 className="text-2xl font-bold text-foreground">Proyectos</h1>
-        {can("projects", "create") && (
-          <Link
-            href="/projects/new"
-            className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-secondary transition"
-          >
-            + Nuevo Proyecto
-          </Link>
-        )}
+        <div className="flex items-center gap-3">
+          {groups.length > 1 && (
+            <select
+              value={clientFilter}
+              onChange={(e) => setClientFilter(e.target.value)}
+              aria-label="Filtrar por empresa"
+              className="px-3 py-2 text-sm rounded-lg border border-border bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-secondary"
+            >
+              <option value="all">Todas las empresas</option>
+              {groups.map((g) => (
+                <option key={g.clientName} value={g.clientName}>
+                  {g.clientName}
+                </option>
+              ))}
+            </select>
+          )}
+          {can("projects", "create") && (
+            <Link
+              href="/projects/new"
+              className="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-secondary transition whitespace-nowrap"
+            >
+              + Nuevo Proyecto
+            </Link>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -149,7 +171,7 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {groups.map((group) => (
+          {displayGroups.map((group) => (
             <div key={group.clientName} className="bg-card rounded-xl border border-border overflow-hidden">
               <div className="px-4 py-3 bg-gray-50 border-b border-border">
                 <h2 className="font-semibold text-foreground">{group.clientName}</h2>
