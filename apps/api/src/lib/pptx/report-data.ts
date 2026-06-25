@@ -1,11 +1,7 @@
-import { prisma } from "@qa-metrics/database";
+import { prisma, type AssignmentStatus } from "@qa-metrics/database";
 import type { AuthRequest } from "../../middleware/auth.js";
 import { isClientPm, isAnalyst, clientPmProjectIds, analystProjectIds } from "../access.js";
-
-const ACTIVE_OR_UAT = [
-  "REGISTERED", "ANALYSIS", "TEST_DESIGN", "WAITING_QA_DEPLOY",
-  "EXECUTION", "RETURNED_TO_DEV", "UAT",
-] as const;
+import { VISIBLE_STATUSES, isStoryVisibleInPeriod } from "./report-visibility.js";
 
 export async function buildProjectScope(
   req: AuthRequest,
@@ -23,35 +19,27 @@ export async function buildProjectScope(
   return scope;
 }
 
-// Estados visibles a nivel de visibilidad del reporte. PRODUCTION queda fuera
-// porque una HU cerrada hace semanas no debe re-aparecer; sí entra si tiene
-// DailyRecords en el periodo (HU que cerró durante el periodo).
-const VISIBLE_STATUSES = [
-  ...ACTIVE_OR_UAT,
-  "ON_HOLD" as const,
-];
-
 export async function loadScopedProjects(
   scope: Record<string, unknown>,
   periodStart: Date,
   periodEnd: Date,
 ) {
-  // Filtro de visibilidad: assignment en estado visible O con DailyRecord en
-  // el periodo. Se aplica a nivel de project + story para decidir QUÉ HUs
-  // aparecen en el reporte. NO se aplica al cargar los assignments dentro de
-  // cada story: ahí se traen TODOS los assignments para que el "estado actual"
-  // (s.assignments[0]) sea el del último ciclo real, sin importar si ese
-  // último ciclo está en PRODUCTION o en cualquier otro estado filtrado.
-  const assignmentFilter = {
+  // Filtro candidato: captura todas las HUs que podrían aparecer en el
+  // reporte. Incluye: assignment en estado visible, O con DailyRecord en el
+  // periodo, O con un StatusLog de paso a PRODUCTION en el periodo.
+  // El post-filtro en JS con isStoryVisibleInPeriod aplica la regla precisa
+  // (basada en el ÚLTIMO assignment) para descartar falsos positivos.
+  const candidateFilter = {
     OR: [
-      { status: { in: VISIBLE_STATUSES } },
+      { status: { in: VISIBLE_STATUSES as unknown as AssignmentStatus[] } },
       { dailyRecords: { some: { date: { gte: periodStart, lte: periodEnd } } } },
+      { statusLogs: { some: { status: "PRODUCTION" as AssignmentStatus, changedAt: { gte: periodStart, lte: periodEnd } } } },
     ],
   };
-  return prisma.project.findMany({
+  const projects = await prisma.project.findMany({
     where: {
       ...scope,
-      stories: { some: { assignments: { some: assignmentFilter } } },
+      stories: { some: { assignments: { some: candidateFilter } } },
     },
     select: {
       id: true,
@@ -63,9 +51,10 @@ export async function loadScopedProjects(
         orderBy: { allocation: "desc" },
       },
       stories: {
-        // Visibilidad a nivel story: solo cargar stories con al menos un
-        // assignment que cumpla el filtro de visibilidad.
-        where: { assignments: { some: assignmentFilter } },
+        // Pre-filtro a nivel story: candidatas con al menos un assignment
+        // que cumpla el filtro candidato. El post-filtro JS aplica la regla
+        // precisa basada en el último ciclo.
+        where: { assignments: { some: candidateFilter } },
         select: {
           id: true,
           externalId: true,
@@ -89,6 +78,10 @@ export async function loadScopedProjects(
                 where: { date: { gte: periodStart, lte: periodEnd } },
                 select: { date: true, designed: true, executed: true, defects: true },
               },
+              statusLogs: {
+                where: { status: "PRODUCTION" as AssignmentStatus, changedAt: { gte: periodStart, lte: periodEnd } },
+                select: { id: true },
+              },
             },
             // Ordenar por createdAt DESC: [0] es el último ciclo creado y
             // representa el estado actual de la HU.
@@ -99,6 +92,24 @@ export async function loadScopedProjects(
     },
     orderBy: { name: "asc" },
   });
+  // Post-filtro preciso: una HU se muestra si su ÚLTIMO assignment está en
+  // progreso (VISIBLE_STATUSES), O si tuvo actividad (dailyRecords) en el
+  // periodo, O si pasó a PRODUCTION durante el periodo (statusLogs).
+  return projects
+    .map((p) => ({
+      ...p,
+      stories: p.stories.filter((s) =>
+        isStoryVisibleInPeriod(
+          s.assignments.map((a) => ({
+            status: a.status,
+            createdAt: a.createdAt,
+            dailyRecords: a.dailyRecords,
+            productionLogsInPeriod: a.statusLogs,
+          }))
+        )
+      ),
+    }))
+    .filter((p) => p.stories.length > 0);
 }
 
 export type LoadedProject = Awaited<ReturnType<typeof loadScopedProjects>>[number];
