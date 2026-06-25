@@ -18,6 +18,7 @@ export function isWorkday(date: Date, holidays: Date[]): boolean {
 }
 
 import { prisma, AssignmentStatus } from "@qa-metrics/database";
+import { isLatestCycleExcluded } from "./alert-visibility.js";
 
 const EXCLUDED_STATUSES: AssignmentStatus[] = [
   AssignmentStatus.ON_HOLD,
@@ -87,12 +88,36 @@ export async function findTestersWithMissingRecords(
     },
   });
 
+  // HUs cuyo ÚLTIMO ciclo ya está cerrado (PRODUCTION/UAT/ON_HOLD) no deben
+  // alertarse, aunque tengan ciclos viejos activos (p.ej. RETURNED_TO_DEV).
+  const candidateStoryIds = [
+    ...new Set(testers.flatMap((t) => t.assignments.map((a) => a.storyId))),
+  ];
+  const closedStoryIds = new Set<string>();
+  if (candidateStoryIds.length > 0) {
+    const allAssignments = await prisma.testerAssignment.findMany({
+      where: { storyId: { in: candidateStoryIds } },
+      select: { storyId: true, status: true, createdAt: true },
+    });
+    const byStory = new Map<string, { status: string; createdAt: Date }[]>();
+    for (const a of allAssignments) {
+      const list = byStory.get(a.storyId) ?? [];
+      list.push({ status: a.status, createdAt: a.createdAt });
+      byStory.set(a.storyId, list);
+    }
+    for (const [storyId, asgs] of byStory) {
+      if (isLatestCycleExcluded(asgs, EXCLUDED_STATUSES)) closedStoryIds.add(storyId);
+    }
+  }
+
   // Consolida por email: una persona con N filas Tester (N proyectos) recibe
   // UN solo correo con todas sus HUs faltantes, no N correos duplicados.
   const byEmail = new Map<string, TesterWithMissing>();
   for (const t of testers) {
     if (!t.user?.email) continue;
-    const missing = t.assignments.filter((a) => a.dailyRecords.length === 0);
+    const missing = t.assignments.filter(
+      (a) => a.dailyRecords.length === 0 && !closedStoryIds.has(a.storyId),
+    );
     if (missing.length === 0) continue;
     const mapped = missing.map((a) => ({
       assignmentId: a.id,
