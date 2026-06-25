@@ -13,9 +13,13 @@ router.use(authMiddleware as any);
 router.get("/", requirePermission("users", "read") as any, async (req: AuthRequest, res: Response) => {
   try {
     const roleFilter = req.query.role as string | undefined;
-    const minCapacity = req.query.minCapacity ? Number(req.query.minCapacity) : 0;
+    const clientId = req.query.clientId as string | undefined;
+    const where: any = {};
+    if (roleFilter) where.role = { name: roleFilter };
+    if (clientId) where.assignedClients = { some: { id: clientId } };
+
     const users = await prisma.user.findMany({
-      where: roleFilter ? { role: { name: roleFilter } } : {},
+      where,
       select: {
         id: true,
         email: true,
@@ -23,8 +27,10 @@ router.get("/", requirePermission("users", "read") as any, async (req: AuthReque
         active: true,
         allowOverallocation: true,
         isAutomation: true,
+        specialties: true,
         createdAt: true,
         role: { select: { id: true, name: true } },
+        assignedClients: { select: { id: true, name: true } },
         testers: {
           select: {
             allocation: true,
@@ -38,8 +44,7 @@ router.get("/", requirePermission("users", "read") as any, async (req: AuthReque
       },
       orderBy: { createdAt: "desc" },
     });
-    const withCapacity = users.map(u => {
-      // Only count allocation for testers with at least one ACTIVE assignment
+    const result = users.map(u => {
       const used = u.testers.reduce(
         (sum, t) => sum + (t.assignments.length > 0 ? t.allocation : 0),
         0
@@ -48,10 +53,7 @@ router.get("/", requirePermission("users", "read") as any, async (req: AuthReque
       const { testers, ...rest } = u;
       return { ...rest, allocationUsed: used, allocationAvailable: available };
     });
-    const filtered = minCapacity > 0
-      ? withCapacity.filter(u => u.allowOverallocation || u.allocationAvailable >= minCapacity)
-      : withCapacity;
-    res.json(filtered);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: "Error al obtener usuarios" });
   }
