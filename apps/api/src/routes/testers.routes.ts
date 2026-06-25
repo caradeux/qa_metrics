@@ -124,32 +124,32 @@ router.post("/", requirePermission("testers", "create") as any, async (req: Auth
     }
 
     const requestedAllocation = data.allocation ?? 100;
-    if (data.userId) {
-      const user = await prisma.user.findUnique({
-        where: { id: data.userId },
-        include: {
-          role: true,
-          assignedClients: { where: { id: project.clientId }, select: { id: true } },
-          testers: { select: { projectId: true } },
-        },
-      });
-      if (!user) { res.status(400).json({ error: "Usuario no encontrado" }); return; }
-      if (user.role.name !== "QA_ANALYST") { res.status(400).json({ error: "El usuario debe tener rol QA_ANALYST" }); return; }
-      if (user.assignedClients.length === 0) {
-        res.status(400).json({ error: "El analista no está asociado a este cliente" });
-        return;
-      }
-      if (user.testers.some(t => t.projectId === data.projectId)) {
-        res.status(409).json({ error: "Ese usuario ya está asignado a este proyecto" });
-        return;
-      }
+
+    // Un tester es siempre un analista existente del sistema (no se crea por texto).
+    const user = await prisma.user.findUnique({
+      where: { id: data.userId },
+      include: {
+        role: true,
+        assignedClients: { where: { id: project.clientId }, select: { id: true } },
+        testers: { select: { projectId: true } },
+      },
+    });
+    if (!user) { res.status(400).json({ error: "Analista no encontrado" }); return; }
+    if (user.role.name !== "QA_ANALYST") { res.status(400).json({ error: "El usuario debe tener rol QA_ANALYST" }); return; }
+    if (user.assignedClients.length === 0) {
+      res.status(400).json({ error: "El analista no está asociado a este cliente" });
+      return;
+    }
+    if (user.testers.some(t => t.projectId === data.projectId)) {
+      res.status(409).json({ error: "Ese analista ya está asignado a este proyecto" });
+      return;
     }
 
     const tester = await prisma.tester.create({
       data: {
-        name: data.name,
+        name: user.name, // el nombre del tester es el del analista
         projectId: data.projectId,
-        userId: data.userId ?? null,
+        userId: user.id,
         allocation: requestedAllocation,
       },
     });
@@ -177,11 +177,22 @@ router.put("/:id", requirePermission("testers", "update") as any, async (req: Au
       return;
     }
 
+    // Reasignar: el nuevo tester debe ser un analista del sistema; el nombre lo hereda.
+    let userUpdate: { userId?: string; name?: string } = {};
+    if (data.userId !== undefined) {
+      const user = await prisma.user.findUnique({
+        where: { id: data.userId },
+        select: { id: true, name: true, role: { select: { name: true } } },
+      });
+      if (!user) { res.status(400).json({ error: "Analista no encontrado" }); return; }
+      if (user.role.name !== "QA_ANALYST") { res.status(400).json({ error: "El usuario debe tener rol QA_ANALYST" }); return; }
+      userUpdate = { userId: user.id, name: user.name };
+    }
+
     const tester = await prisma.tester.update({
       where: { id },
       data: {
-        ...(data.name !== undefined ? { name: data.name } : {}),
-        ...(data.userId !== undefined ? { userId: data.userId } : {}),
+        ...userUpdate,
         ...(data.allocation !== undefined ? { allocation: data.allocation } : {}),
       },
     });

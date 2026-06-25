@@ -90,13 +90,12 @@ export default function ProjectsPage() {
     if (!quick) return;
     setSaving(true); setFormError(null);
     try {
-      if (!draft.name?.trim()) { setFormError("Nombre requerido"); setSaving(false); return; }
+      if (!draft.userId) { setFormError("Selecciona un analista"); setSaving(false); return; }
       await apiClient("/api/testers", {
         method: "POST",
         body: JSON.stringify({
           projectId: quick.project.id,
-          name: draft.name.trim(),
-          userId: draft.userId || null,
+          userId: draft.userId,
           allocation: draft.allocation,
         }),
       });
@@ -353,7 +352,7 @@ export default function ProjectsPage() {
                           onChange={e => setRowDrafts(prev => ({ ...prev, [t.id]: { ...d, userId: e.target.value } }))}
                           className="flex-1 rounded border border-gray-300 p-1 text-xs"
                         >
-                          <option value="">— Tester sin cuenta —</option>
+                          <option value="" disabled>Selecciona un analista…</option>
                           {analysts.map(a => (
                             <option key={a.id} value={a.id}>{a.name}</option>
                           ))}
@@ -396,22 +395,15 @@ export default function ProjectsPage() {
                     onChange={(e) => {
                       const uid = e.target.value;
                       const u = analysts.find(a => a.id === uid);
-                      setDraft({ ...draft, userId: uid, name: u ? u.name : draft.name });
+                      setDraft({ ...draft, userId: uid, name: u ? u.name : "" });
                     }}
                     className="w-full rounded border border-gray-300 p-1.5 text-sm"
                   >
-                    <option value="">— Tester sin cuenta —</option>
+                    <option value="" disabled>Selecciona un analista…</option>
                     {analysts.map(a => (
                       <option key={a.id} value={a.id}>{a.name} — {a.allocationAvailable}% disp.{a.specialties?.length ? ` · ${a.specialties.join(", ")}` : ""}</option>
                     ))}
                   </select>
-                  <input
-                    type="text"
-                    value={draft.name ?? ""}
-                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                    placeholder="Nombre del tester"
-                    className="w-full rounded border border-gray-300 p-1.5 text-sm"
-                  />
                   <div>
                     <div className="flex gap-1 mb-1">
                       {[25, 50, 75, 100].map(pct => (

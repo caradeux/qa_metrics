@@ -49,12 +49,12 @@ export default function EditTesterPage({ params }: { params: Promise<{ id: strin
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) { setError("El nombre es obligatorio"); return; }
+    if (!userId) { setError("Selecciona un analista del sistema"); return; }
     setSaving(true); setError("");
     try {
       await apiClient(`/api/testers/${testerId}`, {
         method: "PUT",
-        body: JSON.stringify({ name: name.trim(), userId: userId || null, allocation }),
+        body: JSON.stringify({ userId, allocation }),
       });
       router.push(`/projects/${projectId}/testers`);
     } catch (err: any) {
@@ -72,11 +72,11 @@ export default function EditTesterPage({ params }: { params: Promise<{ id: strin
       <form onSubmit={handleSubmit} className="space-y-5 bg-card p-6 rounded-xl border border-border">
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">
-            Vincular a analista
-            <span className="text-xs text-gray-400 font-normal ml-2">(para que pueda loguearse)</span>
+            Analista del sistema
+            <span className="text-red-500 ml-1">*</span>
           </label>
           <select value={userId} onChange={(e) => setUserId(e.target.value)} className={inp}>
-            <option value="">— Tester sin cuenta —</option>
+            <option value="" disabled>Selecciona un analista…</option>
             {analysts.map((a) => {
               const av = a.allocationAvailable ?? 100;
               const overflow = a.allowOverallocation
@@ -93,19 +93,9 @@ export default function EditTesterPage({ params }: { params: Promise<{ id: strin
           </select>
           {selected && (
             <p className="text-[11px] text-gray-500 mt-1">
-              Linkeado a <span className="font-medium">{selected.email}</span>.
-              Si lo desvinculas, el analista dejará de ver este proyecto en su listado.
+              Asignado a <span className="font-medium">{selected.email}</span>. Reasignar cambia el analista de este tester.
             </p>
           )}
-          {!selected && (
-            <p className="text-[11px] text-amber-600 mt-1">
-              Este tester no tiene cuenta de usuario → el analista no puede loguearse ni ver este proyecto en /projects.
-            </p>
-          )}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Nombre del tester</label>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className={inp} />
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-2">Dedicación al proyecto</label>

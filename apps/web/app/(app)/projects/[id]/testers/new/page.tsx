@@ -49,12 +49,12 @@ export default function NewTesterPage({ params }: { params: Promise<{ id: string
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) { setError("El nombre es obligatorio"); return; }
+    if (!userId) { setError("Selecciona un analista del sistema"); return; }
     setSaving(true); setError("");
     try {
       await apiClient("/api/testers", {
         method: "POST",
-        body: JSON.stringify({ name: name.trim(), projectId, userId: userId || null, allocation }),
+        body: JSON.stringify({ projectId, userId, allocation }),
       });
       router.push(`/projects/${projectId}/testers`);
     } catch (err: any) {
@@ -70,12 +70,11 @@ export default function NewTesterPage({ params }: { params: Promise<{ id: string
       <form onSubmit={handleSubmit} className="space-y-5 bg-card p-6 rounded-xl border border-border">
         <div>
           <label className="block text-sm font-medium text-foreground mb-1">
-            Vincular a analista existente
+            Analista del sistema
             <span className="text-red-500 ml-1">*</span>
-            <span className="text-xs text-gray-400 font-normal ml-2">(recomendado)</span>
           </label>
           <select value={userId} onChange={(e) => onPickUser(e.target.value)} className={inp}>
-            <option value="">— Tester sin cuenta —</option>
+            <option value="" disabled>Selecciona un analista…</option>
             {analysts.map((a) => {
               const av = a.allocationAvailable ?? 100;
               const overflow = a.allowOverallocation
@@ -91,8 +90,7 @@ export default function NewTesterPage({ params }: { params: Promise<{ id: string
             })}
           </select>
           <p className="text-[11px] text-gray-500 mt-1">
-            Vincular el tester a un User permite que el analista se loguee y cargue sus registros.
-            Si no lo vinculas, no podrá ver este proyecto en su listado.
+            El tester es un analista del sistema. Al asignarlo, podrá loguearse, ver este proyecto y cargar sus registros.
           </p>
           {willOverallocate && (
             <div className="mt-2 px-3 py-2 bg-amber-50 border-l-4 border-amber-300 rounded-r">
@@ -103,10 +101,6 @@ export default function NewTesterPage({ params }: { params: Promise<{ id: string
               </p>
             </div>
           )}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">Nombre del tester</label>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} required autoFocus className={inp} placeholder="Nombre del tester" />
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-2">Dedicación al proyecto</label>
