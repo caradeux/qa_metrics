@@ -474,6 +474,18 @@ async function main() {
   }
   await ensureAutoAssignment(autoTester2.id, testLine1.id, "2026-01-05", "2026-12-31", "MAINTENANCE");
 
+  // Asociar Ana Garcia a un cliente concreto para tests del filtro estricto
+  const primerCliente = await prisma.client.findFirst({ orderBy: { name: "asc" } });
+  if (primerCliente) {
+    await prisma.user.update({
+      where: { email: "ana.garcia@qametrics.com" },
+      data: {
+        specialties: ["QA_MANUAL"],
+        assignedClients: { set: [{ id: primerCliente.id }] },
+      },
+    });
+  }
+
   console.log("Seed completado (idempotente):");
   console.log("- Feriados CL 2026 (skipDuplicates)");
   console.log("- 4 roles (ADMIN, QA_LEAD, QA_ANALYST, CLIENT_PM)");
