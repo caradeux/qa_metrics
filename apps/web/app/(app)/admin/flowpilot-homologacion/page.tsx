@@ -38,6 +38,10 @@ export default function FlowpilotHomologacionPage() {
 
   useEffect(() => { if (userId) loadMappings(userId); }, [userId, loadMappings]);
 
+  // Tipos aún no homologados para este usuario (evita pisar uno existente al agregar).
+  const usedKinds = new Set(mappings.map((m) => m.kind));
+  const availableKinds = KIND_OPTIONS.filter((k) => !usedKinds.has(k));
+
   if (user && !can("flowpilot-mappings", "read")) {
     return <div className="max-w-md mx-auto mt-24 text-center text-sm text-gray-500">No tienes permiso para la homologación de FlowPilot.</div>;
   }
@@ -59,8 +63,11 @@ export default function FlowpilotHomologacionPage() {
           {users.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.email})</option>)}
         </select>
         {userId && (
-          <button onClick={() => setEditing({ userId, kind: "QA_WORK", entityType: "contract" })}
-            className="ml-auto text-sm bg-[#2E5FA3] text-white rounded-md px-3 py-1.5 hover:bg-[#264f88]">
+          <button
+            onClick={() => availableKinds.length > 0 && setEditing({ userId, kind: availableKinds[0], entityType: "contract" })}
+            disabled={availableKinds.length === 0}
+            title={availableKinds.length === 0 ? "Ya existe una homologación para cada tipo" : ""}
+            className="ml-auto text-sm bg-[#2E5FA3] text-white rounded-md px-3 py-1.5 hover:bg-[#264f88] disabled:opacity-50 disabled:cursor-not-allowed">
             + Agregar homologación
           </button>
         )}
@@ -88,6 +95,8 @@ export default function FlowpilotHomologacionPage() {
         <MappingEditor
           initial={editing}
           userId={userId}
+          kindOptions={editing.id ? [editing.kind as string] : availableKinds}
+          lockKind={!!editing.id}
           reloadKey={reloadKey}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); loadMappings(userId); }}
@@ -108,17 +117,19 @@ export default function FlowpilotHomologacionPage() {
 }
 
 function MappingEditor({
-  initial, userId, reloadKey, onClose, onSaved, onError, onAuthError,
+  initial, userId, kindOptions, lockKind, reloadKey, onClose, onSaved, onError, onAuthError,
 }: {
   initial: Partial<FlowpilotMapping>;
   userId: string;
+  kindOptions: string[];
+  lockKind: boolean;
   reloadKey: number;
   onClose: () => void;
   onSaved: () => void;
   onError: (m: string) => void;
   onAuthError: () => void;
 }) {
-  const [kind, setKind] = useState(initial.kind ?? "QA_WORK");
+  const [kind, setKind] = useState(initial.kind ?? kindOptions[0] ?? "QA_WORK");
   const [entityType, setEntityType] = useState<"contract" | "project">(initial.entityType ?? "contract");
   const [clients, setClients] = useState<FlowpilotCatalogItem[]>([]);
   const [entities, setEntities] = useState<FlowpilotCatalogItem[]>([]);
@@ -161,9 +172,10 @@ function MappingEditor({
       <div className="bg-white rounded-lg shadow-xl p-5 w-[460px] space-y-3" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-base font-semibold text-gray-900">Homologación</h2>
         <Field label="Tipo (kind)">
-          <select value={kind} onChange={(e) => setKind(e.target.value)} className="w-full border rounded px-2 py-1.5 text-sm">
-            {KIND_OPTIONS.map((k) => <option key={k} value={k}>{k}</option>)}
+          <select value={kind} onChange={(e) => setKind(e.target.value)} disabled={lockKind} className="w-full border rounded px-2 py-1.5 text-sm disabled:bg-gray-50 disabled:text-gray-500">
+            {kindOptions.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
+          {lockKind && <p className="text-[11px] text-gray-400 mt-1">El tipo no se puede cambiar al editar. Para otro tipo, crea una nueva homologación.</p>}
         </Field>
         <Field label="Tipo de Entidad">
           <select value={entityType} onChange={(e) => { setEntityType(e.target.value as any); setClientId(null); setEntityId(null); }} className="w-full border rounded px-2 py-1.5 text-sm">
