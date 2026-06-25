@@ -23,7 +23,7 @@ interface ClientGroup {
   projects: Project[];
 }
 
-interface QuickListItem { id: string; name: string; extra?: string }
+interface QuickTester { id: string; name: string; userId: string | null; allocation: number; records: number }
 interface AnalystOpt { id: string; name: string; email: string; allocationAvailable: number; specialties?: string[] }
 
 export default function ProjectsPage() {
@@ -31,27 +31,32 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [quick, setQuick] = useState<{ project: Project; kind: "testers"; items: QuickListItem[] | null } | null>(null);
+  const [quick, setQuick] = useState<{ project: Project; kind: "testers"; items: QuickTester[] | null } | null>(null);
   const [analysts, setAnalysts] = useState<AnalystOpt[]>([]);
   const [draft, setDraft] = useState<any>({});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [clientFilter, setClientFilter] = useState<string>("all");
+  const [rowDrafts, setRowDrafts] = useState<Record<string, { allocation: number; userId: string }>>({});
+  const [rowSaving, setRowSaving] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<string | null>(null);
   const { can } = usePermissions();
 
   // Filtro de empresas (cliente). Solo tiene sentido cuando se ven varias.
   const displayGroups =
     clientFilter === "all" ? groups : groups.filter((g) => g.clientName === clientFilter);
 
-  async function loadQuickItems(project: Project) {
+  async function loadQuickItems(project: Project): Promise<QuickTester[]> {
     const rows = await apiClient<any[]>(`/api/testers?projectId=${project.id}`);
-    return rows.map(t => ({ id: t.id, name: t.name, extra: `${t.allocation ?? 100}%` }));
+    return rows.map(t => ({ id: t.id, name: t.name, userId: t.user?.id ?? null, allocation: t.allocation ?? 100, records: t._count?.records ?? 0 }));
   }
 
   async function openQuick(project: Project) {
     setQuick({ project, kind: "testers", items: null });
     setFormError(null);
     setDraft({ userId: "", name: "", allocation: 100 });
+    setRowDrafts({});
+    setRowError(null);
     try {
       const items = await loadQuickItems(project);
       setQuick({ project, kind: "testers", items });
@@ -59,6 +64,26 @@ export default function ProjectsPage() {
     } catch {
       setQuick(q => q ? { ...q, items: [] } : null);
     }
+  }
+
+  async function saveRow(t: QuickTester) {
+    const d = rowDrafts[t.id] ?? { allocation: t.allocation, userId: t.userId ?? "" };
+    setRowSaving(t.id); setRowError(null);
+    try {
+      await apiClient(`/api/testers/${t.id}`, { method: "PUT", body: JSON.stringify({ name: t.name, userId: d.userId || null, allocation: d.allocation }) });
+      if (quick) { const items = await loadQuickItems(quick.project); setQuick({ ...quick, items }); }
+      setRowDrafts(prev => { const n = { ...prev }; delete n[t.id]; return n; });
+      fetchProjects();
+    } catch (e: any) { setRowError(e?.message ?? "Error al guardar"); } finally { setRowSaving(null); }
+  }
+
+  async function removeRow(t: QuickTester) {
+    setRowSaving(t.id); setRowError(null);
+    try {
+      await apiClient(`/api/testers/${t.id}`, { method: "DELETE" });
+      if (quick) { const items = await loadQuickItems(quick.project); setQuick({ ...quick, items }); }
+      fetchProjects();
+    } catch (e: any) { setRowError(e?.message ?? "No se pudo quitar (¿tiene registros?)"); } finally { setRowSaving(null); }
   }
 
   async function submitDraft() {
@@ -288,20 +313,76 @@ export default function ProjectsPage() {
               <p className="text-[11px] text-gray-500">Cliente: {quick.project.client.name}</p>
             </div>
 
-            {/* Listado */}
+            {/* Listado editable */}
             {quick.items === null ? (
               <p className="text-sm text-gray-500">Cargando…</p>
             ) : quick.items.length === 0 ? (
               <p className="text-sm text-gray-500">Aún no hay testers.</p>
             ) : (
-              <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 bg-white max-h-40 overflow-auto">
-                {quick.items.map(it => (
-                  <li key={it.id} className="flex items-center justify-between px-4 py-2">
-                    <span className="text-sm text-gray-900">{it.name}</span>
-                    {it.extra && <span className="text-xs text-gray-500">{it.extra}</span>}
-                  </li>
-                ))}
-              </ul>
+              <div className="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100 max-h-64 overflow-auto">
+                {rowError && (
+                  <p className="text-xs text-red-600 px-3 py-1.5 bg-red-50">{rowError}</p>
+                )}
+                {quick.items.map(t => {
+                  const d = rowDrafts[t.id] ?? { allocation: t.allocation, userId: t.userId ?? "" };
+                  const changed = d.allocation !== t.allocation || d.userId !== (t.userId ?? "");
+                  const isSaving = rowSaving === t.id;
+                  return (
+                    <div key={t.id} className="px-3 py-2 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium text-gray-900 truncate">{t.name}</span>
+                        <span className="text-[10px] text-gray-400 shrink-0">{t.records} registro(s)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 shrink-0">
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={d.allocation}
+                            onChange={e => {
+                              const v = Math.min(100, Math.max(1, Number(e.target.value) || 1));
+                              setRowDrafts(prev => ({ ...prev, [t.id]: { ...d, allocation: v } }));
+                            }}
+                            className="w-14 rounded border border-gray-300 p-1 text-xs text-center"
+                          />
+                          <span className="text-xs text-gray-500">%</span>
+                        </div>
+                        <select
+                          value={d.userId}
+                          onChange={e => setRowDrafts(prev => ({ ...prev, [t.id]: { ...d, userId: e.target.value } }))}
+                          className="flex-1 rounded border border-gray-300 p-1 text-xs"
+                        >
+                          <option value="">— Tester sin cuenta —</option>
+                          {analysts.map(a => (
+                            <option key={a.id} value={a.id}>{a.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-1 justify-end">
+                        {changed && (
+                          <button
+                            type="button"
+                            disabled={isSaving}
+                            onClick={() => saveRow(t)}
+                            className="px-2 py-0.5 text-[10px] font-semibold text-white bg-[#1F3864] rounded hover:bg-[#2E5FA3] disabled:opacity-50"
+                          >
+                            {isSaving ? "…" : "Guardar"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => removeRow(t)}
+                          className="px-2 py-0.5 text-[10px] font-semibold text-red-600 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50"
+                        >
+                          {isSaving ? "…" : "Quitar"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
 
             {/* Form inline */}
@@ -331,17 +412,30 @@ export default function ProjectsPage() {
                     placeholder="Nombre del tester"
                     className="w-full rounded border border-gray-300 p-1.5 text-sm"
                   />
-                  <div className="flex gap-2">
-                    {[50, 100].map(pct => (
-                      <button
-                        key={pct}
-                        type="button"
-                        onClick={() => setDraft({ ...draft, allocation: pct })}
-                        className={`flex-1 rounded border px-2 py-1 text-xs font-semibold ${draft.allocation === pct ? "border-[#2E5FA3] bg-[#2E5FA3]/10 text-[#2E5FA3]" : "border-gray-200 text-gray-600"}`}
-                      >
-                        {pct}%
-                      </button>
-                    ))}
+                  <div>
+                    <div className="flex gap-1 mb-1">
+                      {[25, 50, 75, 100].map(pct => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setDraft({ ...draft, allocation: pct })}
+                          className={`flex-1 rounded border px-1 py-1 text-xs font-semibold ${draft.allocation === pct ? "border-[#2E5FA3] bg-[#2E5FA3]/10 text-[#2E5FA3]" : "border-gray-200 text-gray-600"}`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={draft.allocation ?? 100}
+                      onChange={e => {
+                        const v = Math.min(100, Math.max(1, Number(e.target.value) || 1));
+                        setDraft({ ...draft, allocation: v });
+                      }}
+                      className="w-full rounded border border-gray-300 p-1.5 text-sm text-center"
+                    />
                   </div>
               </>
               {formError && <p className="text-xs text-red-600">{formError}</p>}

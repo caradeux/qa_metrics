@@ -40,10 +40,10 @@ export default function EditTesterPage({ params }: { params: Promise<{ id: strin
         setLoaded(true);
       })
       .catch((err) => { setError(err.message || "Error al cargar"); setLoaded(true); });
-    apiClient<AnalystUser[]>("/api/users?role=QA_ANALYST")
-      .then(setAnalysts)
+    apiClient<{ client: { id: string } }>(`/api/projects/${projectId}`)
+      .then((p) => apiClient<AnalystUser[]>(`/api/users?role=QA_ANALYST&clientId=${p.client.id}`).then(setAnalysts))
       .catch(() => setAnalysts([]));
-  }, [testerId]);
+  }, [testerId, projectId]);
 
   const selected = useMemo(() => analysts.find((a) => a.id === userId), [analysts, userId]);
 
@@ -109,23 +109,30 @@ export default function EditTesterPage({ params }: { params: Promise<{ id: strin
         </div>
         <div>
           <label className="block text-sm font-medium text-foreground mb-2">Dedicación al proyecto</label>
-          <div className="grid grid-cols-2 gap-3">
-            {[50, 100].map((pct) => (
+          <div className="flex gap-2 mb-2">
+            {[25, 50, 75, 100].map((pct) => (
               <button
                 key={pct}
                 type="button"
                 onClick={() => setAllocation(pct)}
-                className={`p-3 rounded-lg border text-center transition-all ${
+                className={`flex-1 p-2 rounded-lg border text-center transition-all ${
                   allocation === pct
                     ? "border-[#2E5FA3] bg-[#2E5FA3]/5 shadow-sm"
                     : "border-gray-200 hover:border-gray-300"
                 }`}
               >
-                <p className={`text-lg font-bold ${allocation === pct ? "text-[#2E5FA3]" : "text-gray-700"}`}>{pct}%</p>
-                <p className="text-[11px] text-gray-500 mt-0.5">{pct === 100 ? "Tiempo completo" : "Medio tiempo"}</p>
+                <p className={`text-sm font-bold ${allocation === pct ? "text-[#2E5FA3]" : "text-gray-700"}`}>{pct}%</p>
               </button>
             ))}
           </div>
+          <input
+            type="number"
+            min={1}
+            max={100}
+            value={allocation}
+            onChange={(e) => setAllocation(Math.min(100, Math.max(1, Number(e.target.value) || 1)))}
+            className={inp + " text-center"}
+          />
         </div>
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-3">
