@@ -3,7 +3,6 @@ import { prisma } from "@qa-metrics/database";
 import { authMiddleware, requirePermission, type AuthRequest } from "../middleware/auth.js";
 import { createTesterSchema, updateTesterSchema } from "../validators/tester.validator.js";
 import { isClientPm, isAnalyst } from "../lib/access.js";
-import { ACTIVE_STATUSES } from "../lib/assignment-states.js";
 import { ZodError } from "zod";
 
 const router = Router();
@@ -130,35 +129,19 @@ router.post("/", requirePermission("testers", "create") as any, async (req: Auth
         where: { id: data.userId },
         include: {
           role: true,
-          testers: {
-            select: {
-              allocation: true,
-              projectId: true,
-              assignments: {
-                where: { status: { in: [...ACTIVE_STATUSES] } },
-                select: { id: true },
-                take: 1,
-              },
-            },
-          },
+          assignedClients: { where: { id: project.clientId }, select: { id: true } },
+          testers: { select: { projectId: true } },
         },
       });
       if (!user) { res.status(400).json({ error: "Usuario no encontrado" }); return; }
       if (user.role.name !== "QA_ANALYST") { res.status(400).json({ error: "El usuario debe tener rol QA_ANALYST" }); return; }
+      if (user.assignedClients.length === 0) {
+        res.status(400).json({ error: "El analista no está asociado a este cliente" });
+        return;
+      }
       if (user.testers.some(t => t.projectId === data.projectId)) {
         res.status(409).json({ error: "Ese usuario ya está asignado a este proyecto" });
         return;
-      }
-      if (!user.allowOverallocation) {
-        // Only count testers that currently have at least one ACTIVE assignment
-        const currentSum = user.testers.reduce(
-          (sum, t) => sum + (t.assignments.length > 0 ? t.allocation : 0),
-          0
-        );
-        if (currentSum + requestedAllocation > 100) {
-          res.status(409).json({ error: `Capacidad excedida: el usuario tiene ${currentSum}% asignado; quedan ${100 - currentSum}% disponibles` });
-          return;
-        }
       }
     }
 
