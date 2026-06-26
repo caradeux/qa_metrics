@@ -93,22 +93,48 @@ export function addProjectHuTableSlide(pres: PptxGenJS, p: ProjectReportData): v
     border: { type: "solid", pt: 0.5, color: "E5E7EB" },
   } as any);
 
-  // Nota al pie: HUs "En Diseño" cuyo diseño se hizo en semanas previas (marcadas
-  // con * en la tabla). Aclara que el Dis.=0 de la semana NO significa estancamiento.
+  // Callout: HUs "En Diseño" cuyo diseño se hizo en semanas previas (marcadas con
+  // * en la tabla). Aclara que el Dis.=0 de la semana NO significa estancamiento.
+  // Se ubica pegado bajo la tabla y con estilo destacado para que se note.
   const priorDesigned = sorted.filter((h) => h.priorDesign);
   if (priorDesigned.length > 0) {
-    const MAX_NOTES = 4;
+    const MAX_NOTES = 6;
     const visible = priorDesigned.slice(0, MAX_NOTES);
-    const entries = visible.map((h) => {
-      const id = h.externalId ? `${h.externalId}` : truncate(h.title, 28);
-      return `${id} — diseñada ${h.priorDesign!.weekRangeLabel} (${h.priorDesign!.totalDesigned} casos)`;
-    });
     const overflow = priorDesigned.length - visible.length;
-    const noteText = `*  Casos diseñados en semanas previas:   ${entries.join("    ·    ")}${overflow > 0 ? `    ·    … y ${overflow} más` : ""}`;
-    s.addText(noteText, {
-      x: 0.3, y: SLIDE.heightIn - 0.95, w: SLIDE.widthIn - 0.6, h: 0.45,
-      fontFace: FONT.face, fontSize: 8.5, italic: true, color: PALETTE.textMuted,
-      align: "left", valign: "top", wrap: true,
+    const entries = visible.map((h) => {
+      const id = h.externalId ?? truncate(h.title, 22);
+      return `${id} — ${h.priorDesign!.weekRangeLabel} (${h.priorDesign!.totalDesigned} casos)`;
+    });
+    const detail = entries.join("    ·    ") + (overflow > 0 ? `    ·    +${overflow} más` : "");
+
+    // Posición: justo bajo la tabla (alto estimado) sin chocar con la leyenda.
+    const estTableBottom = 1.0 + (sorted.length + 1) * 0.3;
+    const cy = Math.min(estTableBottom + 0.3, SLIDE.heightIn - 1.65);
+    const cx = 0.3;
+    const cw = SLIDE.widthIn - 0.6;
+    const ch = 0.78;
+
+    s.addShape((pres as any).shapes.ROUNDED_RECTANGLE, {
+      x: cx, y: cy, w: cw, h: ch,
+      fill: { color: "FEF3C7" }, line: { color: PALETTE.amber, width: 1 }, rectRadius: 0.06,
+    } as any);
+    s.addShape((pres as any).shapes.RECTANGLE, {
+      x: cx, y: cy, w: 0.09, h: ch, fill: { color: PALETTE.amber }, line: { type: "none" },
+    } as any);
+    s.addText(
+      [
+        { text: "✳  ", options: { bold: true, color: PALETTE.amber } },
+        { text: "Diseño realizado en semanas previas", options: { bold: true, color: PALETTE.textPrimary } },
+        { text: "  —  no aparece esta semana porque ya estaba hecho (las HU marcadas con * en la tabla).", options: { italic: true, color: PALETTE.textMuted } },
+      ] as any,
+      {
+        x: cx + 0.25, y: cy + 0.08, w: cw - 0.4, h: 0.3,
+        fontFace: FONT.face, fontSize: 11, valign: "middle",
+      } as any,
+    );
+    s.addText(detail, {
+      x: cx + 0.25, y: cy + 0.42, w: cw - 0.4, h: 0.3,
+      fontFace: FONT.face, fontSize: 10, color: PALETTE.textPrimary, valign: "middle", wrap: true,
     } as any);
   }
 
