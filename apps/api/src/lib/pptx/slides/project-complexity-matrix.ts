@@ -26,6 +26,10 @@ function chipLabel(b: ComplexityBubble): string {
   return b.title.length > 16 ? b.title.slice(0, 15) + "…" : b.title;
 }
 
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
+
 export function addProjectComplexityMatrixSlide(pres: PptxGenJS, p: ProjectReportData): void {
   const s = pres.addSlide();
   s.background = { color: PALETTE.grayLight };
@@ -188,19 +192,33 @@ export function addProjectComplexityMatrixSlide(pres: PptxGenJS, p: ProjectRepor
   top3.forEach((b, i) => {
     const cy = gridY + 2.65 + i * 1.0;
     const score = LEVEL_SCORE[b.designComplexity] + LEVEL_SCORE[b.executionComplexity];
+    const accent = cellBorderByScore(score);
     s.addShape((pres as any).shapes.ROUNDED_RECTANGLE, {
       x: rightX, y: cy, w: rightW, h: 0.9,
       fill: { color: PALETTE.white },
-      line: { color: cellBorderByScore(score), width: 1.25 },
+      line: { color: accent, width: 1.25 },
       rectRadius: 0.06,
     } as any);
-    s.addText(b.title, {
-      x: rightX + 0.1, y: cy + 0.05, w: rightW - 0.2, h: 0.4,
-      fontFace: FONT.face, fontSize: 10, bold: true, color: PALETTE.textPrimary,
+    // Franja izquierda de color (ancla visual del ranking).
+    s.addShape((pres as any).shapes.RECTANGLE, {
+      x: rightX, y: cy, w: 0.08, h: 0.9,
+      fill: { color: accent }, line: { type: "none" },
+    } as any);
+    // Número de ranking.
+    s.addText(String(i + 1), {
+      x: rightX + 0.12, y: cy + 0.06, w: 0.32, h: 0.32,
+      fontFace: FONT.face, fontSize: 13, bold: true, color: accent,
+      align: "center", valign: "middle",
     });
+    // Título recortado para que nunca desborde la tarjeta angosta.
+    s.addText(truncate(b.title, 46), {
+      x: rightX + 0.46, y: cy + 0.08, w: rightW - 0.56, h: 0.42,
+      fontFace: FONT.face, fontSize: 9.5, bold: true, color: PALETTE.textPrimary,
+      valign: "top", wrap: true,
+    } as any);
     s.addText(`${LEVEL_LABEL[b.designComplexity]} × ${LEVEL_LABEL[b.executionComplexity]} · ${b.size} casos`, {
-      x: rightX + 0.1, y: cy + 0.45, w: rightW - 0.2, h: 0.4,
-      fontFace: FONT.face, fontSize: 9, color: PALETTE.textMuted,
+      x: rightX + 0.46, y: cy + 0.56, w: rightW - 0.56, h: 0.3,
+      fontFace: FONT.face, fontSize: 9, color: PALETTE.textMuted, valign: "middle",
     });
   });
 }

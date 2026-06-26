@@ -192,6 +192,26 @@ function periodLabel(period: ReportPeriod, start: Date, end: Date): string {
   return `Año ${format(start, "yyyy")}`;
 }
 
+function dayMonth(d: Date): string {
+  return format(d, "d MMM", { locale: es }).replace(".", "");
+}
+
+// Rango de semana(s) en que se diseñaron casos previamente. Una semana →
+// "sem del 14–18 abr"; varias → "14 abr – 9 may" (lun de la 1ª a vie de la última).
+function formatPriorDesignRange(min: Date, max: Date): string {
+  const wkStart = startOfWeek(min, { weekStartsOn: 1 });
+  const wkEnd = startOfWeek(max, { weekStartsOn: 1 });
+  const friStart = new Date(wkStart.getTime() + 4 * 86400000);
+  if (wkStart.getTime() === wkEnd.getTime()) {
+    const sameMonth = format(wkStart, "MM") === format(friStart, "MM");
+    return sameMonth
+      ? `sem del ${format(wkStart, "d", { locale: es })}–${dayMonth(friStart)}`
+      : `sem del ${dayMonth(wkStart)}–${dayMonth(friStart)}`;
+  }
+  const friEnd = new Date(wkEnd.getTime() + 4 * 86400000);
+  return `${dayMonth(wkStart)} – ${dayMonth(friEnd)}`;
+}
+
 export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec> {
   const { period, periodStart, periodEnd, scope, clientFilter, userRole, userId } = input;
 
@@ -499,6 +519,42 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       occupationCurve: curve,
     };
   });
+
+  // Enriquecer HUs "En Diseño" sin diseño en el periodo con la(s) semana(s)
+  // previa(s) en que SÍ se diseñaron casos. Sin esto la HU aparece con Dis.=0
+  // y aparenta un estado "vacío/estancado" cuando en realidad ya se diseñó.
+  const priorCandidates = new Map<string, HuRow>(); // storyId → HuRow (mutable)
+  for (const p of projects) {
+    for (const hu of p.hus) {
+      if (hu.status === "TEST_DESIGN" && hu.designed === 0) priorCandidates.set(hu.storyId, hu);
+    }
+  }
+  if (priorCandidates.size > 0) {
+    const priorRecords = await prisma.dailyRecord.findMany({
+      where: {
+        assignment: { storyId: { in: Array.from(priorCandidates.keys()) } },
+        designed: { gt: 0 },
+        date: { lt: periodStart },
+      },
+      select: { date: true, designed: true, assignment: { select: { storyId: true } } },
+    });
+    const agg = new Map<string, { min: Date; max: Date; total: number }>();
+    for (const r of priorRecords) {
+      const sid = r.assignment?.storyId;
+      if (!sid) continue;
+      const cur = agg.get(sid);
+      if (!cur) agg.set(sid, { min: r.date, max: r.date, total: r.designed });
+      else {
+        if (r.date < cur.min) cur.min = r.date;
+        if (r.date > cur.max) cur.max = r.date;
+        cur.total += r.designed;
+      }
+    }
+    for (const [sid, hu] of priorCandidates) {
+      const a = agg.get(sid);
+      if (a) hu.priorDesign = { weekRangeLabel: formatPriorDesignRange(a.min, a.max), totalDesigned: a.total };
+    }
+  }
 
   // Portfolio KPIs.
   const portD = projects.reduce((s, p) => s + p.kpis.designed, 0);

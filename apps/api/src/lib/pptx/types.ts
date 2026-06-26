@@ -19,6 +19,9 @@ export interface HuRow {
   trainingHours: number;           // horas de Inducción/Capacitación imputadas a esta HU
   userMeetingHours: number;        // horas de "Reunión con usuario" imputadas
   devMeetingHours: number;         // horas de "Reunión con desarrollo" imputadas
+  // HU en "En Diseño" cuyo diseño se hizo en semanas previas (designed=0 en el
+  // periodo, pero designed>0 en registros anteriores). null si no aplica.
+  priorDesign?: { weekRangeLabel: string; totalDesigned: number } | null;
 }
 
 export interface ComplexityBubble {

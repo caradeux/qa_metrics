@@ -46,7 +46,7 @@ export function addProjectHuTableSlide(pres: PptxGenJS, p: ProjectReportData): v
   });
 
   const header = ["Historia de Usuario", "R#", "C-Dis.", "C-Ejec.", "Estado", "Dis.", "Ejec.", "Def.", "Contexto"];
-  const colW = [3.9, 0.55, 0.75, 0.75, 1.8, 0.6, 0.6, 0.6, 2.55];
+  const colW = [5.15, 0.5, 0.7, 0.7, 1.55, 0.55, 0.55, 0.55, 1.6];
 
   const rows: any[] = [];
 
@@ -66,7 +66,7 @@ export function addProjectHuTableSlide(pres: PptxGenJS, p: ProjectReportData): v
     const chip = regressionChip(h.regressionNumber);
     const cdc = complexityColor(h.designComplexity);
     const cec = complexityColor(h.executionComplexity);
-    const huText = (h.externalId ? `${h.externalId} · ` : "") + truncate(h.title, 50);
+    const huText = (h.externalId ? `${h.externalId} · ` : "") + truncate(h.title, 68) + (h.priorDesign ? " *" : "");
     const ctx = contextBadges(h);
     rows.push([
       { text: huText, options: { fontSize: 9, fontFace: FONT.face, color: PALETTE.textPrimary, margin: 0.05 } },
@@ -89,9 +89,28 @@ export function addProjectHuTableSlide(pres: PptxGenJS, p: ProjectReportData): v
   }
 
   s.addTable(rows, {
-    x: 0.3, y: 1.0, w: 12.1, colW,
+    x: 0.3, y: 1.0, w: 11.85, colW,
     border: { type: "solid", pt: 0.5, color: "E5E7EB" },
   } as any);
+
+  // Nota al pie: HUs "En Diseño" cuyo diseño se hizo en semanas previas (marcadas
+  // con * en la tabla). Aclara que el Dis.=0 de la semana NO significa estancamiento.
+  const priorDesigned = sorted.filter((h) => h.priorDesign);
+  if (priorDesigned.length > 0) {
+    const MAX_NOTES = 4;
+    const visible = priorDesigned.slice(0, MAX_NOTES);
+    const entries = visible.map((h) => {
+      const id = h.externalId ? `${h.externalId}` : truncate(h.title, 28);
+      return `${id} — diseñada ${h.priorDesign!.weekRangeLabel} (${h.priorDesign!.totalDesigned} casos)`;
+    });
+    const overflow = priorDesigned.length - visible.length;
+    const noteText = `*  Casos diseñados en semanas previas:   ${entries.join("    ·    ")}${overflow > 0 ? `    ·    … y ${overflow} más` : ""}`;
+    s.addText(noteText, {
+      x: 0.3, y: SLIDE.heightIn - 0.95, w: SLIDE.widthIn - 0.6, h: 0.45,
+      fontFace: FONT.face, fontSize: 8.5, italic: true, color: PALETTE.textMuted,
+      align: "left", valign: "top", wrap: true,
+    } as any);
+  }
 
   // Leyenda de iconos al pie.
   s.addText("📚 Capacitación/Inducción   ·   👤 Reunión con usuario   ·   💻 Reunión con desarrollo   ·   R# = n° de regresión   ·   C-Dis/C-Ejec = complejidad", {
