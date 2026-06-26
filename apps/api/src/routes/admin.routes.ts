@@ -357,23 +357,34 @@ router.post("/send-daily-reminders", async (req: AuthRequest, res: Response) => 
 });
 
 // GET /api/admin/hus-sin-registros?clientId=...
-// HUs cuyo ESTADO ACTUAL es Diseño (TEST_DESIGN) o Ejecución (EXECUTION) y cuyo
-// CICLO ACTUAL no tiene cargada la métrica de su fase: en Diseño con diseñados=0,
-// o en Ejecución con ejecutados=0. Son las que salen "vacías" en informes porque
-// el analista no cargó el avance del ciclo en curso. Se mira el último ciclo (no
-// el histórico), para no enmascarar una regresión nueva sin registros. Si la HU
-// entró a su estado hoy se marca "cambió hoy" (puede que recién la trabajen).
+// HUs con datos faltantes que hacen que los informes salgan "vacíos". Dos tipos:
+//  - kind "current": estado actual En Diseño (diseñados=0 en el CICLO ACTUAL) o
+//    En Curso/Ejecución (ejecutados=0 en el ciclo actual). El analista no cargó
+//    el avance del ciclo en curso. Se mira el último ciclo, no el histórico.
+//  - kind "advanced": la HU ya AVANZÓ (Pdte. Instalación QA / Devuelto a Dev /
+//    UAT / Producción) pero NUNCA registró una fase: diseñados=0 (histórico) y/o
+//    ejecutados=0 cuando ya debió ejecutarse (ej. ejecutó sin diseñar).
+// "cambió hoy" = entró a su estado hoy (puede que recién la trabajen).
 // Agrupadas por proyecto, filtrables por cliente. Solo ADMIN.
 router.get("/hus-sin-registros", async (req: AuthRequest, res: Response) => {
   if (!requireAdmin(req, res)) return;
 
   const clientId = (req.query.clientId as string | undefined) || undefined;
-  const TARGET = ["TEST_DESIGN", "EXECUTION"] as const;
-  const isTarget = (s: string) => (TARGET as readonly string[]).includes(s);
+  const SLABEL: Record<string, string> = {
+    TEST_DESIGN: "En Diseño",
+    EXECUTION: "En Curso",
+    WAITING_QA_DEPLOY: "Pdte. Instalación QA",
+    RETURNED_TO_DEV: "Devuelto a Desarrollo",
+    UAT: "En UAT",
+    PRODUCTION: "En Producción",
+  };
+  const CANDIDATES = Object.keys(SLABEL);
+  const ADVANCED = new Set(["WAITING_QA_DEPLOY", "RETURNED_TO_DEV", "UAT", "PRODUCTION"]);
+  const EXEC_EXPECTED = new Set(["RETURNED_TO_DEV", "UAT", "PRODUCTION"]); // ya debió ejecutarse
 
   const stories = await prisma.userStory.findMany({
     where: {
-      assignments: { some: { status: { in: [...TARGET] } } },
+      assignments: { some: { status: { in: CANDIDATES as AssignmentStatus[] } } },
       ...(clientId ? { project: { clientId } } : {}),
     },
     select: {
@@ -404,7 +415,8 @@ router.get("/hus-sin-registros", async (req: AuthRequest, res: Response) => {
     storyId: string;
     externalId: string | null;
     title: string;
-    missing: "Diseño" | "Ejecución";
+    missing: string;
+    kind: "current" | "advanced";
     statusLabel: string;
     testerName: string;
     since: string | null;
@@ -417,20 +429,30 @@ router.get("/hus-sin-registros", async (req: AuthRequest, res: Response) => {
 
   for (const s of stories) {
     const latest = s.assignments[0];
-    if (!latest || !isTarget(latest.status)) continue;
+    if (!latest || !SLABEL[latest.status]) continue;
+    const st = latest.status;
 
-    // Solo el ciclo actual (último assignment).
-    let designed = 0;
-    let executed = 0;
-    for (const r of latest.dailyRecords) {
-      designed += r.designed;
-      executed += r.executed;
+    // Ciclo actual (último assignment).
+    let curDes = 0, curEje = 0;
+    for (const r of latest.dailyRecords) { curDes += r.designed; curEje += r.executed; }
+    // Histórico (todos los ciclos).
+    let cumDes = 0, cumEje = 0;
+    for (const a of s.assignments) for (const r of a.dailyRecords) { cumDes += r.designed; cumEje += r.executed; }
+
+    let missing: string | null = null;
+    let kind: "current" | "advanced" | null = null;
+    if (st === "TEST_DESIGN") {
+      if (curDes === 0) { missing = "Diseño"; kind = "current"; }
+    } else if (st === "EXECUTION") {
+      if (curEje === 0) { missing = "Ejecución"; kind = "current"; }
+    } else if (ADVANCED.has(st)) {
+      const noDes = cumDes === 0;
+      const noEje = cumEje === 0 && EXEC_EXPECTED.has(st);
+      if (noDes && noEje) { missing = "Diseño y Ejecución"; kind = "advanced"; }
+      else if (noDes) { missing = "Diseño"; kind = "advanced"; }
+      else if (noEje) { missing = "Ejecución"; kind = "advanced"; }
     }
-
-    let missing: "Diseño" | "Ejecución" | null = null;
-    if (latest.status === "TEST_DESIGN" && designed === 0) missing = "Diseño";
-    else if (latest.status === "EXECUTION" && executed === 0) missing = "Ejecución";
-    if (!missing) continue;
+    if (!missing || !kind) continue;
 
     const changedAt = latest.statusLogs[0]?.changedAt ?? null;
     const changedToday = changedAt ? fmtCl(changedAt) === todayCl : false;
@@ -446,7 +468,8 @@ router.get("/hus-sin-registros", async (req: AuthRequest, res: Response) => {
       externalId: s.externalId,
       title: s.title,
       missing,
-      statusLabel: missing === "Diseño" ? "En Diseño" : "En Curso",
+      kind,
+      statusLabel: SLABEL[st] ?? st,
       testerName: latest.tester?.user?.name ?? latest.tester?.name ?? "—",
       since: latest.startDate ? latest.startDate.toISOString() : null,
       changedToday,
@@ -457,11 +480,11 @@ router.get("/hus-sin-registros", async (req: AuthRequest, res: Response) => {
   const projects = [...byProject.values()]
     .map((p) => ({
       ...p,
-      // No marcadas como "cambió hoy" primero (más urgentes), luego por fase/título.
+      // "advanced" primero (datos que faltan desde hace rato), luego no-cambió-hoy.
       hus: p.hus.sort(
         (a, b) =>
+          Number(a.kind === "current") - Number(b.kind === "current") ||
           Number(a.changedToday) - Number(b.changedToday) ||
-          a.missing.localeCompare(b.missing, "es") ||
           a.title.localeCompare(b.title, "es"),
       ),
     }))
@@ -471,12 +494,15 @@ router.get("/hus-sin-registros", async (req: AuthRequest, res: Response) => {
         a.projectName.localeCompare(b.projectName, "es"),
     );
 
-  const totalHus = projects.reduce((sum, p) => sum + p.hus.length, 0);
-  const totalChangedToday = projects.reduce(
-    (sum, p) => sum + p.hus.filter((h) => h.changedToday).length,
-    0,
-  );
-  res.json({ generatedAt: new Date().toISOString(), totalHus, totalChangedToday, projects });
+  const allHus = projects.flatMap((p) => p.hus);
+  res.json({
+    generatedAt: new Date().toISOString(),
+    totalHus: allHus.length,
+    totalCurrent: allHus.filter((h) => h.kind === "current").length,
+    totalAdvanced: allHus.filter((h) => h.kind === "advanced").length,
+    totalChangedToday: allHus.filter((h) => h.changedToday).length,
+    projects,
+  });
 });
 
 export default router;

@@ -8,7 +8,8 @@ interface Hu {
   storyId: string;
   externalId: string | null;
   title: string;
-  missing: "Diseño" | "Ejecución";
+  missing: string;
+  kind: "current" | "advanced";
   statusLabel: string;
   testerName: string;
   since: string | null;
@@ -23,6 +24,8 @@ interface ProjectGroup {
 interface Response {
   generatedAt: string;
   totalHus: number;
+  totalCurrent: number;
+  totalAdvanced: number;
   totalChangedToday: number;
   projects: ProjectGroup[];
 }
@@ -33,17 +36,33 @@ function formatDate(iso: string | null): string {
   return d.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric", timeZone: "America/Santiago" });
 }
 
-function MissingChip({ missing }: { missing: "Diseño" | "Ejecución" }) {
-  const isDesign = missing === "Diseño";
+function MissingChip({ missing }: { missing: string }) {
+  const hasDesign = missing.includes("Diseño");
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-        isDesign
+        hasDesign
           ? "bg-sky-50 text-sky-700 border border-sky-200"
           : "bg-emerald-50 text-emerald-700 border border-emerald-200"
       }`}
     >
       Falta {missing.toLowerCase()}
+    </span>
+  );
+}
+
+function KindBadge({ kind }: { kind: "current" | "advanced" }) {
+  const isAdvanced = kind === "advanced";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+        isAdvanced
+          ? "bg-purple-50 text-purple-700 border border-purple-200"
+          : "bg-gray-100 text-gray-600 border border-gray-200"
+      }`}
+      title={isAdvanced ? "La HU ya avanzó de fase pero nunca registró esta métrica" : "El ciclo actual no tiene cargada la métrica de su fase"}
+    >
+      {isAdvanced ? "Avanzada" : "Ciclo actual"}
     </span>
   );
 }
@@ -55,6 +74,7 @@ export default function HusSinRegistrosPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState<"" | "current" | "advanced">("");
 
   useEffect(() => {
     apiClient<ClientOpt[]>("/api/clients").then(setClients).catch(() => {});
@@ -73,19 +93,21 @@ export default function HusSinRegistrosPage() {
   const filtered = useMemo(() => {
     if (!data) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return data.projects;
     return data.projects
       .map((p) => ({
         ...p,
-        hus: p.hus.filter(
-          (h) =>
+        hus: p.hus.filter((h) => {
+          if (kindFilter && h.kind !== kindFilter) return false;
+          if (!q) return true;
+          return (
             h.title.toLowerCase().includes(q) ||
             (h.externalId ?? "").toLowerCase().includes(q) ||
-            h.testerName.toLowerCase().includes(q),
-        ),
+            h.testerName.toLowerCase().includes(q)
+          );
+        }),
       }))
-      .filter((p) => p.hus.length > 0 || p.projectName.toLowerCase().includes(q) || p.clientName.toLowerCase().includes(q));
-  }, [data, query]);
+      .filter((p) => p.hus.length > 0);
+  }, [data, query, kindFilter]);
 
   const shownHus = filtered.reduce((s, p) => s + p.hus.length, 0);
 
@@ -110,38 +132,51 @@ export default function HusSinRegistrosPage() {
       </div>
 
       {/* Resumen + filtros */}
-      <div className="mb-6 flex flex-wrap items-center gap-4">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="rounded-xl border bg-white px-5 py-3 shadow-sm">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">HUs sin registros</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Total</p>
           <p className="mt-0.5 font-mono text-2xl font-bold tabular-nums text-[#dc2626]">{data ? data.totalHus : "—"}</p>
         </div>
-        <div className="rounded-xl border bg-white px-5 py-3 shadow-sm">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Proyectos afectados</p>
-          <p className="mt-0.5 font-mono text-2xl font-bold tabular-nums text-[#2E5FA3]">{data ? data.projects.length : "—"}</p>
+        <div className="rounded-xl border bg-white px-5 py-3 shadow-sm" title="El ciclo actual no tiene cargada la métrica de su fase">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Ciclo actual</p>
+          <p className="mt-0.5 font-mono text-2xl font-bold tabular-nums text-gray-700">{data ? data.totalCurrent : "—"}</p>
+        </div>
+        <div className="rounded-xl border bg-white px-5 py-3 shadow-sm" title="HUs ya avanzadas que nunca registraron una fase (ej. ejecutó sin diseñar)">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Avanzadas</p>
+          <p className="mt-0.5 font-mono text-2xl font-bold tabular-nums text-purple-700">{data ? data.totalAdvanced : "—"}</p>
         </div>
         <div className="rounded-xl border bg-white px-5 py-3 shadow-sm" title="Entraron a su estado hoy — puede que recién las estén trabajando">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Cambiaron hoy</p>
           <p className="mt-0.5 font-mono text-2xl font-bold tabular-nums text-amber-600">{data ? data.totalChangedToday : "—"}</p>
         </div>
-        <div className="ml-auto flex items-center gap-3">
-          <select
-            value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1F3864] focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
-          >
-            <option value="">Todos los clientes</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar HU, ID o analista…"
-            className="w-64 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1F3864] focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
-          />
-        </div>
+      </div>
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <select
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1F3864] focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
+        >
+          <option value="">Todos los clientes</option>
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <select
+          value={kindFilter}
+          onChange={(e) => setKindFilter(e.target.value as "" | "current" | "advanced")}
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1F3864] focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
+        >
+          <option value="">Todos los tipos</option>
+          <option value="current">Solo ciclo actual</option>
+          <option value="advanced">Solo avanzadas</option>
+        </select>
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar HU, ID o analista…"
+          className="ml-auto w-64 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-[#1F3864] focus:outline-none focus:ring-2 focus:ring-[#1F3864]/30"
+        />
       </div>
 
       {loading ? (
@@ -191,7 +226,12 @@ export default function HusSinRegistrosPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5"><MissingChip missing={h.missing} /></td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <MissingChip missing={h.missing} />
+                          <KindBadge kind={h.kind} />
+                        </div>
+                      </td>
                       <td className="px-3 py-2.5 text-gray-600">{h.statusLabel}</td>
                       <td className="px-3 py-2.5 text-gray-700">{h.testerName}</td>
                       <td className="px-5 py-2.5 font-mono text-xs text-gray-500">{formatDate(h.since)}</td>
