@@ -99,7 +99,7 @@ model Tester {
   projectId   String
   project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   userId      String?
-  user        User?              @relation(fields: [userId], references: [id])
+  user        User?              @relation(fields: [userId], references: [id], onDelete: Restrict)
   allocation  Int                @default(100)
   records     DailyRecord[]
   assignments TesterAssignment[]

@@ -192,6 +192,17 @@ router.delete("/:id", requirePermission("users", "delete") as any, async (req: A
       return;
     }
 
+    // Un tester es siempre un analista del sistema (FK Tester.userId RESTRICT).
+    // Si el usuario es tester en algún proyecto, no se puede borrar sin antes
+    // quitar/reasignar esos testers — evita dejar testers huérfanos.
+    const testerCount = await prisma.tester.count({ where: { userId: id } });
+    if (testerCount > 0) {
+      res.status(409).json({
+        error: "No se puede eliminar: el usuario es tester en uno o más proyectos. Quita o reasigna sus testers primero.",
+      });
+      return;
+    }
+
     await prisma.user.delete({ where: { id } });
     invalidateAuthCache();
     res.json({ message: "Usuario eliminado" });
