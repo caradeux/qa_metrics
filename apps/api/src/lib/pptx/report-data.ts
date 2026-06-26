@@ -143,7 +143,7 @@ import { PALETTE } from "./theme.js";
 
 const STATUS_LABEL: Record<string, string> = {
   REGISTERED: "No Iniciado",
-  ANALYSIS: "En Diseño",
+  ANALYSIS: "En Análisis",
   TEST_DESIGN: "En Diseño",
   WAITING_QA_DEPLOY: "Pdte. Instalación QA",
   EXECUTION: "En Curso",
@@ -155,6 +155,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   "No Iniciado": PALETTE.textMuted,
+  "En Análisis": PALETTE.phaseAnalysis,
   "En Diseño": PALETTE.phaseDesign,
   "Pdte. Instalación QA": PALETTE.amber,
   "En Curso": PALETTE.greenPrimary,
@@ -524,13 +525,11 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
   // previa(s) en que SÍ se diseñaron casos. Sin esto la HU aparece con Dis.=0
   // y aparenta un estado "vacío/estancado" cuando en realidad ya se diseñó.
   const priorCandidates = new Map<string, HuRow>(); // storyId → HuRow (mutable)
-  // ANALYSIS y TEST_DESIGN se muestran ambos como "En Diseño" en el reporte, así
-  // que la nota de diseño previo debe cubrir los dos para no verse inconsistente.
+  // Solo "En Diseño" (TEST_DESIGN): una HU en este estado con 0 casos esta semana
+  // pero diseñada antes. "En Análisis" es un estado aparte y no lleva esta nota.
   for (const p of projects) {
     for (const hu of p.hus) {
-      if ((hu.status === "TEST_DESIGN" || hu.status === "ANALYSIS") && hu.designed === 0) {
-        priorCandidates.set(hu.storyId, hu);
-      }
+      if (hu.status === "TEST_DESIGN" && hu.designed === 0) priorCandidates.set(hu.storyId, hu);
     }
   }
   if (priorCandidates.size > 0) {

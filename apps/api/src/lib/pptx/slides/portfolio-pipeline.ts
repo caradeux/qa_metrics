@@ -6,6 +6,7 @@ import { slideHeader } from "../components.js";
 // Orden narrativo del flujo QA (izq → der sigue la vida del trabajo).
 const STATE_ORDER = [
   "No Iniciado",
+  "En Análisis",
   "En Diseño",
   "Pdte. Instalación QA",
   "En Curso",

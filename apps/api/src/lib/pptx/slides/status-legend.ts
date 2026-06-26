@@ -15,9 +15,14 @@ const STATUS_LEGEND: StatusEntry[] = [
     description: "La HU fue registrada en el sistema pero aún no se ha iniciado el trabajo.",
   },
   {
+    label: "En Análisis",
+    color: PALETTE.phaseAnalysis,
+    description: "El analista QA está entendiendo la HU y definiendo el alcance de las pruebas, antes de escribir casos.",
+  },
+  {
     label: "En Diseño",
     color: PALETTE.phaseDesign,
-    description: "El analista QA está analizando la HU y escribiendo los casos de prueba.",
+    description: "El analista QA está escribiendo los casos de prueba de la HU.",
   },
   {
     label: "Pdte. Instalación QA",
@@ -68,9 +73,9 @@ export function addStatusLegendSlide(pres: PptxGenJS): void {
     fontFace: FONT.face, fontSize: 12, color: PALETTE.textMuted, align: "center",
   });
 
-  // Grid 3×3
+  // Grid 3×N (filas según cantidad de estados).
   const cols = 3;
-  const rows = 3;
+  const rows = Math.ceil(STATUS_LEGEND.length / cols);
   const gridX = 0.5;
   const gridY = 1.55;
   const gridW = SLIDE.widthIn - 1;
