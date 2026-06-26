@@ -14,6 +14,16 @@ export function addClosingSlide(pres: PptxGenJS): void {
   const s = pres.addSlide();
   s.background = { color: PALETTE.navyDeep };
 
+  // Motivo de marca (mismo que la portada) para cerrar con coherencia.
+  s.addShape((pres as any).shapes.OVAL, {
+    x: -1.6, y: 3.6, w: 5.5, h: 5.5,
+    fill: { color: PALETTE.greenPrimary, transparency: 93 }, line: { type: "none" },
+  } as any);
+  s.addShape((pres as any).shapes.OVAL, {
+    x: 9.8, y: -1.5, w: 5.2, h: 5.2,
+    fill: { color: PALETTE.cyan, transparency: 93 }, line: { type: "none" },
+  } as any);
+
   const svg = readFileSync(LOGO_PATH, "utf-8");
   const dataUri = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
   s.addImage({ data: dataUri, x: (SLIDE.widthIn - 4) / 2, y: 2.3, w: 4, h: 0.49 });

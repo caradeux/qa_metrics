@@ -1,6 +1,7 @@
 import type PptxGenJS from "pptxgenjs";
 import type { ProjectReportData, ComplexityLevel, HuRow } from "../types.js";
 import { PALETTE, FONT, SLIDE } from "../theme.js";
+import { slideHeader } from "../components.js";
 
 function regressionChip(n: number): { label: string; color: string } {
   if (n <= 1) return { label: "R1", color: PALETTE.textMuted };
@@ -35,15 +36,7 @@ export function addProjectHuTableSlide(pres: PptxGenJS, p: ProjectReportData): v
   const s = pres.addSlide();
   s.background = { color: PALETTE.grayLight };
 
-  // Header.
-  s.addShape((pres as any).shapes.RECTANGLE, {
-    x: 0, y: 0, w: SLIDE.widthIn, h: 0.8,
-    fill: { color: PALETTE.navyUi }, line: { type: "none" },
-  } as any);
-  s.addText(`Detalle por Historia de Usuario — ${p.projectName}`, {
-    x: 0.5, y: 0.2, w: SLIDE.widthIn - 1, h: 0.4,
-    fontFace: FONT.face, fontSize: 18, bold: true, color: PALETTE.white,
-  });
+  slideHeader(pres, s, `Detalle por Historia de Usuario — ${p.projectName}`);
 
   const header = ["Historia de Usuario", "R#", "C-Dis.", "C-Ejec.", "Estado", "Dis.", "Ejec.", "Def.", "Contexto"];
   const colW = [5.15, 0.5, 0.7, 0.7, 1.55, 0.55, 0.55, 0.55, 1.6];

@@ -1,6 +1,7 @@
 import type PptxGenJS from "pptxgenjs";
 import type { ProjectReportData, ComplexityLevel, ComplexityBubble } from "../types.js";
 import { PALETTE, FONT, SLIDE } from "../theme.js";
+import { slideHeader } from "../components.js";
 
 const LEVELS: ComplexityLevel[] = ["LOW", "MEDIUM", "HIGH"];
 const LEVEL_LABEL: Record<ComplexityLevel, string> = { LOW: "Baja", MEDIUM: "Media", HIGH: "Alta" };
@@ -34,14 +35,7 @@ export function addProjectComplexityMatrixSlide(pres: PptxGenJS, p: ProjectRepor
   const s = pres.addSlide();
   s.background = { color: PALETTE.grayLight };
 
-  s.addShape((pres as any).shapes.RECTANGLE, {
-    x: 0, y: 0, w: SLIDE.widthIn, h: 0.8,
-    fill: { color: PALETTE.navyUi }, line: { type: "none" },
-  } as any);
-  s.addText(`Matriz de complejidad — ${p.projectName}`, {
-    x: 0.5, y: 0.2, w: SLIDE.widthIn - 1, h: 0.4,
-    fontFace: FONT.face, fontSize: 18, bold: true, color: PALETTE.white,
-  });
+  slideHeader(pres, s, `Matriz de complejidad — ${p.projectName}`);
 
   if (p.complexityBubbles.length === 0) {
     s.addText("(Sin HUs con actividad para graficar)", {

@@ -15,6 +15,21 @@ export function addCoverSlide(pres: PptxGenJS, spec: ReportSpec): void {
   const s = pres.addSlide();
   s.background = { color: PALETTE.navyDeep };
 
+  // Motivo de marca: círculos tenues en la esquina inferior derecha (dan
+  // profundidad sin recargar). Se dibujan primero para quedar detrás.
+  s.addShape((pres as any).shapes.OVAL, {
+    x: 8.6, y: 3.2, w: 6.0, h: 6.0,
+    fill: { color: PALETTE.cyan, transparency: 93 }, line: { type: "none" },
+  } as any);
+  s.addShape((pres as any).shapes.OVAL, {
+    x: 10.2, y: 4.4, w: 4.4, h: 4.4,
+    fill: { color: PALETTE.greenPrimary, transparency: 90 }, line: { type: "none" },
+  } as any);
+  s.addShape((pres as any).shapes.OVAL, {
+    x: 11.6, y: 5.4, w: 2.6, h: 2.6,
+    fill: { color: PALETTE.blue, transparency: 88 }, line: { type: "none" },
+  } as any);
+
   // Franja vertical verde (gradient simulado por rect sólido).
   s.addShape((pres as any).shapes.RECTANGLE, {
     x: 0, y: 0, w: 0.45, h: SLIDE.heightIn,
@@ -40,18 +55,39 @@ export function addCoverSlide(pres: PptxGenJS, spec: ReportSpec): void {
     fontFace: FONT.face, fontSize: 44, bold: true, color: PALETTE.white,
   });
 
+  // Regla de acento bajo el título.
+  s.addShape((pres as any).shapes.RECTANGLE, {
+    x: 0.95, y: 3.25, w: 1.5, h: 0.06,
+    fill: { color: PALETTE.greenPrimary }, line: { type: "none" },
+  } as any);
+
   // Subtítulo: periodo.
   s.addText(spec.periodLabel, {
-    x: 0.9, y: 3.3, w: SLIDE.widthIn - 1.8, h: 0.7,
+    x: 0.9, y: 3.5, w: SLIDE.widthIn - 1.8, h: 0.7,
     fontFace: FONT.face, fontSize: 24, color: PALETTE.grayLight,
   });
 
   // Cliente (si aplica).
   if (spec.clientFilter) {
     s.addText(`Cliente: ${spec.clientFilter.name}`, {
-      x: 0.9, y: 4.3, w: SLIDE.widthIn - 1.8, h: 0.5,
+      x: 0.9, y: 4.45, w: SLIDE.widthIn - 1.8, h: 0.5,
       fontFace: FONT.face, fontSize: 16, color: PALETTE.cyan,
     });
+  }
+
+  // Teaser de métricas del portafolio.
+  const tk = spec.portfolio?.kpis;
+  if (tk) {
+    s.addText(
+      [
+        { text: `${tk.totalProjects} `, options: { bold: true, color: PALETTE.white } },
+        { text: tk.totalProjects === 1 ? "proyecto" : "proyectos", options: { color: PALETTE.grayLight } },
+        { text: "      ", options: {} },
+        { text: `${tk.totalAnalysts} `, options: { bold: true, color: PALETTE.white } },
+        { text: tk.totalAnalysts === 1 ? "analista" : "analistas", options: { color: PALETTE.grayLight } },
+      ] as any,
+      { x: 0.9, y: 5.25, w: SLIDE.widthIn - 1.8, h: 0.4, fontFace: FONT.face, fontSize: 14 },
+    );
   }
 
   // Footer.

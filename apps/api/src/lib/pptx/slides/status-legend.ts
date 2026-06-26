@@ -1,5 +1,6 @@
 import type PptxGenJS from "pptxgenjs";
 import { PALETTE, FONT, SLIDE } from "../theme.js";
+import { slideHeader } from "../components.js";
 
 interface StatusEntry {
   label: string;
@@ -59,15 +60,7 @@ export function addStatusLegendSlide(pres: PptxGenJS): void {
   const s = pres.addSlide();
   s.background = { color: PALETTE.grayLight };
 
-  // Header
-  s.addShape((pres as any).shapes.RECTANGLE, {
-    x: 0, y: 0, w: SLIDE.widthIn, h: 0.8,
-    fill: { color: PALETTE.navyUi }, line: { type: "none" },
-  } as any);
-  s.addText("Estados del flujo QA — glosario", {
-    x: 0.5, y: 0.2, w: SLIDE.widthIn - 1, h: 0.4,
-    fontFace: FONT.face, fontSize: 18, bold: true, color: PALETTE.white,
-  });
+  slideHeader(pres, s, "Estados del flujo QA — glosario");
 
   // Subtítulo
   s.addText("Referencia de los estados que verás en las tablas y gráficos de este informe.", {

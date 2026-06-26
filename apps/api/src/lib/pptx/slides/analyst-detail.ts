@@ -1,6 +1,7 @@
 import type PptxGenJS from "pptxgenjs";
 import type { OccupationResult } from "../../occupation.js";
 import { PALETTE, FONT, SLIDE } from "../theme.js";
+import { slideHeader } from "../components.js";
 
 function formatHours(h: number): string {
   return h >= 10 ? `${Math.round(h)}h` : `${h.toFixed(1)}h`;
@@ -10,18 +11,7 @@ export function addAnalystDetailSlide(pres: PptxGenJS, a: OccupationResult): voi
   const s = pres.addSlide();
   s.background = { color: PALETTE.grayLight };
 
-  s.addShape((pres as any).shapes.RECTANGLE, {
-    x: 0, y: 0, w: SLIDE.widthIn, h: 0.8,
-    fill: { color: PALETTE.navyUi }, line: { type: "none" },
-  } as any);
-  s.addText(`Analista — ${a.testerName}`, {
-    x: 0.5, y: 0.2, w: SLIDE.widthIn - 5, h: 0.4,
-    fontFace: FONT.face, fontSize: 18, bold: true, color: PALETTE.white,
-  });
-  s.addText(`Periodo: ${a.workdays} días hábiles`, {
-    x: SLIDE.widthIn - 4.8, y: 0.25, w: 4.3, h: 0.4,
-    fontFace: FONT.face, fontSize: 12, color: PALETTE.greenLight, align: "right",
-  });
+  slideHeader(pres, s, `Analista — ${a.testerName}`, { rightText: `Periodo: ${a.workdays} días hábiles` });
 
   // Narrativa de capacidad ajustada
   const nominal = a.nominalCapacityHours ?? a.capacityHours + (a.absenceHours ?? 0);

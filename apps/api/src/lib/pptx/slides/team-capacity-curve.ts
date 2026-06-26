@@ -1,6 +1,7 @@
 import type PptxGenJS from "pptxgenjs";
 import type { ReportSpec, OccupationBandLabel } from "../types.js";
 import { PALETTE, FONT, SLIDE } from "../theme.js";
+import { slideHeader } from "../components.js";
 import { buildOccupationChart } from "../charts/occupation-chart.js";
 
 const MEANINGFUL_BANDS: OccupationBandLabel[] = [
@@ -34,18 +35,8 @@ export async function addTeamCapacityCurveSlide(pres: PptxGenJS, spec: ReportSpe
   const s = pres.addSlide();
   s.background = { color: PALETTE.grayLight };
 
-  // Header
-  s.addShape((pres as any).shapes.RECTANGLE, {
-    x: 0, y: 0, w: SLIDE.widthIn, h: 0.8,
-    fill: { color: PALETTE.navyUi }, line: { type: "none" },
-  } as any);
-  s.addText("Capacidad ocupada del equipo", {
-    x: 0.5, y: 0.2, w: SLIDE.widthIn - 5, h: 0.4,
-    fontFace: FONT.face, fontSize: 18, bold: true, color: PALETTE.white,
-  });
-  s.addText("Dashboard de utilización por persona + curva consolidada", {
-    x: SLIDE.widthIn - 5.2, y: 0.26, w: 4.7, h: 0.4,
-    fontFace: FONT.face, fontSize: 11, color: PALETTE.greenLight, align: "right",
+  slideHeader(pres, s, "Capacidad ocupada del equipo", {
+    rightText: "Dashboard de utilización por persona + curva consolidada",
   });
 
   // Summary strip (totales del equipo)

@@ -1,6 +1,7 @@
 import type PptxGenJS from "pptxgenjs";
 import type { ReportSpec, ProjectPipeline } from "../types.js";
 import { PALETTE, FONT, SLIDE } from "../theme.js";
+import { slideHeader } from "../components.js";
 
 // Orden narrativo del flujo QA (izq → der sigue la vida del trabajo).
 const STATE_ORDER = [
@@ -33,15 +34,7 @@ export function addPortfolioPipelineSlide(pres: PptxGenJS, spec: ReportSpec): vo
   const s = pres.addSlide();
   s.background = { color: PALETTE.grayLight };
 
-  // Header.
-  s.addShape((pres as any).shapes.RECTANGLE, {
-    x: 0, y: 0, w: SLIDE.widthIn, h: 0.8,
-    fill: { color: PALETTE.navyUi }, line: { type: "none" },
-  } as any);
-  s.addText("Pipeline consolidado del portafolio", {
-    x: 0.5, y: 0.2, w: SLIDE.widthIn - 1, h: 0.4,
-    fontFace: FONT.face, fontSize: 18, bold: true, color: PALETTE.white,
-  });
+  slideHeader(pres, s, "Pipeline consolidado del portafolio");
 
   const pipeline = sortByFlow(spec.portfolio.pipeline.filter((p) => p.count > 0));
   const total = pipeline.reduce((s, p) => s + p.count, 0);
