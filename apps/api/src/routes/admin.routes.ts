@@ -356,4 +356,103 @@ router.post("/send-daily-reminders", async (req: AuthRequest, res: Response) => 
   res.json({ date: dateStr, testersNotified, assignmentsFlagged, errors });
 });
 
+// GET /api/admin/hus-sin-registros
+// HUs cuyo estado actual es Diseño (TEST_DESIGN) o Ejecución (EXECUTION) pero
+// que NO tienen registros cargados (diseñados=0 Y ejecutados=0 en toda su
+// historia). Son las que salen "vacías" en informes/presentaciones porque el
+// analista nunca cargó el avance. Agrupadas por proyecto. Solo ADMIN.
+router.get("/hus-sin-registros", async (req: AuthRequest, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+
+  const TARGET = ["TEST_DESIGN", "EXECUTION"] as const;
+  const isTarget = (s: string) => (TARGET as readonly string[]).includes(s);
+  const STATUS_LABEL: Record<string, string> = { TEST_DESIGN: "Diseño", EXECUTION: "Ejecución" };
+
+  // Candidatas: HUs con al menos un assignment en Diseño/Ejecución. El estado
+  // "actual" es el del último assignment (createdAt desc), igual que en los
+  // reportes.
+  const stories = await prisma.userStory.findMany({
+    where: { assignments: { some: { status: { in: [...TARGET] } } } },
+    select: {
+      id: true,
+      externalId: true,
+      title: true,
+      project: {
+        select: { id: true, name: true, client: { select: { id: true, name: true } } },
+      },
+      assignments: {
+        select: {
+          status: true,
+          createdAt: true,
+          startDate: true,
+          tester: { select: { name: true, user: { select: { name: true, email: true } } } },
+          dailyRecords: { select: { designed: true, executed: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+
+  type Hu = {
+    storyId: string;
+    externalId: string | null;
+    title: string;
+    statusLabel: string;
+    testerName: string;
+    since: string | null;
+  };
+  const byProject = new Map<
+    string,
+    { projectId: string; projectName: string; clientName: string; hus: Hu[] }
+  >();
+
+  for (const s of stories) {
+    const latest = s.assignments[0];
+    if (!latest || !isTarget(latest.status)) continue;
+
+    // Acumulado de TODOS los registros de la HU (todos los ciclos/assignments).
+    let designed = 0;
+    let executed = 0;
+    for (const a of s.assignments) {
+      for (const r of a.dailyRecords) {
+        designed += r.designed;
+        executed += r.executed;
+      }
+    }
+    if (designed !== 0 || executed !== 0) continue; // tiene actividad → no aplica
+
+    const grp = byProject.get(s.project.id) ?? {
+      projectId: s.project.id,
+      projectName: s.project.name,
+      clientName: s.project.client.name,
+      hus: [] as Hu[],
+    };
+    grp.hus.push({
+      storyId: s.id,
+      externalId: s.externalId,
+      title: s.title,
+      statusLabel: STATUS_LABEL[latest.status] ?? latest.status,
+      testerName: latest.tester?.user?.name ?? latest.tester?.name ?? "—",
+      since: latest.startDate ? latest.startDate.toISOString() : null,
+    });
+    byProject.set(s.project.id, grp);
+  }
+
+  const projects = [...byProject.values()]
+    .map((p) => ({
+      ...p,
+      hus: p.hus.sort(
+        (a, b) => a.statusLabel.localeCompare(b.statusLabel, "es") || a.title.localeCompare(b.title, "es"),
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        a.clientName.localeCompare(b.clientName, "es") ||
+        a.projectName.localeCompare(b.projectName, "es"),
+    );
+
+  const totalHus = projects.reduce((sum, p) => sum + p.hus.length, 0);
+  res.json({ generatedAt: new Date().toISOString(), totalHus, projects });
+});
+
 export default router;
