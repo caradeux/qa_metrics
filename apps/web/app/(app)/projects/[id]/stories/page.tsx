@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { STATUSES, statusMap, ComplexityBadge } from "@/components/stories/StatusBadge";
 import { StatusStepperCompact } from "@/components/stories/StatusStepper";
 import { fmtDateShortUtc, fmtDateUtc } from "@/lib/dates";
+import { buildAssignmentPayloads } from "@/lib/assignment-payloads";
 
 interface TesterLite { id: string; name: string }
 interface AssignmentPhase {
@@ -949,7 +950,9 @@ function AssignToCycleModal({
   testers: TesterLite[];
   onSaved: () => void;
 }) {
-  const [testerId, setTesterId] = useState("");
+  // Una HU puede tener varios analistas en el mismo ciclo: se crea una
+  // asignación por cada uno seleccionado.
+  const [testerIds, setTesterIds] = useState<string[]>([]);
   const [status, setStatus] = useState("REGISTERED");
   const [startDate, setStartDate] = useState(new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState("");
@@ -966,8 +969,10 @@ function AssignToCycleModal({
 
   useEffect(() => {
     if (open) {
-      // Para Ciclo 2+, pre-seleccionar el tester del ciclo anterior (mismo tester habitual para regresiones)
-      let suggestedTesterId = "";
+      // Para Ciclo 2+, pre-seleccionar los testers del ciclo anterior (mismo
+      // equipo habitual para regresiones). Si el ciclo previo lo trabajaron
+      // varios analistas, se sugieren todos.
+      let suggestedTesterIds: string[] = [];
       if (!isFirstCycle && entry?.story?.cycles?.length) {
         const currentCycleStart = entry.cycle.startDate
           ? new Date(entry.cycle.startDate).getTime()
@@ -984,12 +989,16 @@ function AssignToCycleModal({
             const db = b.startDate ? new Date(b.startDate).getTime() : 0;
             return db - da;
           });
-        const lastAssign = priorCycles[0]?.assignments[0];
-        if (lastAssign?.tester?.id && testers.some((t) => t.id === lastAssign.tester!.id)) {
-          suggestedTesterId = lastAssign.tester.id;
-        }
+        const priorAssignments = priorCycles[0]?.assignments ?? [];
+        suggestedTesterIds = Array.from(
+          new Set(
+            priorAssignments
+              .map((a) => a.tester?.id)
+              .filter((id): id is string => !!id && testers.some((t) => t.id === id)),
+          ),
+        );
       }
-      setTesterId(suggestedTesterId);
+      setTesterIds(suggestedTesterIds);
       setStatus(isFirstCycle ? "REGISTERED" : "WAITING_QA_DEPLOY");
 
       // Prellenar con fechas del ciclo si existen
@@ -1061,7 +1070,7 @@ function AssignToCycleModal({
 
   async function save() {
     if (!entry) return;
-    if (!testerId) { setError("Tester obligatorio"); return; }
+    if (testerIds.length === 0) { setError("Selecciona al menos un analista"); return; }
     setSaving(true); setError("");
 
     const phasesPayload: { phase: string; startDate: string; endDate: string }[] = [];
@@ -1078,28 +1087,44 @@ function AssignToCycleModal({
       }
     }
 
-    try {
-      const body: Record<string, unknown> = {
-        testerId,
-        storyId: entry.story.id,
-        cycleId: entry.cycle.id,
-        status,
-        notes: notes.trim() || null,
-      };
-      if (phasesPayload.length > 0) {
-        body.phases = phasesPayload;
-      } else {
-        body.startDate = new Date(startDate + "T00:00:00.000Z").toISOString();
-        body.endDate = endDate ? new Date(endDate + "T00:00:00.000Z").toISOString() : null;
+    const payloads = buildAssignmentPayloads({
+      testerIds,
+      storyId: entry.story.id,
+      cycleId: entry.cycle.id,
+      status,
+      notes: notes.trim() || null,
+      phases: phasesPayload,
+      startDate,
+      endDate,
+    });
+
+    // Una asignación por analista. Se reportan los fallos parciales por nombre
+    // para que quede claro cuáles quedaron creados y cuáles no.
+    const failures: string[] = [];
+    for (const [index, body] of payloads.entries()) {
+      try {
+        await apiClient(`/api/assignments`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        const name = testers.find((t) => t.id === payloads[index].testerId)?.name ?? "analista";
+        failures.push(`${name}: ${e instanceof Error ? e.message : "error al guardar"}`);
       }
-      await apiClient(`/api/assignments`, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      onSaved();
-    } catch (e: any) {
-      setError(e?.message || "Error al guardar");
-    } finally { setSaving(false); }
+    }
+
+    setSaving(false);
+    if (failures.length === payloads.length) {
+      // Nada se creó: el modal sigue abierto con el detalle.
+      setError(failures.join(" · "));
+      return;
+    }
+    if (failures.length > 0) {
+      // Éxito parcial: onSaved() cierra el modal, así que el aviso va por
+      // alert para que no se pierda al desmontarse.
+      alert(`Se crearon ${payloads.length - failures.length} de ${payloads.length} asignaciones.\n\nFallaron:\n${failures.join("\n")}`);
+    }
+    onSaved();
   }
 
   const inp = "w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#2E5FA3]";
@@ -1108,25 +1133,52 @@ function AssignToCycleModal({
       <div className="space-y-3">
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Tester</label>
-            {!isFirstCycle && testerId && (
+            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Analistas QA {testerIds.length > 0 && <span className="text-gray-400 normal-case">· {testerIds.length} seleccionado{testerIds.length === 1 ? "" : "s"}</span>}
+            </label>
+            {!isFirstCycle && testerIds.length > 0 && (
               <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">
                 <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
-                Sugerido del ciclo anterior
+                Sugerido{testerIds.length === 1 ? "" : "s"} del ciclo anterior
               </span>
             )}
           </div>
-          <select value={testerId} onChange={e => setTesterId(e.target.value)} className={inp}>
-            <option value="">Seleccionar...</option>
-            {testers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-          {!isFirstCycle && (
-            <p className="text-[10px] text-gray-500 mt-1">
-              En ciclos de regresión suele ser el mismo tester. Cambialo si quien hace la re-ejecución es otra persona.
+          {testers.length === 0 ? (
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              Este proyecto no tiene analistas incorporados todavía. Agregalos en Proyecto → Testers antes de asignar.
             </p>
+          ) : (
+            <div className="max-h-44 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+              {testers.map(t => {
+                const checked = testerIds.includes(t.id);
+                return (
+                  <label
+                    key={t.id}
+                    className={`flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${checked ? "bg-[#2E5FA3]/5" : "hover:bg-gray-50"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setTesterIds(prev =>
+                          prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id],
+                        )
+                      }
+                      className="w-4 h-4 rounded border-gray-300 text-[#2E5FA3] focus:ring-[#2E5FA3]"
+                    />
+                    <span className={`text-sm ${checked ? "text-gray-900 font-medium" : "text-gray-700"}`}>{t.name}</span>
+                  </label>
+                );
+              })}
+            </div>
           )}
+          <p className="text-[10px] text-gray-500 mt-1">
+            {isFirstCycle
+              ? "Podés marcar más de un analista: se crea una asignación por cada uno, con el mismo plan de fases."
+              : "En ciclos de regresión suele ser el mismo equipo. Marcá o desmarcá según quién haga la re-ejecución."}
+          </p>
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wider">Estado inicial</label>
