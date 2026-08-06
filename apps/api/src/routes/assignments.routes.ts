@@ -384,6 +384,36 @@ router.put(
         const u = await tx.testerAssignment.update({ where: { id }, data });
         if (statusChanged) {
           await tx.assignmentStatusLog.create({ data: { assignmentId: id, status: body.status! } });
+
+          // El estado pertenece a la HU dentro de su ciclo, no al analista.
+          // Si la HU la trabajan varios analistas, todos comparten un único
+          // estado: propagamos el cambio para que no puedan divergir.
+          const siblings = await tx.testerAssignment.findMany({
+            where: {
+              storyId: existing.storyId,
+              cycleId: existing.cycleId,
+              id: { not: id },
+              status: { not: body.status! },
+            },
+            select: { id: true },
+          });
+          if (siblings.length > 0) {
+            const siblingIds = siblings.map((s) => s.id);
+            await tx.testerAssignment.updateMany({
+              where: { id: { in: siblingIds } },
+              data: {
+                status: body.status!,
+                // El cierre automático al pasar a Producción también es de la
+                // HU, así que acompaña al estado.
+                ...(body.status === "PRODUCTION" && !body.endDate
+                  ? { endDate: data.endDate as Date }
+                  : {}),
+              },
+            });
+            await tx.assignmentStatusLog.createMany({
+              data: siblingIds.map((assignmentId) => ({ assignmentId, status: body.status! })),
+            });
+          }
         }
         if (diffs.length > 0) {
           await writeDateChangeLogs(tx, {
