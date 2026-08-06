@@ -524,7 +524,18 @@ function StoryCard({
           {story.cycles.length === 0 ? (
             <p className="text-xs text-gray-400 italic">Sin ciclos aun.</p>
           ) : (
-            story.cycles.map(cycle => (
+            story.cycles.map(cycle => {
+              // El estado es de la HU dentro del ciclo, no de cada analista:
+              // todos comparten el mismo, así que se lee y se edita una vez.
+              const head = cycle.assignments[0];
+              const cycleStatus = head?.status ?? null;
+              const cycleDaysInStatus = head?.daysInStatus ?? null;
+              const stateTone =
+                cycleDaysInStatus === null ? "text-gray-500"
+                  : cycleDaysInStatus > 14 ? "text-red-600 font-bold"
+                    : cycleDaysInStatus > 7 ? "text-amber-600 font-bold"
+                      : "text-gray-500";
+              return (
               <div key={cycle.id} className="border border-gray-200 rounded-lg overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
                   <div className="flex items-center gap-2">
@@ -535,7 +546,35 @@ function StoryCard({
                         {cycle.endDate ? ` - ${fmtDateUtc(cycle.endDate)}` : ""}
                       </span>
                     )}
-                    <span className="text-[10px] text-gray-400">· {cycle.assignments.length} asignacion(es)</span>
+                    <span className="text-[10px] text-gray-400">
+                      · {cycle.assignments.length} analista{cycle.assignments.length === 1 ? "" : "s"}
+                    </span>
+                    {cycleStatus && (
+                      <>
+                        <span className="text-gray-300">|</span>
+                        <StatusStepperCompact value={cycleStatus} />
+                        {canChangeStatus ? (
+                          <select
+                            value={cycleStatus}
+                            onChange={e => head && onChangeStatus(head.id, e.target.value)}
+                            className="px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-white text-gray-700 focus:border-[#4A90D9] outline-none cursor-pointer"
+                            title="El estado es de la HU en este ciclo: aplica a todos sus analistas"
+                          >
+                            {STATUSES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
+                          </select>
+                        ) : (
+                          <span className="text-[10px] text-gray-500">{statusMap[cycleStatus]?.label || cycleStatus}</span>
+                        )}
+                        {cycleDaysInStatus !== null && (
+                          <span
+                            className={`text-[10px] font-mono ${stateTone}`}
+                            title={cycleDaysInStatus > 7 ? `${cycleDaysInStatus} días en el mismo estado` : "Días en el estado actual"}
+                          >
+                            {cycleDaysInStatus}d
+                          </span>
+                        )}
+                      </>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     {canAssign && (
@@ -565,23 +604,14 @@ function StoryCard({
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="text-[9px] text-gray-400 uppercase tracking-wider border-b border-gray-100">
-                        <th className="px-3 py-1.5 text-left font-medium">Tester</th>
-                        <th className="px-3 py-1.5 text-left font-medium">Estado</th>
+                        <th className="px-3 py-1.5 text-left font-medium">Analista</th>
                         <th className="px-3 py-1.5 text-left font-medium">Rango</th>
                         <th className="px-3 py-1.5 text-center font-medium" title="Duración planificada (desde→hasta) o días transcurridos si sigue abierta">Duración</th>
-                        <th className="px-3 py-1.5 text-center font-medium" title="Días en el estado actual (desde último cambio)">Días en estado</th>
                         {cycle.id === firstCycleId && <th className="px-3 py-1.5 text-right font-medium">Fases</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {cycle.assignments.map((a, idx) => {
-                        const daysInState = a.daysInStatus ?? null;
-                        // Resalta cuando lleva muchos días en el mismo estado.
-                        const stateTone =
-                          daysInState === null ? "text-gray-500"
-                            : daysInState > 14 ? "text-red-600 font-bold"
-                              : daysInState > 7 ? "text-amber-600 font-bold"
-                                : "text-gray-500";
                         const startD = new Date(a.startDate);
                         const endD = a.endDate ? new Date(a.endDate) : null;
                         const endForCalc = endD ?? new Date();
@@ -593,34 +623,12 @@ function StoryCard({
                         return (
                           <tr key={a.id} className={`border-t border-gray-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/30"}`}>
                             <td className="px-3 py-1.5">{a.tester?.name || <span className="text-gray-400">-</span>}</td>
-                            <td className="px-3 py-1.5">
-                              <div className="flex flex-col gap-1.5 items-start">
-                                <StatusStepperCompact value={a.status} />
-                                {canChangeStatus ? (
-                                  <select
-                                    value={a.status}
-                                    onChange={e => onChangeStatus(a.id, e.target.value)}
-                                    className="px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-white text-gray-700 focus:border-[#4A90D9] outline-none cursor-pointer"
-                                  >
-                                    {STATUSES.map(st => <option key={st.value} value={st.value}>{st.label}</option>)}
-                                  </select>
-                                ) : (
-                                  <span className="text-[10px] text-gray-500">{statusMap[a.status]?.label || a.status}</span>
-                                )}
-                              </div>
-                            </td>
                             <td className="px-3 py-1.5 text-gray-500">
                               {fmtDateShortUtc(startD)}
                               {endD ? ` → ${fmtDateShortUtc(endD)}` : " → en curso"}
                             </td>
                             <td className="px-3 py-1.5 text-center font-mono text-gray-700">
                               {duration}d{open ? <span className="ml-0.5 text-[9px] text-gray-400">(en curso)</span> : ""}
-                            </td>
-                            <td
-                              className={`px-3 py-1.5 text-center font-mono ${stateTone}`}
-                              title={daysInState !== null && daysInState > 7 ? `${daysInState} días en el mismo estado` : undefined}
-                            >
-                              {daysInState !== null ? `${daysInState}d` : "-"}
                             </td>
                             {cycle.id === firstCycleId && (
                               <td className="px-3 py-1.5 text-right">
@@ -639,7 +647,8 @@ function StoryCard({
                   </table>
                 )}
               </div>
-            ))
+              );
+            })
           )}
           {canCreateCycle && (
             <button onClick={onNewCycle} className="text-xs text-[#2E5FA3] hover:underline font-semibold">
