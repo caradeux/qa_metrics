@@ -10,8 +10,8 @@ const router = Router();
 
 router.post("/login", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password } = loginSchema.parse(req.body);
-    const result = await authService.login(email, password);
+    const { email, password, rememberMe } = loginSchema.parse(req.body);
+    const result = await authService.login(email, password, rememberMe);
     // Capturar password cifrado para envío de horas a FlowPilot (best-effort,
     // no debe bloquear el login si falla).
     try {
@@ -19,7 +19,7 @@ router.post("/login", async (req: Request, res: Response, next: NextFunction) =>
     } catch (err) {
       logger.warn({ err }, "flowpilot: captura de credencial falló (no bloquea login)");
     }
-    setAuthCookies(res, result.accessToken, result.refreshToken);
+    setAuthCookies(res, result.accessToken, result.refreshToken, result.rememberMe);
     res.json({ user: result.user, accessToken: result.accessToken, refreshToken: result.refreshToken });
   } catch (error) {
     if (error instanceof authService.AuthError) {
