@@ -1,0 +1,644 @@
+<title>Arquitectura Azure — QA Metrics</title>
+<style>
+  :root{
+    --bg:#F1F5F9; --surface:#FFFFFF; --surface-2:#E7EDF4; --card:#FFFFFF;
+    --ink:#16222E; --muted:#54627A; --line:#DCE4EE; --line-strong:#C4D0DE;
+    --accent:#0078D4;
+    --region:#0078D4; --vnet:#8661C5; --sub-pub:#107C10; --sub-priv:#0078D4;
+    /* categorías de servicio Azure */
+    --c-compute:#0078D4; --c-network:#8661C5; --c-db:#0E7C7B;
+    --c-storage:#107C10; --c-security:#C0392B; --c-mgmt:#C74EA0;
+    --c-ext:#64748B;
+    --good:#2F8F5B; --warn:#C77A15; --crit:#C0392B;
+    --shadow:0 1px 2px rgba(16,34,46,.06),0 8px 24px rgba(16,34,46,.06);
+    --maxw:1120px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0C121A; --surface:#141C26; --surface-2:#0A1017; --card:#18212D;
+      --ink:#E7EEF6; --muted:#93A2B6; --line:#26313F; --line-strong:#354454;
+      --accent:#4AA5E8;
+      --vnet:#A98BDC; --sub-pub:#4FB04F; --sub-priv:#4AA5E8;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#F1F5F9; --surface:#FFFFFF; --surface-2:#E7EDF4; --card:#FFFFFF;
+    --ink:#16222E; --muted:#54627A; --line:#DCE4EE; --line-strong:#C4D0DE; --accent:#0078D4;
+    --vnet:#8661C5; --sub-pub:#107C10; --sub-priv:#0078D4;
+    --shadow:0 1px 2px rgba(16,34,46,.06),0 8px 24px rgba(16,34,46,.06);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0C121A; --surface:#141C26; --surface-2:#0A1017; --card:#18212D;
+    --ink:#E7EEF6; --muted:#93A2B6; --line:#26313F; --line-strong:#354454; --accent:#4AA5E8;
+    --vnet:#A98BDC; --sub-pub:#4FB04F; --sub-priv:#4AA5E8;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    line-height:1.55; font-size:16px; -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"Cascadia Code","SF Mono",Consolas,ui-monospace,Menlo,monospace}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px}
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+
+  header.top{border-bottom:1px solid var(--line); background:linear-gradient(180deg,var(--surface),var(--bg))}
+  .top-inner{padding:40px 0 30px}
+  .eyebrow{font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700; margin:0 0 10px}
+  h1{font-size:clamp(28px,4.4vw,44px); line-height:1.05; margin:0; letter-spacing:-.02em; font-weight:800; text-wrap:balance; max-width:20ch}
+  .lede{color:var(--muted); font-size:clamp(15px,1.7vw,18px); margin:14px 0 0; max-width:70ch}
+  .chips{display:flex; flex-wrap:wrap; gap:10px; margin-top:22px}
+  .chip{display:inline-flex; align-items:center; gap:7px; background:var(--surface-2); border:1px solid var(--line); border-radius:999px; padding:6px 13px; font-size:13px; color:var(--ink)}
+  .chip b{font-weight:700}
+  .chip .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+
+  section{padding:44px 0}
+  section + section{border-top:1px solid var(--line)}
+  .sec-head{display:flex; align-items:baseline; gap:14px; margin:0 0 22px}
+  .sec-num{font-family:"Cascadia Code",Consolas,ui-monospace,monospace; font-size:13px; color:var(--accent); font-weight:700; padding-top:5px}
+  h2{font-size:clamp(20px,2.6vw,27px); margin:0; letter-spacing:-.01em; font-weight:800; text-wrap:balance}
+  .sec-sub{color:var(--muted); margin:6px 0 0; font-size:15px; max-width:75ch}
+
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:16px}
+  .kpi{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
+  .kpi .k-label{font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:600}
+  .kpi .k-val{font-size:27px; font-weight:800; margin:8px 0 2px; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+  .kpi .k-val small{font-size:15px; font-weight:600; color:var(--muted)}
+  .kpi .k-foot{font-size:12.5px; color:var(--muted)}
+
+  .diagram-scroll{overflow-x:auto; padding:6px 2px 10px}
+  .diagram{min-width:760px; display:grid; grid-template-columns:1fr 268px; gap:20px; align-items:start}
+  .flow-col{display:flex; flex-direction:column; gap:0}
+  .tier{position:relative}
+  .chev{display:flex; justify-content:center; padding:9px 0; color:var(--muted)}
+  .chev span{font-size:13px; line-height:1; display:inline-flex; align-items:center; gap:6px}
+  .actor{background:var(--card); border:1px solid var(--line-strong); border-radius:12px; padding:14px 18px; display:flex; align-items:center; gap:14px; box-shadow:var(--shadow)}
+  .region{border:1.5px solid var(--region); border-radius:16px; padding:34px 18px 20px; position:relative; margin-top:6px; background:color-mix(in srgb,var(--region) 5%, var(--surface))}
+  .container-tag{position:absolute; top:-1px; left:16px; transform:translateY(-50%); font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:4px 10px; border-radius:7px; background:var(--bg); border:1px solid var(--line); display:inline-flex; align-items:center; gap:7px}
+  .container-tag .sq{width:11px;height:11px;border-radius:3px}
+  .vpc{border:1.4px solid var(--vnet); border-radius:14px; padding:30px 16px 16px; position:relative; margin-top:14px; background:color-mix(in srgb,var(--vnet) 7%, transparent)}
+  .subnet{border:1.3px dashed; border-radius:12px; padding:28px 14px 14px; position:relative; margin-top:16px}
+  .subnet.pub{border-color:var(--sub-pub); background:color-mix(in srgb,var(--sub-pub) 9%, transparent)}
+  .subnet.priv{border-color:var(--sub-priv); background:color-mix(in srgb,var(--sub-priv) 8%, transparent)}
+  .subnet:first-of-type{margin-top:6px}
+  .row{display:grid; gap:12px}
+  .row.two{grid-template-columns:1fr 1fr}
+  .row.one{grid-template-columns:1fr}
+
+  .svc{background:var(--card); border:1px solid var(--line); border-radius:11px; padding:12px 13px; display:flex; align-items:center; gap:12px; box-shadow:var(--shadow); min-width:0}
+  .svc .ic{flex:none; width:42px; height:42px; border-radius:9px; display:grid; place-items:center; color:#fff; font-weight:800; font-size:11px; letter-spacing:.01em; text-align:center; line-height:1.05; box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+  .svc .tx{min-width:0}
+  .svc .nm{font-weight:700; font-size:14.5px; letter-spacing:-.01em}
+  .svc .sb{font-size:12px; color:var(--muted); margin-top:1px}
+  .c-compute{background:var(--c-compute)} .c-network{background:var(--c-network)}
+  .c-db{background:var(--c-db)} .c-storage{background:var(--c-storage)}
+  .c-security{background:var(--c-security)} .c-mgmt{background:var(--c-mgmt)} .c-ext{background:var(--c-ext)}
+
+  .rail{border:1.3px solid var(--line-strong); border-radius:14px; padding:30px 14px 14px; position:relative; background:var(--surface); display:flex; flex-direction:column; gap:12px; align-self:stretch}
+  .rail .container-tag{background:var(--surface)}
+  .ext-strip{border:1.3px dashed var(--c-ext); border-radius:12px; padding:28px 14px 14px; position:relative; margin-top:22px; background:color-mix(in srgb,var(--c-ext) 8%, transparent)}
+  .egress-note{text-align:center; font-size:12.5px; color:var(--muted); margin:14px 0 0; display:flex; align-items:center; justify-content:center; gap:8px}
+  .egress-note .ln{height:1px; flex:1; background:var(--line); max-width:120px}
+
+  .legend{display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:22px; padding-top:18px; border-top:1px solid var(--line)}
+  .lg{display:inline-flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted)}
+  .lg .sq{width:12px;height:12px;border-radius:3px}
+  .lg .ln-pub{width:22px;height:0;border-top:2px dashed var(--sub-pub)}
+  .lg .ln-priv{width:22px;height:0;border-top:2px dashed var(--sub-priv)}
+
+  .flow{display:grid; grid-template-columns:repeat(2,1fr); gap:14px}
+  .step{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 16px 16px 52px; position:relative; box-shadow:var(--shadow)}
+  .step .n{position:absolute; left:14px; top:15px; width:26px; height:26px; border-radius:8px; background:var(--accent); color:#fff; font-weight:800; font-size:13px; display:grid; place-items:center; font-variant-numeric:tabular-nums}
+  .step h4{margin:0 0 3px; font-size:14.5px}
+  .step p{margin:0; font-size:13px; color:var(--muted)}
+  .step code{font-family:"Cascadia Code",Consolas,monospace; font-size:12px; background:var(--surface-2); padding:1px 5px; border-radius:5px; color:var(--ink)}
+
+  .tbl-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow)}
+  table{border-collapse:collapse; width:100%; min-width:640px; background:var(--card); font-size:14px}
+  thead th{text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:700; padding:13px 15px; border-bottom:1px solid var(--line-strong); background:var(--surface-2); position:sticky; top:0}
+  td{padding:12px 15px; border-bottom:1px solid var(--line); vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:color-mix(in srgb,var(--accent) 4%, transparent)}
+  .num{text-align:right; font-variant-numeric:tabular-nums; font-family:"Cascadia Code",Consolas,monospace; white-space:nowrap}
+  .cat-pill{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; white-space:nowrap}
+  .cat-pill .sq{width:11px;height:11px;border-radius:3px; flex:none}
+  tr.total td{font-weight:800; background:var(--surface-2); border-top:2px solid var(--line-strong)}
+  tr.total td.num{font-size:15px}
+  .rec-col{background:color-mix(in srgb,var(--accent) 6%, transparent)}
+  thead th.rec-col{background:color-mix(in srgb,var(--accent) 14%, var(--surface-2))}
+  .colnote{font-weight:600; font-size:11px; color:var(--accent); display:block; text-transform:none; letter-spacing:0; margin-top:2px}
+
+  /* justificación por componente */
+  .just{display:grid; grid-template-columns:repeat(2,1fr); gap:16px; margin-top:24px}
+  .jcard{background:var(--card); border:1px solid var(--line); border-left:4px solid var(--jc,var(--accent)); border-radius:14px; padding:18px; box-shadow:var(--shadow)}
+  .jhead{display:flex; align-items:center; gap:12px; margin-bottom:14px}
+  .jhead .ic{flex:none; width:40px; height:40px; border-radius:9px; display:grid; place-items:center; color:#fff; font-weight:800; font-size:11px; text-align:center; line-height:1.05; box-shadow:inset 0 0 0 1px rgba(255,255,255,.14)}
+  .jhead .nm{font-weight:800; font-size:15px; letter-spacing:-.01em}
+  .jhead .role{font-size:12px; color:var(--muted); margin-top:1px}
+  .jcard dl{margin:0; display:flex; flex-direction:column; gap:11px}
+  .jcard dt{font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; color:var(--jc,var(--accent)); margin-bottom:3px}
+  .jcard dd{margin:0; font-size:13.5px; line-height:1.5; color:var(--ink)}
+  .jcard dd.alt{color:var(--muted)}
+  .jcard code{font-family:"Cascadia Code",Consolas,monospace; font-size:12px; background:var(--surface-2); padding:1px 5px; border-radius:5px; color:var(--ink)}
+  .just-head{margin:30px 0 0; font-size:18px; font-weight:800; letter-spacing:-.01em}
+  .just-sub{margin:6px 0 0; font-size:14px; color:var(--muted); max-width:75ch}
+  @media (max-width:880px){ .just{grid-template-columns:1fr} }
+
+  .cards3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+  .info{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px; box-shadow:var(--shadow)}
+  .info .t{font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:700; margin:0 0 12px}
+  .info ul{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:9px}
+  .info li{display:flex; justify-content:space-between; gap:12px; font-size:13.5px; border-bottom:1px dashed var(--line); padding-bottom:9px}
+  .info li:last-child{border-bottom:none; padding-bottom:0}
+  .info li span:last-child{font-weight:700; font-variant-numeric:tabular-nums; font-family:"Cascadia Code",Consolas,monospace; text-align:right}
+
+  .alts{display:grid; grid-template-columns:repeat(2,1fr); gap:16px}
+  .alt{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:var(--shadow); position:relative}
+  .alt.pick{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent),var(--shadow)}
+  .alt .tag{position:absolute; top:16px; right:16px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--accent)}
+  .alt h4{margin:0 0 4px; font-size:16px; padding-right:90px}
+  .alt .price{font-family:"Cascadia Code",Consolas,monospace; font-weight:700; color:var(--ink); font-size:14px; margin:0 0 12px}
+  .alt p{margin:0 0 10px; font-size:13.5px; color:var(--muted)}
+  .pros{display:flex; flex-direction:column; gap:6px; font-size:13px}
+  .pros div{display:flex; gap:8px; align-items:flex-start}
+  .pros .p::before{content:"+"; color:var(--good); font-weight:800}
+  .pros .m::before{content:"\2013"; color:var(--crit); font-weight:800}
+
+  .callout{background:color-mix(in srgb,var(--accent) 7%, var(--surface)); border:1px solid color-mix(in srgb,var(--accent) 30%, var(--line)); border-radius:14px; padding:20px 22px; display:flex; gap:16px; align-items:flex-start}
+  .callout .ico{flex:none; width:38px;height:38px;border-radius:10px; background:var(--accent); color:#fff; display:grid; place-items:center; font-size:19px; font-weight:800}
+  .callout h4{margin:0 0 6px; font-size:16px}
+  .callout p{margin:0 0 8px; font-size:14px; color:var(--muted)}
+  .callout p:last-child{margin-bottom:0}
+  .callout code{font-family:"Cascadia Code",Consolas,monospace; font-size:12.5px; background:var(--surface-2); padding:2px 7px; border-radius:6px; color:var(--ink); word-break:break-all}
+  ol.steps{margin:8px 0 0; padding-left:20px; font-size:13.5px; color:var(--muted)}
+  ol.steps li{margin-bottom:6px}
+  ol.steps code{background:var(--surface-2); padding:1px 6px; border-radius:5px; color:var(--ink)}
+
+  .assump{columns:2; column-gap:32px; margin:0; padding:0}
+  .assump li{break-inside:avoid; margin:0 0 12px; list-style:none; padding-left:22px; position:relative; font-size:14px; color:var(--muted)}
+  .assump li::before{content:"\203A"; position:absolute; left:4px; top:-1px; color:var(--accent); font-weight:800}
+  .assump li b{color:var(--ink); font-weight:700}
+
+  footer{border-top:1px solid var(--line); padding:26px 0 44px; color:var(--muted); font-size:13px}
+  .foot-flex{display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px}
+
+  @media (max-width:880px){
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .diagram{grid-template-columns:1fr}
+    .flow{grid-template-columns:1fr}
+    .cards3{grid-template-columns:1fr}
+    .alts{grid-template-columns:1fr}
+    .assump{columns:1}
+  }
+  @media (prefers-reduced-motion:no-preference){
+    .kpi,.svc,.step,.alt{transition:transform .15s ease}
+    .alt:hover{transform:translateY(-2px)}
+  }
+</style>
+
+<header class="top">
+  <div class="wrap top-inner">
+    <p class="eyebrow">Documento de Arquitectura · Propuesta de despliegue Cloud</p>
+    <h1>QA Metrics en Microsoft Azure</h1>
+    <p class="lede">Arquitectura de referencia para desplegar la plataforma interna de métricas de QA de INOVABIZ sobre Azure, con dimensionamiento de componentes y estimación de consumo mensual en tres escenarios.</p>
+    <div class="chips">
+      <span class="chip"><span class="dot"></span><b>App:</b>&nbsp;Next.js 16 + API Express + PostgreSQL</span>
+      <span class="chip"><b>Modelo:</b>&nbsp;Contenedores (Container Apps)</span>
+      <span class="chip"><b>Región base:</b>&nbsp;East US</span>
+      <span class="chip"><b>Uso:</b>&nbsp;Interno · baja concurrencia</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 1. Resumen -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><div><h2>Resumen ejecutivo</h2>
+      <p class="sec-sub">La aplicación se traslada 1:1 desde su despliegue actual en contenedores (Coolify/Docker) a servicios gestionados de Azure, sin re-arquitectura. Cifras de consumo On-Demand, sin compromisos.</p></div></div>
+    <div class="kpis">
+      <div class="kpi"><div class="k-label">Costo estimado / mes</div><div class="k-val">$80–320<small> USD</small></div><div class="k-foot">East US · según escenario</div></div>
+      <div class="kpi"><div class="k-label">Servicios Azure</div><div class="k-val">11</div><div class="k-foot">core + gestionados</div></div>
+      <div class="kpi"><div class="k-label">Recomendado</div><div class="k-val">$205<small>/mes</small></div><div class="k-foot">Container Apps 2× + PostgreSQL</div></div>
+      <div class="kpi"><div class="k-label">Con Reservas (1 año)</div><div class="k-val">&minus;30<small>%</small></div><div class="k-foot">Cómputo + PostgreSQL</div></div>
+    </div>
+  </section>
+
+  <!-- 2. Diagrama -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><div><h2>Diagrama de arquitectura</h2>
+      <p class="sec-sub">Despliegue en una Virtual Network (VNet) con subredes públicas (borde) y privadas (aplicación y datos). El color de cada tarjeta indica la categoría del servicio Azure.</p></div></div>
+
+    <div class="diagram-scroll">
+      <div class="diagram">
+        <div class="flow-col">
+
+          <div class="tier">
+            <div class="actor">
+              <span class="ic" style="background:var(--ink)">USR</span>
+              <div class="tx"><div class="nm">Usuarios internos</div><div class="sb">Analistas QA · Líderes · Admin — navegador vía HTTPS</div></div>
+            </div>
+          </div>
+          <div class="chev"><span>&#9660;&nbsp; HTTPS 443</span></div>
+
+          <div class="region tier">
+            <span class="container-tag"><span class="sq" style="background:var(--region)"></span>Azure — Región East US · Resource Group</span>
+
+            <div class="row two">
+              <div class="svc"><span class="ic c-network">DNS</span><div class="tx"><div class="nm">Azure DNS</div><div class="sb">qa-metrics.inovabiz.com</div></div></div>
+              <div class="svc"><span class="ic c-security">CERT</span><div class="tx"><div class="nm">Managed Certificate</div><div class="sb">TLS gestionado (gratis)</div></div></div>
+            </div>
+
+            <div class="vpc">
+              <span class="container-tag"><span class="sq" style="background:var(--vnet)"></span>Virtual Network · 10.0.0.0/16</span>
+
+              <div class="subnet pub">
+                <span class="container-tag"><span class="sq" style="background:var(--sub-pub)"></span>Subred pública</span>
+                <div class="row two">
+                  <div class="svc"><span class="ic c-network">AGW</span><div class="tx"><div class="nm">Application Gateway</div><div class="sb">TLS · WAF opcional · enrutado</div></div></div>
+                  <div class="svc"><span class="ic c-network">NAT</span><div class="tx"><div class="nm">NAT Gateway</div><div class="sb">Salida a internet</div></div></div>
+                </div>
+              </div>
+              <div class="chev"><span>&#9660;</span></div>
+
+              <div class="subnet priv">
+                <span class="container-tag"><span class="sq" style="background:var(--sub-priv)"></span>Subred privada — Aplicación (Container Apps Env.)</span>
+                <div class="row two">
+                  <div class="svc"><span class="ic c-compute">ACA</span><div class="tx"><div class="nm">Container Apps — Web</div><div class="sb">Next.js 16 · SSR · :3000</div></div></div>
+                  <div class="svc"><span class="ic c-compute">ACA</span><div class="tx"><div class="nm">Container Apps — API</div><div class="sb">Express 5 · reportes · :8080</div></div></div>
+                </div>
+                <p class="egress-note"><span class="ln"></span>Web &#8644; API (SSR) · egress a SaaS vía NAT<span class="ln"></span></p>
+              </div>
+              <div class="chev"><span>&#9660;&nbsp; PostgreSQL 5432</span></div>
+
+              <div class="subnet priv">
+                <span class="container-tag"><span class="sq" style="background:var(--sub-priv)"></span>Subred privada — Datos (delegada)</span>
+                <div class="row one">
+                  <div class="svc"><span class="ic c-db">PG</span><div class="tx"><div class="nm">PostgreSQL Flexible Server 16</div><div class="sb">Zone-redundant opcional · 24 modelos Prisma</div></div></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ext-strip">
+              <span class="container-tag"><span class="sq" style="background:var(--c-ext)"></span>Internet — Proveedores SaaS externos</span>
+              <div class="row two">
+                <div class="svc"><span class="ic c-ext">&#9993;</span><div class="tx"><div class="nm">Resend</div><div class="sb">Correo transaccional (alertas)</div></div></div>
+                <div class="svc"><span class="ic c-ext">FP</span><div class="tx"><div class="nm">FlowPilot</div><div class="sb">Carga de horas (Flask) · HTTPS</div></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rail">
+          <span class="container-tag"><span class="sq" style="background:var(--line-strong)"></span>Servicios regionales</span>
+          <div class="svc"><span class="ic c-compute">ACR</span><div class="tx"><div class="nm">Container Registry</div><div class="sb">Imágenes Docker web/api</div></div></div>
+          <div class="svc"><span class="ic c-storage">BLOB</span><div class="tx"><div class="nm">Blob Storage</div><div class="sb">Evidencias · reportes generados</div></div></div>
+          <div class="svc"><span class="ic c-security">KV</span><div class="tx"><div class="nm">Key Vault</div><div class="sb">JWT · ENCRYPTION_KEY · secretos DB</div></div></div>
+          <div class="svc"><span class="ic c-mgmt">MON</span><div class="tx"><div class="nm">Azure Monitor</div><div class="sb">Log Analytics · App Insights · alertas</div></div></div>
+          <p class="sb" style="font-size:12px;color:var(--muted);margin:2px 4px 0">Accedidos por Container Apps: pull de imagen, secretos, logs y artefactos (vía Managed Identity).</p>
+        </div>
+      </div>
+    </div>
+
+    <figure class="drawio-embed" style="margin:22px 0 0;padding:0">
+      <figcaption style="font-size:12.5px;color:var(--muted);margin:0 0 10px">Versión interactiva (draw.io) — íconos oficiales de Azure · usa la barra para zoom y capas</figcaption>
+      <div class="mxgraph" style="max-width:100%;border:1px solid var(--line);border-radius:14px;background:var(--card);box-shadow:var(--shadow)" data-mxgraph="{&quot;highlight&quot;:&quot;#0078D4&quot;,&quot;nav&quot;:true,&quot;resize&quot;:true,&quot;toolbar&quot;:&quot;zoom layers lightbox&quot;,&quot;xml&quot;:&quot;&lt;mxfile host=\&quot;app.diagrams.net\&quot; type=\&quot;device\&quot;&gt;\n  &lt;diagram name=\&quot;Azure — QA Metrics\&quot; id=\&quot;azure-qa-metrics\&quot;&gt;\n    &lt;mxGraphModel dx=\&quot;1200\&quot; dy=\&quot;900\&quot; grid=\&quot;0\&quot; gridSize=\&quot;10\&quot; guides=\&quot;1\&quot; tooltips=\&quot;1\&quot; connect=\&quot;1\&quot; arrows=\&quot;1\&quot; fold=\&quot;1\&quot; page=\&quot;1\&quot; pageScale=\&quot;1\&quot; pageWidth=\&quot;1169\&quot; pageHeight=\&quot;1654\&quot; math=\&quot;0\&quot; shadow=\&quot;0\&quot;&gt;\n      &lt;root&gt;\n        &lt;mxCell id=\&quot;0\&quot;/&gt;\n        &lt;mxCell id=\&quot;1\&quot; parent=\&quot;0\&quot;/&gt;\n\n        &lt;mxCell id=\&quot;title\&quot; value=\&quot;Arquitectura Azure — QA Metrics&amp;#10;Next.js 16 + API Express + PostgreSQL · Container Apps · Región East US\&quot; style=\&quot;text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;spacing=2;\&quot; vertex=\&quot;1\&quot; parent=\&quot;1\&quot;&gt;\n          &lt;mxGeometry x=\&quot;60\&quot; y=\&quot;-80\&quot; width=\&quot;900\&quot; height=\&quot;50\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n\n        &lt;mxCell id=\&quot;users\&quot; value=\&quot;&amp;lt;b&amp;gt;Usuarios internos&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;Analistas QA · Líderes · Admin — HTTPS\&quot; style=\&quot;rounded=1;whiteSpace=wrap;html=1;fillColor=#16222E;strokeColor=#16222E;fontColor=#FFFFFF;fontSize=12;\&quot; vertex=\&quot;1\&quot; parent=\&quot;1\&quot;&gt;\n          &lt;mxGeometry x=\&quot;360\&quot; y=\&quot;20\&quot; width=\&quot;300\&quot; height=\&quot;60\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n\n        &lt;mxCell id=\&quot;region\&quot; value=\&quot;Azure — Región East US · Resource Group\&quot; style=\&quot;rounded=1;arcSize=3;whiteSpace=wrap;html=1;dashed=0;strokeColor=#0078D4;strokeWidth=2;fillColor=#0078D4;fillOpacity=5;verticalAlign=top;align=left;spacingLeft=14;spacingTop=10;fontColor=#0078D4;fontStyle=1;fontSize=13;container=1;collapsible=0;\&quot; vertex=\&quot;1\&quot; parent=\&quot;1\&quot;&gt;\n          &lt;mxGeometry x=\&quot;60\&quot; y=\&quot;170\&quot; width=\&quot;980\&quot; height=\&quot;760\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n\n        &lt;mxCell id=\&quot;dns\&quot; value=\&quot;&amp;lt;b&amp;gt;Azure DNS&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;qa-metrics.inovabiz.com\&quot; style=\&quot;image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/networking/DNS_Zones.svg;\&quot; vertex=\&quot;1\&quot; parent=\&quot;region\&quot;&gt;\n          &lt;mxGeometry x=\&quot;60\&quot; y=\&quot;55\&quot; width=\&quot;60\&quot; height=\&quot;60\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;cert\&quot; value=\&quot;&amp;lt;b&amp;gt;Managed Certificate&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;TLS gestionado (gratis)\&quot; style=\&quot;rounded=1;whiteSpace=wrap;html=1;strokeColor=#C0392B;fillColor=#C0392B;fillOpacity=10;fontSize=11;\&quot; vertex=\&quot;1\&quot; parent=\&quot;region\&quot;&gt;\n          &lt;mxGeometry x=\&quot;280\&quot; y=\&quot;55\&quot; width=\&quot;220\&quot; height=\&quot;56\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n\n        &lt;mxCell id=\&quot;vnet\&quot; value=\&quot;Virtual Network · 10.0.0.0/16\&quot; style=\&quot;rounded=1;arcSize=3;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 4;strokeColor=#8661C5;strokeWidth=2;fillColor=#8661C5;fillOpacity=7;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#8661C5;fontStyle=1;fontSize=12;container=1;collapsible=0;\&quot; vertex=\&quot;1\&quot; parent=\&quot;region\&quot;&gt;\n          &lt;mxGeometry x=\&quot;40\&quot; y=\&quot;150\&quot; width=\&quot;560\&quot; height=\&quot;560\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n\n        &lt;mxCell id=\&quot;subpub\&quot; value=\&quot;Subred pública\&quot; style=\&quot;rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;strokeColor=#107C10;fillColor=#107C10;fillOpacity=8;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontColor=#107C10;fontStyle=1;fontSize=11;container=1;collapsible=0;\&quot; vertex=\&quot;1\&quot; parent=\&quot;vnet\&quot;&gt;\n          &lt;mxGeometry x=\&quot;25\&quot; y=\&quot;45\&quot; width=\&quot;510\&quot; height=\&quot;135\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;agw\&quot; value=\&quot;&amp;lt;b&amp;gt;Application Gateway&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;TLS · WAF opcional · L7\&quot; style=\&quot;image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/networking/Application_Gateways.svg;\&quot; vertex=\&quot;1\&quot; parent=\&quot;subpub\&quot;&gt;\n          &lt;mxGeometry x=\&quot;95\&quot; y=\&quot;42\&quot; width=\&quot;60\&quot; height=\&quot;60\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;nat\&quot; value=\&quot;&amp;lt;b&amp;gt;NAT Gateway&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;Salida a internet\&quot; style=\&quot;image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/networking/NAT.svg;\&quot; vertex=\&quot;1\&quot; parent=\&quot;subpub\&quot;&gt;\n          &lt;mxGeometry x=\&quot;350\&quot; y=\&quot;42\&quot; width=\&quot;60\&quot; height=\&quot;60\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n\n        &lt;mxCell id=\&quot;subapp\&quot; value=\&quot;Subred privada — Aplicación (Container Apps Environment)\&quot; style=\&quot;rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;strokeColor=#0078D4;fillColor=#0078D4;fillOpacity=8;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontColor=#0078D4;fontStyle=1;fontSize=11;container=1;collapsible=0;\&quot; vertex=\&quot;1\&quot; parent=\&quot;vnet\&quot;&gt;\n          &lt;mxGeometry x=\&quot;25\&quot; y=\&quot;205\&quot; width=\&quot;510\&quot; height=\&quot;150\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;acaweb\&quot; value=\&quot;&amp;lt;b&amp;gt;Container Apps — Web&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;Next.js 16 · SSR · :3000\&quot; style=\&quot;image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/other/Container_App_Environments.svg;\&quot; vertex=\&quot;1\&quot; parent=\&quot;subapp\&quot;&gt;\n          &lt;mxGeometry x=\&quot;95\&quot; y=\&quot;50\&quot; width=\&quot;60\&quot; height=\&quot;60\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;acaapi\&quot; value=\&quot;&amp;lt;b&amp;gt;Container Apps — API&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;Express 5 · reportes · :8080\&quot; style=\&quot;image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/other/Worker_Container_App.svg;\&quot; vertex=\&quot;1\&quot; parent=\&quot;subapp\&quot;&gt;\n          &lt;mxGeometry x=\&quot;350\&quot; y=\&quot;50\&quot; width=\&quot;60\&quot; height=\&quot;60\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n\n        &lt;mxCell id=\&quot;subdata\&quot; value=\&quot;Subred privada — Datos (delegada · Private Link)\&quot; style=\&quot;rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;strokeColor=#0078D4;fillColor=#0078D4;fillOpacity=8;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontColor=#0078D4;fontStyle=1;fontSize=11;container=1;collapsible=0;\&quot; vertex=\&quot;1\&quot; parent=\&quot;vnet\&quot;&gt;\n          &lt;mxGeometry x=\&quot;25\&quot; y=\&quot;385\&quot; width=\&quot;510\&quot; height=\&quot;140\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;pg\&quot; value=\&quot;&amp;lt;b&amp;gt;PostgreSQL Flexible Server 16&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;24 modelos Prisma · zone-redundant opc.\&quot; style=\&quot;image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/databases/Azure_Database_PostgreSQL_Server.svg;\&quot; vertex=\&quot;1\&quot; parent=\&quot;subdata\&quot;&gt;\n          &lt;mxGeometry x=\&quot;225\&quot; y=\&quot;35\&quot; width=\&quot;48\&quot; height=\&quot;64\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n\n        &lt;mxCell id=\&quot;rail\&quot; value=\&quot;Servicios regionales\&quot; style=\&quot;rounded=1;arcSize=3;whiteSpace=wrap;html=1;dashed=0;strokeColor=#94A3B8;strokeWidth=1;fillColor=#64748B;fillOpacity=6;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#64748B;fontStyle=1;fontSize=12;container=1;collapsible=0;\&quot; vertex=\&quot;1\&quot; parent=\&quot;region\&quot;&gt;\n          &lt;mxGeometry x=\&quot;680\&quot; y=\&quot;150\&quot; width=\&quot;250\&quot; height=\&quot;560\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;acr\&quot; value=\&quot;&amp;lt;b&amp;gt;Container Registry&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;Imágenes Docker web/api\&quot; style=\&quot;image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/containers/Container_Registries.svg;\&quot; vertex=\&quot;1\&quot; parent=\&quot;rail\&quot;&gt;\n          &lt;mxGeometry x=\&quot;95\&quot; y=\&quot;50\&quot; width=\&quot;60\&quot; height=\&quot;56\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;blob\&quot; value=\&quot;&amp;lt;b&amp;gt;Blob Storage&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;Evidencias · reportes generados\&quot; style=\&quot;image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/storage/Storage_Accounts.svg;\&quot; vertex=\&quot;1\&quot; parent=\&quot;rail\&quot;&gt;\n          &lt;mxGeometry x=\&quot;93\&quot; y=\&quot;185\&quot; width=\&quot;64\&quot; height=\&quot;52\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;kv\&quot; value=\&quot;&amp;lt;b&amp;gt;Key Vault&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;JWT · ENCRYPTION_KEY · secretos DB\&quot; style=\&quot;image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/security/Key_Vaults.svg;\&quot; vertex=\&quot;1\&quot; parent=\&quot;rail\&quot;&gt;\n          &lt;mxGeometry x=\&quot;95\&quot; y=\&quot;315\&quot; width=\&quot;60\&quot; height=\&quot;60\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;mon\&quot; value=\&quot;&amp;lt;b&amp;gt;Azure Monitor&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;Log Analytics · App Insights · alertas\&quot; style=\&quot;image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/management_governance/Log_Analytics_Workspaces.svg;\&quot; vertex=\&quot;1\&quot; parent=\&quot;rail\&quot;&gt;\n          &lt;mxGeometry x=\&quot;95\&quot; y=\&quot;455\&quot; width=\&quot;60\&quot; height=\&quot;60\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n\n        &lt;mxCell id=\&quot;ext\&quot; value=\&quot;Internet — Proveedores SaaS externos\&quot; style=\&quot;rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;strokeColor=#64748B;fillColor=#64748B;fillOpacity=8;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#64748B;fontStyle=1;fontSize=12;container=1;collapsible=0;\&quot; vertex=\&quot;1\&quot; parent=\&quot;1\&quot;&gt;\n          &lt;mxGeometry x=\&quot;140\&quot; y=\&quot;1000\&quot; width=\&quot;560\&quot; height=\&quot;120\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;resend\&quot; value=\&quot;&amp;lt;b&amp;gt;Resend&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;Correo transaccional (alertas)\&quot; style=\&quot;rounded=1;whiteSpace=wrap;html=1;strokeColor=#64748B;fillColor=#64748B;fillOpacity=12;fontSize=11;\&quot; vertex=\&quot;1\&quot; parent=\&quot;ext\&quot;&gt;\n          &lt;mxGeometry x=\&quot;40\&quot; y=\&quot;45\&quot; width=\&quot;220\&quot; height=\&quot;56\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;flowpilot\&quot; value=\&quot;&amp;lt;b&amp;gt;FlowPilot&amp;lt;/b&amp;gt;&amp;lt;br&amp;gt;Carga de horas (Flask) · HTTPS\&quot; style=\&quot;rounded=1;whiteSpace=wrap;html=1;strokeColor=#64748B;fillColor=#64748B;fillOpacity=12;fontSize=11;\&quot; vertex=\&quot;1\&quot; parent=\&quot;ext\&quot;&gt;\n          &lt;mxGeometry x=\&quot;300\&quot; y=\&quot;45\&quot; width=\&quot;220\&quot; height=\&quot;56\&quot; as=\&quot;geometry\&quot;/&gt;\n        &lt;/mxCell&gt;\n\n        &lt;mxCell id=\&quot;e1\&quot; value=\&quot;HTTPS 443\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0078D4;strokeWidth=2;fontSize=11;fontStyle=1;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;users\&quot; target=\&quot;agw\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;e2\&quot; value=\&quot;\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#54627A;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;agw\&quot; target=\&quot;acaweb\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;e3\&quot; value=\&quot;\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#54627A;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;agw\&quot; target=\&quot;acaapi\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;e4\&quot; value=\&quot;Web ⇄ API (SSR)\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;startArrow=classic;endArrow=classic;strokeColor=#8661C5;dashed=1;fontSize=10;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;acaweb\&quot; target=\&quot;acaapi\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;e5\&quot; value=\&quot;5432\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0E7C7B;fontSize=10;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;acaweb\&quot; target=\&quot;pg\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;e6\&quot; value=\&quot;5432\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0E7C7B;fontSize=10;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;acaapi\&quot; target=\&quot;pg\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;e7\&quot; value=\&quot;egress a SaaS\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#64748B;fontSize=10;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;nat\&quot; target=\&quot;ext\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;e8\&quot; value=\&quot;pull imagen (MI)\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#94A3B8;dashed=1;fontSize=10;fontColor=#94A3B8;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;acaweb\&quot; target=\&quot;acr\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;e9\&quot; value=\&quot;secretos (MI)\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#94A3B8;dashed=1;fontSize=10;fontColor=#94A3B8;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;acaapi\&quot; target=\&quot;kv\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;e10\&quot; value=\&quot;logs · APM\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#94A3B8;dashed=1;fontSize=10;fontColor=#94A3B8;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;acaapi\&quot; target=\&quot;mon\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n        &lt;mxCell id=\&quot;e11\&quot; value=\&quot;reportes\&quot; style=\&quot;edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#94A3B8;dashed=1;fontSize=10;fontColor=#94A3B8;\&quot; edge=\&quot;1\&quot; parent=\&quot;1\&quot; source=\&quot;acaapi\&quot; target=\&quot;blob\&quot;&gt;&lt;mxGeometry relative=\&quot;1\&quot; as=\&quot;geometry\&quot;/&gt;&lt;/mxCell&gt;\n\n      &lt;/root&gt;\n    &lt;/mxGraphModel&gt;\n  &lt;/diagram&gt;\n&lt;/mxfile&gt;\n&quot;}"></div>
+    </figure>
+
+    <div class="legend">
+      <span class="lg"><span class="sq c-compute"></span>Cómputo</span>
+      <span class="lg"><span class="sq c-network"></span>Red / Contenido</span>
+      <span class="lg"><span class="sq c-db"></span>Base de datos</span>
+      <span class="lg"><span class="sq c-storage"></span>Almacenamiento</span>
+      <span class="lg"><span class="sq c-security"></span>Seguridad / Identidad</span>
+      <span class="lg"><span class="sq c-mgmt"></span>Gestión / Observabilidad</span>
+      <span class="lg"><span class="sq c-ext"></span>Externo (SaaS)</span>
+      <span class="lg"><span class="ln-pub"></span>Subred pública</span>
+      <span class="lg"><span class="ln-priv"></span>Subred privada</span>
+    </div>
+  </section>
+
+  <!-- 3. Flujo -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><div><h2>Ruta de la petición</h2>
+      <p class="sec-sub">Cómo viaja una solicitud del analista, desde el navegador hasta la base de datos y las integraciones externas.</p></div></div>
+    <div class="flow">
+      <div class="step"><span class="n">1</span><h4>Resolución y TLS</h4><p><b>Azure DNS</b> resuelve el dominio al <b>Application Gateway</b>, que termina el certificado TLS (<b>Managed Certificate</b>). Entra por el puerto <code>443</code>.</p></div>
+      <div class="step"><span class="n">2</span><h4>Balanceo por host</h4><p>El <b>Application Gateway</b> enruta <code>qa-metrics…</code> a <b>Container Apps — Web</b> y <code>api.qa-metrics…</code> a <b>Container Apps — API</b>.</p></div>
+      <div class="step"><span class="n">3</span><h4>Renderizado y lógica</h4><p><b>Web (Next.js)</b> hace SSR y llama a la <b>API (Express)</b>; ambos leen/escriben en Postgres vía Prisma (<code>pg</code>).</p></div>
+      <div class="step"><span class="n">4</span><h4>Persistencia</h4><p>Consultas a <b>PostgreSQL Flexible Server</b> en subred delegada por el puerto <code>5432</code> (Private Link). Sin exposición pública.</p></div>
+      <div class="step"><span class="n">5</span><h4>Generación de reportes</h4><p>La API produce <b>PPTX / Excel / PDF</b> con gráficos server-side (picos de CPU puntuales) y los entrega o los guarda en <b>Blob Storage</b>.</p></div>
+      <div class="step"><span class="n">6</span><h4>Integraciones salientes</h4><p>Correo vía <b>Resend</b> y carga de horas a <b>FlowPilot</b> salen a internet por el <b>NAT Gateway</b>.</p></div>
+    </div>
+  </section>
+
+  <!-- 4. Componentes -->
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><div><h2>Componentes y dimensionamiento</h2>
+      <p class="sec-sub">Servicios propuestos y su tamaño de partida. Escala con el número de analistas y la frecuencia de reportes.</p></div></div>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Servicio Azure</th><th>Categoría</th><th>Rol en la aplicación</th><th>Dimensionamiento inicial</th></tr></thead>
+        <tbody>
+          <tr><td><b>Container Apps — Web</b></td><td><span class="cat-pill"><span class="sq c-compute"></span>Cómputo</span></td><td>Frontend Next.js 16 con SSR (next-auth)</td><td class="mono">0.5 vCPU · 1 GiB · 1–2 réplicas</td></tr>
+          <tr><td><b>Container Apps — API</b></td><td><span class="cat-pill"><span class="sq c-compute"></span>Cómputo</span></td><td>API Express: auth, métricas, generación de reportes</td><td class="mono">1 vCPU · 2 GiB · 1–2 réplicas</td></tr>
+          <tr><td><b>PostgreSQL Flexible Server 16</b></td><td><span class="cat-pill"><span class="sq c-db"></span>Base de datos</span></td><td>Datos relacionales (24 modelos Prisma)</td><td class="mono">B2s (Burstable) · 32 GB</td></tr>
+          <tr><td><b>Application Gateway</b></td><td><span class="cat-pill"><span class="sq c-network"></span>Red</span></td><td>TLS + enrutado por host + WAF opcional</td><td class="mono">Standard_v2 · 2 backends</td></tr>
+          <tr><td><b>NAT Gateway</b></td><td><span class="cat-pill"><span class="sq c-network"></span>Red</span></td><td>Salida a internet de subredes privadas (SaaS)</td><td class="mono">1× (2 zonas en HA)</td></tr>
+          <tr><td><b>Blob Storage</b></td><td><span class="cat-pill"><span class="sq c-storage"></span>Almacenamiento</span></td><td>Evidencias subidas y reportes generados</td><td class="mono">~10 GB · Hot LRS</td></tr>
+          <tr><td><b>Container Registry (ACR)</b></td><td><span class="cat-pill"><span class="sq c-compute"></span>Cómputo</span></td><td>Registro de imágenes Docker web/api</td><td class="mono">Basic · ~2 GB</td></tr>
+          <tr><td><b>Key Vault</b></td><td><span class="cat-pill"><span class="sq c-security"></span>Seguridad</span></td><td>JWT, ENCRYPTION_KEY, credenciales DB/FlowPilot</td><td class="mono">Standard · ~4 secretos</td></tr>
+          <tr><td><b>Azure Monitor + Log Analytics</b></td><td><span class="cat-pill"><span class="sq c-mgmt"></span>Gestión</span></td><td>Logs de contenedores, métricas y alertas</td><td class="mono">Logs + App Insights + 5 alertas</td></tr>
+          <tr><td><b>Azure DNS + Managed Cert</b></td><td><span class="cat-pill"><span class="sq c-network"></span>Red</span></td><td>DNS y certificados TLS gestionados</td><td class="mono">1 zona · certs gestionados</td></tr>
+          <tr><td><b>Virtual Network</b> (subredes, NSG, Private Link)</td><td><span class="cat-pill"><span class="sq c-network"></span>Red</span></td><td>Aislamiento de red; endpoints privados</td><td class="mono">2 zonas · pública+privada</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="just-head">Justificación por componente</h3>
+    <p class="just-sub">Por qué cada servicio entra en la arquitectura, por qué se eligió frente a sus alternativas, y cómo se ancla en el código real de la aplicación (monorepo turbo: <code>apps/web</code>, <code>apps/api</code>, <code>packages/database</code>).</p>
+    <div class="just">
+
+      <div class="jcard" style="--jc:var(--c-compute)">
+        <div class="jhead"><span class="ic c-compute">ACA</span><div><div class="nm">Container Apps — Web</div><div class="role">Cómputo · Frontend Next.js 16</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>El front es <b>Next.js 16 con SSR</b> y <code>next-auth</code>: necesita un runtime Node siempre disponible que ejecute el contenedor de <code>apps/web/Dockerfile</code> y renderice por request.</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>Container Apps corre <b>la misma imagen Docker</b> que hoy usan en Coolify, sin administrar servidores. Trae <b>ingress Envoy + TLS gestionado</b> y escalado por reglas (KEDA) de fábrica.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt"><b>App Service</b>: PaaS válido pero con escalado menos granular y sin escala a cero. <b>AKS</b>: sobredimensionado en operación. <b>VM</b>: gestionar SO/parches.</dd></div>
+          <div><dt>Dimensionamiento</dt><dd><code>0.5 vCPU / 1 GiB</code>, 2 réplicas para HA tras el ingress.</dd></div>
+        </dl>
+      </div>
+
+      <div class="jcard" style="--jc:var(--c-compute)">
+        <div class="jhead"><span class="ic c-compute">ACA</span><div><div class="nm">Container Apps — API</div><div class="role">Cómputo · Backend Express 5</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>La API (<code>apps/api</code>) hace auth JWT/bcrypt y <b>genera reportes pesados</b>: PPTX (<code>pptxgenjs</code>), Excel (<code>exceljs</code>), PDF (<code>jspdf</code>) y gráficos server-side con <code>chartjs-node-canvas</code> (render en canvas nativo, intensivo en CPU/memoria).</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>App <b>separada del web</b> dentro del mismo Environment: se escala/dimensiona sola y un reporte pesado no degrada la navegación. KEDA escala por concurrencia HTTP.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt"><b>Azure Functions</b>: los reportes con canvas y libs nativas exceden el modelo serverless cómodo. <b>Un solo contenedor web+api</b>: acopla el escalado.</dd></div>
+          <div><dt>Dimensionamiento</dt><dd><code>1 vCPU / 2 GiB</code>; picos de reporte puntuales → 2 réplicas absorben concurrencia.</dd></div>
+        </dl>
+      </div>
+
+      <div class="jcard" style="--jc:var(--c-db)">
+        <div class="jhead"><span class="ic c-db">PG</span><div><div class="nm">PostgreSQL Flexible Server 16</div><div class="role">Base de datos</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>El dominio es 100% relacional: <b>24 modelos Prisma</b> con FKs (Users, Testers, Projects, TestCycles, UserStory, DailyRecord, Flowpilot*, Automation*…). El motor actual ya es Postgres 16.</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>Flexible Server da <b>backups, parcheo y HA zonal opcional</b>, e <b>integración con la VNet</b> por subred delegada + Private Link. Sobre él corre <code>prisma migrate deploy</code>, igual que hoy.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt"><b>Postgres en contenedor</b>: gestionar almacenamiento y backups a mano. <b>Cosmos DB</b>: no relacional. <b>Single Server</b>: en retirada (legacy).</dd></div>
+          <div><dt>Dimensionamiento</dt><dd><code>B2s</code> (Burstable, costo-eficiente) + 32 GB; zona redundante solo en Alta disponibilidad.</dd></div>
+        </dl>
+      </div>
+
+      <div class="jcard" style="--jc:var(--c-network)">
+        <div class="jhead"><span class="ic c-network">AGW</span><div><div class="nm">Application Gateway</div><div class="role">Red · Ingreso L7 + WAF</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>Punto de entrada HTTPS único con <b>enrutado por host</b> (<code>qa-metrics…</code> → web, <code>api.qa-metrics…</code> → api), terminación TLS y, opcionalmente, <b>WAF</b> delante de la app.</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>Es <b>capa 7</b> con WAF integrado (OWASP). Nota: Container Apps ya trae ingress propio, por lo que el App Gateway es <b>opcional</b> y se añade cuando se quiere WAF/L7 central o ingress privado.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt"><b>Front Door</b>: pensado para global/multi-región y CDN, de más para una app interna. <b>Load Balancer</b>: es L4, no rutea por host. <b>Solo el ingress de ACA</b>: usado en el escenario mínimo.</dd></div>
+          <div><dt>Dimensionamiento</dt><dd><code>Standard_v2</code> (o <code>WAF_v2</code> en Alta disponibilidad) · 2 backends.</dd></div>
+        </dl>
+      </div>
+
+      <div class="jcard" style="--jc:var(--c-network)">
+        <div class="jhead"><span class="ic c-network">NAT</span><div><div class="nm">NAT Gateway</div><div class="role">Red · Egress</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>Las réplicas corren en <b>subred privada</b> pero deben salir a internet para enviar correo por <b>Resend</b> y sincronizar horas con <b>FlowPilot</b> (<code>flowpilot.biz</code>).</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>Da una <b>IP de salida estática</b> — útil si FlowPilot exige lista blanca de IP — y egress gestionado de alta disponibilidad.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt">En el <b>escenario mínimo</b> se usa el <b>egress gestionado</b> del Environment de Container Apps (sin IP fija ni costo del NAT).</dd></div>
+          <div><dt>Dimensionamiento</dt><dd>1× (2 zonas en Alta disponibilidad).</dd></div>
+        </dl>
+      </div>
+
+      <div class="jcard" style="--jc:var(--c-storage)">
+        <div class="jhead"><span class="ic c-storage">BLOB</span><div><div class="nm">Blob Storage</div><div class="role">Almacenamiento de objetos</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>Hoy los uploads (<code>multer</code>) se parsean en memoria y los reportes se generan al vuelo. Para <b>retener evidencias y reportes</b> (auditoría, re-descarga) hace falta almacenamiento duradero fuera del disco efímero.</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>Barato y duradero (LRS/ZRS), con <b>SAS tokens</b> para descargas directas sin pasar por la API.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt"><b>Azure Files</b> (SMB): innecesario para objetos. <b>Binarios en Postgres</b>: infla la DB y los backups.</dd></div>
+          <div><dt>Dimensionamiento</dt><dd>~10 GB Hot LRS; lifecycle a Cool para reportes antiguos.</dd></div>
+        </dl>
+      </div>
+
+      <div class="jcard" style="--jc:var(--c-compute)">
+        <div class="jhead"><span class="ic c-compute">ACR</span><div><div class="nm">Container Registry</div><div class="role">Cómputo · Registro</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>Container Apps necesita un registro desde donde traer las imágenes; hoy se construyen <b>dos imágenes</b> (<code>apps/web/Dockerfile</code>, <code>apps/api/Dockerfile</code>).</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>Registro privado integrado con <b>Managed Identity</b>: Container Apps hace el pull <b>sin credenciales</b> almacenadas.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt"><b>Docker Hub</b>: público, con rate limits y credenciales que gestionar.</dd></div>
+          <div><dt>Dimensionamiento</dt><dd><code>Basic</code> · ~2 GB de imágenes.</dd></div>
+        </dl>
+      </div>
+
+      <div class="jcard" style="--jc:var(--c-security)">
+        <div class="jhead"><span class="ic c-security">KV</span><div><div class="nm">Key Vault</div><div class="role">Seguridad · Secretos</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>La app maneja secretos reales: <code>JWT_SECRET</code>, <code>JWT_REFRESH_SECRET</code>, <code>ENCRYPTION_KEY</code> (que <b>cifra las credenciales de FlowPilot del usuario</b>) y <code>DATABASE_URL</code>.</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>Container Apps <b>referencia los secretos vía Managed Identity</b>, con cifrado en HSM, <b>rotación y auditoría</b> de acceso centralizadas.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt"><b>Secrets nativos de Container Apps</b>: más simples, pero sin rotación, HSM ni auditoría central. <b>App Configuration</b>: para config, no para secretos sensibles.</dd></div>
+          <div><dt>Dimensionamiento</dt><dd><code>Standard</code> · ~4 secretos. (El descubrimiento de FlowPilot dejó un password de QA a rotar.)</dd></div>
+        </dl>
+      </div>
+
+      <div class="jcard" style="--jc:var(--c-mgmt)">
+        <div class="jhead"><span class="ic c-mgmt">MON</span><div><div class="nm">Azure Monitor + Log Analytics</div><div class="role">Gestión · Observabilidad</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>La API loguea con <code>pino</code>; se necesita <b>centralizar logs</b> de contenedores, métricas (CPU/mem, réplicas, conexiones a PG) y <b>alertas</b> (fallo de sync a FlowPilot, CPU alta en reportes).</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>El Environment de Container Apps <b>envía logs a Log Analytics de forma nativa</b>; <b>Application Insights</b> añade trazas/APM del runtime Node sin agente extra.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt"><b>Datadog/Grafana Cloud</b>: solo si ya existe observabilidad corporativa estandarizada (costo adicional).</dd></div>
+          <div><dt>Dimensionamiento</dt><dd>Workspace + App Insights + ~5 alertas.</dd></div>
+        </dl>
+      </div>
+
+      <div class="jcard" style="--jc:var(--c-network)">
+        <div class="jhead"><span class="ic c-network">DNS</span><div><div class="nm">Azure DNS + Managed Cert</div><div class="role">Red · DNS y TLS</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>Los dominios <b>ya en uso</b> —<code>qa-metrics.inovabiz.com</code> y <code>api.qa-metrics.inovabiz.com</code>— deben resolver al ingress, con TLS válido (las cookies <code>Secure</code> exigen HTTPS).</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>El <b>Managed Certificate</b> de Container Apps/App Gateway emite y renueva TLS <b>gratis y automáticamente</b> para dominios propios; Azure DNS integra los registros.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt">Si el DNS de <code>inovabiz.com</code> vive en otro proveedor, se delega el subdominio o se usan CNAME; el certificado gestionado sigue aplicando.</dd></div>
+          <div><dt>Dimensionamiento</dt><dd>1 zona + certificados gestionados.</dd></div>
+        </dl>
+      </div>
+
+      <div class="jcard" style="--jc:var(--c-network)">
+        <div class="jhead"><span class="ic c-network">VNet</span><div><div class="nm">Virtual Network</div><div class="role">Red · Aislamiento</div></div></div>
+        <dl>
+          <div><dt>Por qué se necesita</dt><dd>Aislar la aplicación: subredes <b>públicas</b> (App Gateway, NAT) y <b>privadas</b> (Environment de Container Apps y PostgreSQL), de modo que la base <b>nunca sea accesible desde internet</b>.</dd></div>
+          <div><dt>Por qué este servicio</dt><dd>Postura de seguridad por defecto con <b>NSG</b> por capa y <b>Private Link</b> a PostgreSQL; el Environment de Container Apps se integra en una subred de infraestructura dedicada.</dd></div>
+          <div><dt>Alternativas descartadas</dt><dd class="alt"><b>Servicios con endpoints públicos</b>: expondría la DB y el cómputo; inaceptable incluso para uso interno.</dd></div>
+          <div><dt>Dimensionamiento</dt><dd>2 zonas · subred de infra para ACA (mín. <code>/23</code>) + subred delegada para PG + subred del App Gateway.</dd></div>
+        </dl>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 5. Consumo -->
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><div><h2>Perfil de consumo estimado</h2>
+      <p class="sec-sub">Supuestos de carga para una herramienta interna del equipo de QA. Ajustables cuando se confirmen usuarios y frecuencia real de reportes.</p></div></div>
+    <div class="cards3">
+      <div class="info"><p class="t">Carga de usuarios</p><ul>
+        <li><span>Usuarios totales</span><span>20–40</span></li>
+        <li><span>Concurrentes (pico)</span><span>10–15</span></li>
+        <li><span>Requests / día</span><span>~15–30 k</span></li>
+        <li><span>Horario</span><span>Laboral CLT</span></li>
+      </ul></div>
+      <div class="info"><p class="t">Datos y almacenamiento</p><ul>
+        <li><span>Tamaño DB (año 1)</span><span>&lt; 5 GB</span></li>
+        <li><span>Crecimiento</span><span>~1–2 GB/año</span></li>
+        <li><span>Evidencias / reportes Blob</span><span>~10 GB</span></li>
+        <li><span>Backups PostgreSQL</span><span>7 días</span></li>
+      </ul></div>
+      <div class="info"><p class="t">Cómputo y salida</p><ul>
+        <li><span>CPU sostenida</span><span>Baja</span></li>
+        <li><span>Picos (reportes)</span><span>Puntuales</span></li>
+        <li><span>Egress datos</span><span>~20–40 GB/mes</span></li>
+        <li><span>Jobs / colas</span><span>Ninguno</span></li>
+      </ul></div>
+    </div>
+  </section>
+
+  <!-- 6. Costos -->
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><div><h2>Estimación de consumo mensual</h2>
+      <p class="sec-sub">Precios públicos On-Demand en <b>East US</b> (USD/mes), redondeados. La columna resaltada es la configuración recomendada.</p></div></div>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr>
+          <th>Servicio</th>
+          <th class="num">Mínimo<span class="colnote">1 réplica · sin zona</span></th>
+          <th class="num rec-col">Recomendado<span class="colnote">2 réplicas · HA app</span></th>
+          <th class="num">Alta disponibilidad<span class="colnote">Zone-redundant · WAF</span></th>
+        </tr></thead>
+        <tbody>
+          <tr><td>Container Apps — Web</td><td class="num">$15</td><td class="num rec-col">$30</td><td class="num">$30</td></tr>
+          <tr><td>Container Apps — API</td><td class="num">$30</td><td class="num rec-col">$60</td><td class="num">$60</td></tr>
+          <tr><td>PostgreSQL Flexible Server</td><td class="num">$18</td><td class="num rec-col">$30</td><td class="num">$90</td></tr>
+          <tr><td>Application Gateway</td><td class="num">$0*</td><td class="num rec-col">$25</td><td class="num">$45</td></tr>
+          <tr><td>NAT Gateway</td><td class="num">$0*</td><td class="num rec-col">$35</td><td class="num">$50</td></tr>
+          <tr><td>Blob Storage</td><td class="num">$1</td><td class="num rec-col">$3</td><td class="num">$4</td></tr>
+          <tr><td>Container Registry</td><td class="num">$5</td><td class="num rec-col">$5</td><td class="num">$20</td></tr>
+          <tr><td>Key Vault</td><td class="num">$2</td><td class="num rec-col">$2</td><td class="num">$3</td></tr>
+          <tr><td>Azure Monitor + Log Analytics</td><td class="num">$5</td><td class="num rec-col">$8</td><td class="num">$12</td></tr>
+          <tr><td>Azure DNS + Managed Cert</td><td class="num">$1</td><td class="num rec-col">$1</td><td class="num">$1</td></tr>
+          <tr><td>Transferencia de datos (egress)</td><td class="num">$2</td><td class="num rec-col">$4</td><td class="num">$6</td></tr>
+          <tr class="total"><td>Total mensual (East US)</td><td class="num">&asymp; $80</td><td class="num rec-col">&asymp; $203</td><td class="num">&asymp; $321</td></tr>
+          <tr class="total"><td>Total mensual (Brazil South)</td><td class="num">&asymp; $105</td><td class="num rec-col">&asymp; $265</td><td class="num">&asymp; $420</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:12.5px;color:var(--muted);margin:14px 2px 0">
+      * En el escenario mínimo se usa el <b>ingress nativo</b> de Container Apps (sin Application Gateway) y su <b>egress gestionado</b> (sin NAT Gateway), a costa de menos control de red. &nbsp;·&nbsp;
+      <b>Brazil South</b> (São Paulo), la región cercana a Chile, cuesta &asymp; <b>+25–35 %</b> sobre East US; <b>Chile Central</b> es una alternativa emergente. &nbsp;·&nbsp;
+      Con <b>Reserved Instances / Savings Plan</b> a 1 año, cómputo y PostgreSQL bajan ~30–40 %.
+    </p>
+  </section>
+
+  <!-- 7. Alternativas -->
+  <section>
+    <div class="sec-head"><span class="sec-num">07</span><div><h2>Alternativas de despliegue</h2>
+      <p class="sec-sub">Cuatro caminos según el balance deseado entre costo, operación y disponibilidad.</p></div></div>
+    <div class="alts">
+      <div class="alt">
+        <span class="tag">Más simple</span>
+        <h4>A · App Service (Web App for Containers)</h4>
+        <p class="price">&asymp; $70–110 / mes</p>
+        <p>PaaS clásico: dos Web Apps para contenedores (web/api) en un App Service Plan + PostgreSQL Flexible. Cero gestión de red.</p>
+        <div class="pros">
+          <div class="p">Muy simple de operar y desplegar</div>
+          <div class="p">Slots de staging y auto-scale incluidos</div>
+          <div class="m">Menos aislamiento de red por defecto</div>
+          <div class="m">Escalado menos granular que ACA</div>
+        </div>
+      </div>
+      <div class="alt pick">
+        <span class="tag">Recomendado</span>
+        <h4>B · Container Apps + PostgreSQL</h4>
+        <p class="price">&asymp; $205 / mes</p>
+        <p>El diagrama de este documento. Contenedores serverless gestionados, con escalado por réplica y HA de aplicación.</p>
+        <div class="pros">
+          <div class="p">Sin gestión de servidores</div>
+          <div class="p">Escala a cero y por evento</div>
+          <div class="p">Misma imagen Docker actual</div>
+          <div class="m">App Gateway + NAT suman costo fijo</div>
+        </div>
+      </div>
+      <div class="alt">
+        <span class="tag">Máximo control</span>
+        <h4>C · AKS + PostgreSQL</h4>
+        <p class="price">&asymp; $160–320 / mes</p>
+        <p>Kubernetes gestionado para máximo control y portabilidad. Justificable si se estandariza en K8s a nivel organización.</p>
+        <div class="pros">
+          <div class="p">Control y portabilidad total</div>
+          <div class="p">Ecosistema K8s completo</div>
+          <div class="m">Operación y curva de aprendizaje altas</div>
+          <div class="m">Sobredimensionado para esta app</div>
+        </div>
+      </div>
+      <div class="alt">
+        <span class="tag">Front separado</span>
+        <h4>D · Static Web Apps + Container Apps</h4>
+        <p class="price">&asymp; $150–230 / mes</p>
+        <p>Frontend en Static Web Apps con CDN global, API en Container Apps. Bueno si se prioriza el rendimiento del front.</p>
+        <div class="pros">
+          <div class="p">CDN y CI/CD del front incluidos</div>
+          <div class="p">Despliegues web muy simples</div>
+          <div class="m">Dos plataformas que operar</div>
+          <div class="m">SSR de Next en SWA con matices</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. Supuestos -->
+  <section>
+    <div class="sec-head"><span class="sec-num">08</span><div><h2>Supuestos y exclusiones</h2>
+      <p class="sec-sub">Base sobre la que se construyen las cifras. Cualquier cambio impacta el costo.</p></div></div>
+    <ul class="assump">
+      <li><b>Región base East US.</b> Se muestra Brazil South como referencia para Chile; elegir región es decisión de arquitectura por latencia/compliance (Chile Central es opción emergente).</li>
+      <li><b>Precios On-Demand, sin compromisos.</b> No incluyen Reserved Instances, Savings Plans ni descuentos de contrato Enterprise Agreement.</li>
+      <li><b>No incluye impuestos</b> (IVA), soporte Azure (Standard ~$100/mes), ni costos de migración inicial.</li>
+      <li><b>Resend y FlowPilot son SaaS externos:</b> su costo es aparte (Resend ~$0–20/mes). Opción: migrar correo a <b>Azure Communication Services</b> (Email).</li>
+      <li><b>Sin colas, cron ni workers</b> en el código actual: los reportes se generan síncronos on-demand. No se presupuestan Service Bus/Functions.</li>
+      <li><b>Almacenamiento persistente hoy es mínimo:</b> los uploads se parsean en memoria. Blob Storage se incorpora como buena práctica para retener evidencias/reportes.</li>
+      <li><b>HA de datos opcional:</b> el escenario Recomendado usa PostgreSQL sin zona redundante con backups; la HA zonal se reserva para el escenario de Alta disponibilidad.</li>
+      <li><b>Tráfico modesto:</b> herramienta interna sin exposición pública masiva; el WAF de Application Gateway solo se presupuesta en el escenario de Alta disponibilidad.</li>
+    </ul>
+  </section>
+
+  <!-- 9. Pricing -->
+  <section>
+    <div class="sec-head"><span class="sec-num">09</span><div><h2>Valores en vivo con la API de precios de Azure</h2>
+      <p class="sec-sub">El MCP solicitado en el pedido original es específico de AWS. Para Azure, el equivalente son la Azure Retail Prices API y el Azure Pricing Calculator.</p></div></div>
+    <div class="callout">
+      <span class="ico">$</span>
+      <div>
+        <h4>Cómo obtener las cifras exactas de Azure</h4>
+        <p>Estos montos provienen de tarifas públicas de Azure (On-Demand, East US). Para valores exactos, verificados por región y SKU, hay dos vías:</p>
+        <ol class="steps">
+          <li><b>Azure Retail Prices API</b> (pública, sin auth): <code>https://prices.azure.com/api/retail/prices</code> — filtrable por <code>armRegionName</code>, <code>serviceName</code> y <code>skuName</code>.</li>
+          <li><b>Azure Pricing Calculator</b> (<code>azure.microsoft.com/pricing/calculator</code>) para armar el presupuesto formal y exportarlo.</li>
+          <li>Existen servidores <b>MCP comunitarios de Azure pricing/retail</b> que envuelven esa API; conectando uno se regenera la tabla del punto 06 con valores en vivo.</li>
+        </ol>
+        <p style="margin-top:10px">Dime si quieres que consulte la Retail Prices API directamente y recalcule cada línea para East US y Brazil South.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot-flex">
+    <span>QA Metrics · Propuesta de arquitectura Azure — para revisión del equipo de Arquitectura.</span>
+    <span>Cifras referenciales · precios públicos Azure On-Demand · verificar con Azure Pricing Calculator antes de aprobar presupuesto.</span>
+  </div>
+</footer>
+
+<script type="text/javascript" src="https://viewer.diagrams.net/js/viewer-static.min.js"></script>

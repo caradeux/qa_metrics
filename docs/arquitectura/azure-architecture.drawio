@@ -1,0 +1,99 @@
+<mxfile host="app.diagrams.net" type="device">
+  <diagram name="Azure — QA Metrics" id="azure-qa-metrics">
+    <mxGraphModel dx="1200" dy="900" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="1654" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="title" value="Arquitectura Azure — QA Metrics&#10;Next.js 16 + API Express + PostgreSQL · Container Apps · Región East US" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="60" y="-80" width="900" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="users" value="&lt;b&gt;Usuarios internos&lt;/b&gt;&lt;br&gt;Analistas QA · Líderes · Admin — HTTPS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#16222E;strokeColor=#16222E;fontColor=#FFFFFF;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="360" y="20" width="300" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="region" value="Azure — Región East US · Resource Group" style="rounded=1;arcSize=3;whiteSpace=wrap;html=1;dashed=0;strokeColor=#0078D4;strokeWidth=2;fillColor=#0078D4;fillOpacity=5;verticalAlign=top;align=left;spacingLeft=14;spacingTop=10;fontColor=#0078D4;fontStyle=1;fontSize=13;container=1;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="60" y="170" width="980" height="760" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="dns" value="&lt;b&gt;Azure DNS&lt;/b&gt;&lt;br&gt;qa-metrics.inovabiz.com" style="image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/networking/DNS_Zones.svg;" vertex="1" parent="region">
+          <mxGeometry x="60" y="55" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="cert" value="&lt;b&gt;Managed Certificate&lt;/b&gt;&lt;br&gt;TLS gestionado (gratis)" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#C0392B;fillColor=#C0392B;fillOpacity=10;fontSize=11;" vertex="1" parent="region">
+          <mxGeometry x="280" y="55" width="220" height="56" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="vnet" value="Virtual Network · 10.0.0.0/16" style="rounded=1;arcSize=3;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 4;strokeColor=#8661C5;strokeWidth=2;fillColor=#8661C5;fillOpacity=7;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#8661C5;fontStyle=1;fontSize=12;container=1;collapsible=0;" vertex="1" parent="region">
+          <mxGeometry x="40" y="150" width="560" height="560" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="subpub" value="Subred pública" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;strokeColor=#107C10;fillColor=#107C10;fillOpacity=8;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontColor=#107C10;fontStyle=1;fontSize=11;container=1;collapsible=0;" vertex="1" parent="vnet">
+          <mxGeometry x="25" y="45" width="510" height="135" as="geometry"/>
+        </mxCell>
+        <mxCell id="agw" value="&lt;b&gt;Application Gateway&lt;/b&gt;&lt;br&gt;TLS · WAF opcional · L7" style="image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/networking/Application_Gateways.svg;" vertex="1" parent="subpub">
+          <mxGeometry x="95" y="42" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="nat" value="&lt;b&gt;NAT Gateway&lt;/b&gt;&lt;br&gt;Salida a internet" style="image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/networking/NAT.svg;" vertex="1" parent="subpub">
+          <mxGeometry x="350" y="42" width="60" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="subapp" value="Subred privada — Aplicación (Container Apps Environment)" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;strokeColor=#0078D4;fillColor=#0078D4;fillOpacity=8;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontColor=#0078D4;fontStyle=1;fontSize=11;container=1;collapsible=0;" vertex="1" parent="vnet">
+          <mxGeometry x="25" y="205" width="510" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="acaweb" value="&lt;b&gt;Container Apps — Web&lt;/b&gt;&lt;br&gt;Next.js 16 · SSR · :3000" style="image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/other/Container_App_Environments.svg;" vertex="1" parent="subapp">
+          <mxGeometry x="95" y="50" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="acaapi" value="&lt;b&gt;Container Apps — API&lt;/b&gt;&lt;br&gt;Express 5 · reportes · :8080" style="image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/other/Worker_Container_App.svg;" vertex="1" parent="subapp">
+          <mxGeometry x="350" y="50" width="60" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="subdata" value="Subred privada — Datos (delegada · Private Link)" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;strokeColor=#0078D4;fillColor=#0078D4;fillOpacity=8;verticalAlign=top;align=left;spacingLeft=10;spacingTop=6;fontColor=#0078D4;fontStyle=1;fontSize=11;container=1;collapsible=0;" vertex="1" parent="vnet">
+          <mxGeometry x="25" y="385" width="510" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="pg" value="&lt;b&gt;PostgreSQL Flexible Server 16&lt;/b&gt;&lt;br&gt;24 modelos Prisma · zone-redundant opc." style="image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/databases/Azure_Database_PostgreSQL_Server.svg;" vertex="1" parent="subdata">
+          <mxGeometry x="225" y="35" width="48" height="64" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="rail" value="Servicios regionales" style="rounded=1;arcSize=3;whiteSpace=wrap;html=1;dashed=0;strokeColor=#94A3B8;strokeWidth=1;fillColor=#64748B;fillOpacity=6;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#64748B;fontStyle=1;fontSize=12;container=1;collapsible=0;" vertex="1" parent="region">
+          <mxGeometry x="680" y="150" width="250" height="560" as="geometry"/>
+        </mxCell>
+        <mxCell id="acr" value="&lt;b&gt;Container Registry&lt;/b&gt;&lt;br&gt;Imágenes Docker web/api" style="image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/containers/Container_Registries.svg;" vertex="1" parent="rail">
+          <mxGeometry x="95" y="50" width="60" height="56" as="geometry"/>
+        </mxCell>
+        <mxCell id="blob" value="&lt;b&gt;Blob Storage&lt;/b&gt;&lt;br&gt;Evidencias · reportes generados" style="image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/storage/Storage_Accounts.svg;" vertex="1" parent="rail">
+          <mxGeometry x="93" y="185" width="64" height="52" as="geometry"/>
+        </mxCell>
+        <mxCell id="kv" value="&lt;b&gt;Key Vault&lt;/b&gt;&lt;br&gt;JWT · ENCRYPTION_KEY · secretos DB" style="image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/security/Key_Vaults.svg;" vertex="1" parent="rail">
+          <mxGeometry x="95" y="315" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="mon" value="&lt;b&gt;Azure Monitor&lt;/b&gt;&lt;br&gt;Log Analytics · App Insights · alertas" style="image;aspect=fixed;html=1;points=[];align=center;verticalLabelPosition=bottom;verticalAlign=top;fontSize=11;image=img/lib/azure2/management_governance/Log_Analytics_Workspaces.svg;" vertex="1" parent="rail">
+          <mxGeometry x="95" y="455" width="60" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ext" value="Internet — Proveedores SaaS externos" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=6 4;strokeColor=#64748B;fillColor=#64748B;fillOpacity=8;verticalAlign=top;align=left;spacingLeft=12;spacingTop=8;fontColor=#64748B;fontStyle=1;fontSize=12;container=1;collapsible=0;" vertex="1" parent="1">
+          <mxGeometry x="140" y="1000" width="560" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="resend" value="&lt;b&gt;Resend&lt;/b&gt;&lt;br&gt;Correo transaccional (alertas)" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#64748B;fillColor=#64748B;fillOpacity=12;fontSize=11;" vertex="1" parent="ext">
+          <mxGeometry x="40" y="45" width="220" height="56" as="geometry"/>
+        </mxCell>
+        <mxCell id="flowpilot" value="&lt;b&gt;FlowPilot&lt;/b&gt;&lt;br&gt;Carga de horas (Flask) · HTTPS" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#64748B;fillColor=#64748B;fillOpacity=12;fontSize=11;" vertex="1" parent="ext">
+          <mxGeometry x="300" y="45" width="220" height="56" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e1" value="HTTPS 443" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0078D4;strokeWidth=2;fontSize=11;fontStyle=1;" edge="1" parent="1" source="users" target="agw"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#54627A;" edge="1" parent="1" source="agw" target="acaweb"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e3" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#54627A;" edge="1" parent="1" source="agw" target="acaapi"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e4" value="Web ⇄ API (SSR)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;startArrow=classic;endArrow=classic;strokeColor=#8661C5;dashed=1;fontSize=10;" edge="1" parent="1" source="acaweb" target="acaapi"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e5" value="5432" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0E7C7B;fontSize=10;" edge="1" parent="1" source="acaweb" target="pg"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e6" value="5432" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#0E7C7B;fontSize=10;" edge="1" parent="1" source="acaapi" target="pg"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e7" value="egress a SaaS" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#64748B;fontSize=10;" edge="1" parent="1" source="nat" target="ext"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e8" value="pull imagen (MI)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#94A3B8;dashed=1;fontSize=10;fontColor=#94A3B8;" edge="1" parent="1" source="acaweb" target="acr"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e9" value="secretos (MI)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#94A3B8;dashed=1;fontSize=10;fontColor=#94A3B8;" edge="1" parent="1" source="acaapi" target="kv"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e10" value="logs · APM" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#94A3B8;dashed=1;fontSize=10;fontColor=#94A3B8;" edge="1" parent="1" source="acaapi" target="mon"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e11" value="reportes" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#94A3B8;dashed=1;fontSize=10;fontColor=#94A3B8;" edge="1" parent="1" source="acaapi" target="blob"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
