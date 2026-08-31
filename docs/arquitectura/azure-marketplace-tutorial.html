@@ -1,0 +1,871 @@
+<title>Publicar QA Metrics en Azure Marketplace — Runbook</title>
+<style>
+  :root {
+    --font-sans: "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "Cascadia Code", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+    --paper: #eaeef5;
+    --surface: #ffffff;
+    --surface-2: #f3f6fb;
+    --ink: #0c1a2e;
+    --ink-soft: #48576d;
+    --ink-faint: #7a879b;
+    --line: #d9e0ec;
+    --line-soft: #e7ecf4;
+
+    --azure: #1273cf;
+    --azure-strong: #0a5aa8;
+    --azure-tint: rgba(18,115,207,.10);
+
+    --ready: #15855a;
+    --ready-tint: rgba(21,133,90,.11);
+    --effort: #a86a00;
+    --effort-tint: rgba(168,106,0,.12);
+    --warn: #c23b3b;
+    --warn-tint: rgba(194,59,59,.10);
+
+    --code-bg: #0b1626;
+    --code-line: rgba(255,255,255,.08);
+    --code-ink: #cdd9ea;
+    --code-faint: #6d7f97;
+    --code-cmd: #6db1ff;
+    --code-str: #7fd6a3;
+    --code-var: #e0b876;
+
+    --radius: 10px;
+    --maxw: 1080px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #070e18;
+      --surface: #0e1a2b;
+      --surface-2: #101d30;
+      --ink: #e7eefa;
+      --ink-soft: #a4b2c6;
+      --ink-faint: #6f7f95;
+      --line: #23334a;
+      --line-soft: #1a293e;
+      --azure: #4b9ef0;
+      --azure-strong: #6fb3f5;
+      --azure-tint: rgba(75,158,240,.13);
+      --ready: #3cc98a;
+      --ready-tint: rgba(60,201,138,.13);
+      --effort: #e0a94a;
+      --effort-tint: rgba(224,169,74,.13);
+      --warn: #f0736f;
+      --warn-tint: rgba(240,115,111,.12);
+    }
+  }
+  :root[data-theme="light"] {
+    --paper: #eaeef5; --surface: #ffffff; --surface-2: #f3f6fb;
+    --ink: #0c1a2e; --ink-soft: #48576d; --ink-faint: #7a879b;
+    --line: #d9e0ec; --line-soft: #e7ecf4;
+    --azure: #1273cf; --azure-strong: #0a5aa8; --azure-tint: rgba(18,115,207,.10);
+    --ready: #15855a; --ready-tint: rgba(21,133,90,.11);
+    --effort: #a86a00; --effort-tint: rgba(168,106,0,.12);
+    --warn: #c23b3b; --warn-tint: rgba(194,59,59,.10);
+  }
+  :root[data-theme="dark"] {
+    --paper: #070e18; --surface: #0e1a2b; --surface-2: #101d30;
+    --ink: #e7eefa; --ink-soft: #a4b2c6; --ink-faint: #6f7f95;
+    --line: #23334a; --line-soft: #1a293e;
+    --azure: #4b9ef0; --azure-strong: #6fb3f5; --azure-tint: rgba(75,158,240,.13);
+    --ready: #3cc98a; --ready-tint: rgba(60,201,138,.13);
+    --effort: #e0a94a; --effort-tint: rgba(224,169,74,.13);
+    --warn: #f0736f; --warn-tint: rgba(240,115,111,.12);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* ---- top bar ---- */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar__inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 12.5px; letter-spacing: .04em; color: var(--ink-soft); }
+  .brand b { color: var(--ink); font-weight: 600; }
+  .brand .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--azure); box-shadow: 0 0 0 4px var(--azure-tint); }
+  .topnav { display: flex; gap: 4px; }
+  .topnav a {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em;
+    color: var(--ink-soft); text-decoration: none; padding: 6px 11px; border-radius: 7px;
+  }
+  .topnav a:hover { color: var(--ink); background: var(--azure-tint); }
+  @media (max-width: 720px) { .topnav { display: none; } }
+
+  /* ---- hero ---- */
+  .hero { padding: 72px 0 40px; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--azure); font-weight: 600; margin: 0 0 20px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .eyebrow::before { content: ""; width: 34px; height: 1px; background: var(--azure); opacity: .5; }
+  h1 {
+    font-size: clamp(34px, 6vw, 58px); line-height: 1.04; letter-spacing: -.03em;
+    font-weight: 700; margin: 0 0 22px; text-wrap: balance; max-width: 16ch;
+  }
+  h1 .accent { color: var(--azure); }
+  .lede { font-size: clamp(17px, 2.3vw, 20px); color: var(--ink-soft); max-width: 62ch; margin: 0 0 30px; line-height: 1.5; }
+  .metachips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .02em;
+    padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line);
+    color: var(--ink-soft); background: var(--surface);
+  }
+  .chip b { color: var(--ink); font-weight: 600; }
+
+  /* ---- compare strip ---- */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 40px 0 8px; }
+  @media (max-width: 720px) { .compare { grid-template-columns: 1fr; } }
+  .route {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 22px 22px 20px; position: relative; overflow: hidden;
+  }
+  .route::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+  .route--a::before { background: var(--azure); }
+  .route--b::before { background: var(--effort); }
+  .route__tag {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 600;
+  }
+  .route--a .route__tag { color: var(--azure); }
+  .route--b .route__tag { color: var(--effort); }
+  .route__name { font-size: 20px; font-weight: 700; letter-spacing: -.02em; margin: 8px 0 4px; }
+  .route__sub { font-size: 14px; color: var(--ink-soft); margin: 0 0 18px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; font-size: 13.5px; }
+  .kv dt { color: var(--ink-faint); font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .03em; text-transform: uppercase; align-self: center; }
+  .kv dd { margin: 0; color: var(--ink); font-weight: 500; }
+  .effort-bar { display: inline-flex; gap: 3px; vertical-align: middle; margin-left: 2px; }
+  .effort-bar i { width: 7px; height: 12px; border-radius: 2px; background: var(--line); }
+  .route--a .effort-bar i.on { background: var(--azure); }
+  .route--b .effort-bar i.on { background: var(--effort); }
+
+  /* ---- sections ---- */
+  section { padding: 46px 0 6px; scroll-margin-top: 70px; }
+  .sec-head { margin-bottom: 26px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .sec-kicker {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 8px; display: flex; align-items: center; gap: 10px;
+  }
+  .sec-kicker .badge {
+    font-weight: 700; color: #fff; background: var(--ink); border-radius: 6px; padding: 2px 8px; letter-spacing: .05em;
+  }
+  .sec-kicker.k-a .badge { background: var(--azure); }
+  .sec-kicker.k-b .badge { background: var(--effort); }
+  h2 { font-size: clamp(24px, 3.6vw, 34px); letter-spacing: -.025em; font-weight: 700; margin: 0 0 8px; text-wrap: balance; }
+  .sec-intro { font-size: 16px; color: var(--ink-soft); max-width: 68ch; margin: 0; }
+
+  /* ---- steps ---- */
+  .step { display: grid; grid-template-columns: 56px 1fr; gap: 22px; padding: 26px 0; border-bottom: 1px solid var(--line-soft); }
+  @media (max-width: 640px) { .step { grid-template-columns: 1fr; gap: 12px; } }
+  .step__num {
+    font-family: var(--font-mono); font-weight: 700; font-size: 15px;
+    color: var(--azure); border: 1px solid var(--line); border-radius: 9px;
+    height: 48px; width: 48px; display: flex; align-items: center; justify-content: center;
+    background: var(--surface); position: sticky; top: 70px; align-self: start;
+  }
+  .step--b .step__num { color: var(--effort); }
+  @media (max-width: 640px) { .step__num { position: static; height: 40px; width: 40px; } }
+  .step__title { font-size: 19px; font-weight: 650; letter-spacing: -.015em; margin: 4px 0 10px; }
+  .step__title span { font-family: var(--font-mono); font-size: 12px; color: var(--ink-faint); font-weight: 500; letter-spacing: .04em; }
+  .step p { margin: 0 0 14px; color: var(--ink-soft); }
+  .step p strong { color: var(--ink); font-weight: 600; }
+  .step ul { margin: 0 0 14px; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; }
+  .step ul li { position: relative; padding-left: 24px; color: var(--ink-soft); font-size: 14.5px; }
+  .step ul li::before {
+    content: ""; position: absolute; left: 4px; top: 9px; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--azure); opacity: .55;
+  }
+  .step--b ul li::before { background: var(--effort); }
+
+  /* ---- code ---- */
+  .code {
+    background: var(--code-bg); border-radius: var(--radius); border: 1px solid rgba(255,255,255,.06);
+    margin: 0 0 16px; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.15);
+  }
+  .code__bar {
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+    border-bottom: 1px solid var(--code-line); background: rgba(255,255,255,.02);
+  }
+  .code__bar .lbl { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--code-faint); margin-left: auto; }
+  .code__bar .lights { display: flex; gap: 6px; }
+  .code__bar .lights i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.14); }
+  .code pre {
+    margin: 0; padding: 15px 16px; overflow-x: auto;
+    font-family: var(--font-mono); font-size: 12.8px; line-height: 1.7; color: var(--code-ink);
+    tab-size: 2;
+  }
+  .code pre .c { color: var(--code-faint); }
+  .code pre .k { color: var(--code-cmd); }
+  .code pre .s { color: var(--code-str); }
+  .code pre .v { color: var(--code-var); }
+
+  /* ---- callouts ---- */
+  .callout {
+    border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px;
+    padding: 13px 16px; margin: 0 0 14px; font-size: 14px; background: var(--surface);
+  }
+  .callout__h { font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; margin: 0 0 5px; display: flex; align-items: center; gap: 7px; }
+  .callout p { margin: 0; color: var(--ink-soft); font-size: 14px; }
+  .callout code { font-family: var(--font-mono); font-size: 12.5px; background: var(--surface-2); padding: 1px 6px; border-radius: 5px; color: var(--ink); }
+  .callout--gap { border-left-color: var(--effort); background: var(--effort-tint); }
+  .callout--gap .callout__h { color: var(--effort); }
+  .callout--tip { border-left-color: var(--azure); background: var(--azure-tint); }
+  .callout--tip .callout__h { color: var(--azure); }
+  .callout--warn { border-left-color: var(--warn); background: var(--warn-tint); }
+  .callout--warn .callout__h { color: var(--warn); }
+  .callout--ready { border-left-color: var(--ready); background: var(--ready-tint); }
+  .callout--ready .callout__h { color: var(--ready); }
+
+  .verify {
+    background: var(--surface-2); border: 1px dashed var(--line); border-radius: 8px; padding: 12px 16px; margin: 0 0 6px;
+  }
+  .verify__h { font-family: var(--font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ready); font-weight: 700; margin: 0 0 8px; }
+  .verify ul { margin: 0; }
+  .verify ul li { position: relative; padding-left: 24px; color: var(--ink-soft); font-size: 14.5px; list-style: none; }
+  .verify ul { padding-left: 0; display: flex; flex-direction: column; gap: 7px; }
+  .verify ul li::before { content: "✓"; position: absolute; left: 3px; top: 1px; color: var(--ready); font-size: 12px; font-weight: 700; }
+
+  /* ---- gaps table ---- */
+  .gaps { margin: 8px 0 0; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 560px; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  th { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-faint); font-weight: 600; border-bottom: 1px solid var(--line); }
+  td code { font-family: var(--font-mono); font-size: 12.5px; color: var(--azure); }
+  .tag { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; font-weight: 700; padding: 3px 8px; border-radius: 5px; white-space: nowrap; }
+  .tag--a { color: var(--azure); background: var(--azure-tint); }
+  .tag--b { color: var(--effort); background: var(--effort-tint); }
+  .tag--both { color: var(--ink-soft); background: var(--surface-2); }
+
+  /* ---- decision / footer ---- */
+  .decision { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 30px; margin: 20px 0 0; }
+  .decision h3 { margin: 0 0 14px; font-size: 20px; letter-spacing: -.02em; }
+  .decision p { margin: 0 0 12px; color: var(--ink-soft); }
+  .decision p:last-child { margin-bottom: 0; }
+  .decision strong { color: var(--ink); }
+
+  footer { padding: 50px 0 70px; color: var(--ink-faint); font-size: 13px; }
+  footer .rule { height: 1px; background: var(--line); margin-bottom: 22px; }
+  footer .foot-mono { font-family: var(--font-mono); font-size: 12px; letter-spacing: .02em; }
+
+  a.ext { color: var(--azure); text-decoration: none; border-bottom: 1px solid var(--azure-tint); }
+  a.ext:hover { border-bottom-color: var(--azure); }
+
+  :focus-visible { outline: 2px solid var(--azure); outline-offset: 2px; border-radius: 4px; }
+
+  .reveal { opacity: 0; transform: translateY(14px); transition: opacity .5s ease, transform .5s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
+</style>
+
+<div class="topbar">
+  <div class="wrap topbar__inner">
+    <div class="brand"><span class="dot"></span> <b>QA&nbsp;Metrics</b> · Azure Marketplace Runbook</div>
+    <nav class="topnav">
+      <a href="#prereq">00 · Prerequisitos</a>
+      <a href="#ruta-a">Ruta A</a>
+      <a href="#ruta-b">Ruta B</a>
+      <a href="#cert">Certificación</a>
+      <a href="#gaps">Gaps</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">Operations Runbook · Partner Center</p>
+    <h1>Publicar <span class="accent">QA&nbsp;Metrics</span> en el Azure Marketplace, paso a paso</h1>
+    <p class="lede">Dos caminos para llevar la app al Marketplace: empaquetar tu infraestructura para que el cliente la instale (Ruta&nbsp;A), o venderla como SaaS multi-tenant facturado en Azure (Ruta&nbsp;B). Cada paso trae los comandos exactos, aterrizados a tu stack real.</p>
+    <div class="metachips">
+      <span class="chip"><b>Monorepo</b> · Turbo + npm workspaces</span>
+      <span class="chip"><b>apps/api</b> · Express&nbsp;5</span>
+      <span class="chip"><b>apps/web</b> · Next&nbsp;16 · React&nbsp;19</span>
+      <span class="chip">PostgreSQL + Prisma</span>
+      <span class="chip">Docker · App&nbsp;Service · Bicep</span>
+    </div>
+
+    <div class="compare">
+      <div class="route route--a">
+        <div class="route__tag">Ruta A</div>
+        <div class="route__name">Solution Template</div>
+        <p class="route__sub">El cliente instala la app en su propia subscripción con un botón <em>Deploy</em>.</p>
+        <dl class="kv">
+          <dt>Hospeda</dt><dd>El cliente (su subscripción)</dd>
+          <dt>Cobro</dt><dd>Gratis / BYOL · paga sus recursos Azure</dd>
+          <dt>Reusa</dt><dd>Tu <code>main.bicep</code> actual (~70% hecho)</dd>
+          <dt>Esfuerzo</dt><dd><span class="effort-bar"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></span> Bajo–medio · 1–2 sem</dd>
+        </dl>
+      </div>
+      <div class="route route--b">
+        <div class="route__tag">Ruta B</div>
+        <div class="route__name">SaaS Offer</div>
+        <p class="route__sub">Tú hospedas multi-tenant; el cliente se suscribe y paga en su factura Azure.</p>
+        <dl class="kv">
+          <dt>Hospeda</dt><dd>Tú (Inovabiz)</dd>
+          <dt>Cobro</dt><dd>Suscripción / por uso · payout de Microsoft</dd>
+          <dt>Reusa</dt><dd>Requiere multi-tenancy + Entra&nbsp;ID + Fulfillment API</dd>
+          <dt>Esfuerzo</dt><dd><span class="effort-bar"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span> Alto · varias semanas</dd>
+        </dl>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ PREREQUISITOS ============ -->
+  <section id="prereq">
+    <div class="sec-head reveal">
+      <p class="sec-kicker"><span class="badge">00</span> Base común</p>
+      <h2>Prerequisitos para cualquier ruta</h2>
+      <p class="sec-intro">Antes de tocar el offer, la cuenta de publicación y el entorno de trabajo tienen que estar listos. Esto se hace una sola vez.</p>
+    </div>
+
+    <div class="step reveal">
+      <div class="step__num">0.1</div>
+      <div>
+        <div class="step__title">Cuenta de Partner Center + Commercial Marketplace</div>
+        <p>Todo el Marketplace se administra desde <a class="ext" href="https://partner.microsoft.com">Partner Center</a>. Necesitas una cuenta con el programa <strong>Commercial marketplace</strong> habilitado.</p>
+        <ul>
+          <li>Entra a Partner Center y crea/accede a la cuenta de <strong>Inovabiz</strong> (probablemente ya existe si son partner Microsoft).</li>
+          <li>Menú <em>Settings → Account settings → Programs</em> → inscribir <strong>Commercial marketplace</strong>.</li>
+          <li>Completa la <strong>verificación de identidad de negocio</strong> (razón social, dominio, dirección) — tarda de horas a días.</li>
+          <li>Configura el <strong>perfil de pago y fiscal</strong> (solo obligatorio si vas a cobrar — Ruta&nbsp;B, o Ruta&nbsp;A de pago).</li>
+        </ul>
+        <div class="callout callout--tip">
+          <p class="callout__h">◆ Tip</p>
+          <p>Anota tu <code>Microsoft/Partner ID (MPN)</code>. Lo pedirán en varias pantallas y en la asociación de la cuenta de facturación.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step reveal">
+      <div class="step__num">0.2</div>
+      <div>
+        <div class="step__title">Entorno de trabajo local</div>
+        <p>Herramientas para construir, empaquetar y validar los artefactos que subirás.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">bash · setup</span></div>
+<pre><span class="c"># Azure CLI + extensión de Bicep</span>
+<span class="k">az</span> upgrade
+<span class="k">az</span> bicep install
+<span class="k">az</span> login
+<span class="k">az</span> account set --subscription <span class="s">"&lt;tu-subscripcion-de-pruebas&gt;"</span>
+
+<span class="c"># Verifica versiones</span>
+<span class="k">az</span> version
+<span class="k">az</span> bicep version   <span class="c"># &gt;= 0.30</span></pre>
+        </div>
+        <ul>
+          <li>Una <strong>subscripción Azure de pruebas</strong> para desplegar y validar antes de publicar.</li>
+          <li>Docker (ya lo usas) para construir <code>apps/api</code> y <code>apps/web</code>.</li>
+          <li>Acceso de escritura al repo para versionar los artefactos del offer.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RUTA A ============ -->
+  <section id="ruta-a">
+    <div class="sec-head reveal">
+      <p class="sec-kicker k-a"><span class="badge">Ruta A</span> Azure Application · Solution Template</p>
+      <h2>El cliente instala tu app en su subscripción</h2>
+      <p class="sec-intro">Empaquetas tu infraestructura como una plantilla que el cliente despliega con un formulario guiado. Es el camino más rápido porque ya tienes el Bicep que crea Postgres + App Service Plan + los dos App Services.</p>
+    </div>
+
+    <div class="step step--a reveal">
+      <div class="step__num">A1</div>
+      <div>
+        <div class="step__title">Publicar las imágenes Docker en un registro accesible <span>· apps/api · apps/web</span></div>
+        <p>Como la app corre en la subscripción <strong>del cliente</strong>, su App Service tiene que poder descargar las imágenes. Publícalas en un registro público (GHCR o Docker Hub) o en un ACR que la plantilla importe.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">bash · desde la raíz del monorepo</span></div>
+<pre><span class="c"># Construir ambas imágenes (versionadas con tag semántico)</span>
+<span class="k">docker</span> build -f apps/api/Dockerfile -t <span class="s">ghcr.io/inovabiz/qa-metrics-api:1.0.0</span> .
+<span class="k">docker</span> build -f apps/web/Dockerfile -t <span class="s">ghcr.io/inovabiz/qa-metrics-web:1.0.0</span> .
+
+<span class="c"># Publicar (el registro debe ser accesible por el cliente)</span>
+<span class="k">docker</span> push <span class="s">ghcr.io/inovabiz/qa-metrics-api:1.0.0</span>
+<span class="k">docker</span> push <span class="s">ghcr.io/inovabiz/qa-metrics-web:1.0.0</span></pre>
+        </div>
+        <div class="callout callout--gap">
+          <p class="callout__h">▲ Gap de tu app</p>
+          <p>Fija <strong>tags de versión inmutables</strong> (no <code>latest</code>) para que cada versión del offer apunte a una imagen exacta y reproducible.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--a reveal">
+      <div class="step__num">A2</div>
+      <div>
+        <div class="step__title">Blindar el Bicep: secretos generados + Key Vault</div>
+        <p>Hoy tu <code>main.bicep</code> pasa <code>JWT_SECRET</code>, <code>ENCRYPTION_KEY</code> y <code>DATABASE_URL</code> en texto plano dentro de <em>App Settings</em>. La certificación de Microsoft <strong>rechaza secretos en claro</strong>: genera los valores dentro de la plantilla y guárdalos en Key Vault.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">bicep · deploy/azure/main.bicep</span></div>
+<pre><span class="c">// Genera un secreto si el cliente no lo provee</span>
+@secure()
+param jwtSecret <span class="k">string</span> = newGuid()
+@secure()
+param encryptionKey <span class="k">string</span> = newGuid()
+
+resource kv <span class="s">'Microsoft.KeyVault/vaults@2023-07-01'</span> = {
+  name: <span class="v">kvName</span>
+  location: <span class="v">location</span>
+  properties: { tenantId: subscription().tenantId, sku: { family: <span class="s">'A'</span>, name: <span class="s">'standard'</span> }, enableRbacAuthorization: true }
+}
+
+resource kvJwt <span class="s">'Microsoft.KeyVault/vaults/secrets@2023-07-01'</span> = {
+  parent: kv
+  name: <span class="s">'JWT-SECRET'</span>
+  properties: { value: <span class="v">jwtSecret</span> }
+}
+
+<span class="c">// En App Settings, referencia el secreto en vez del valor:</span>
+<span class="c">// { name: 'JWT_SECRET', value: '@Microsoft.KeyVault(SecretUri=${kvJwt.properties.secretUri})' }</span></pre>
+        </div>
+        <ul>
+          <li>Da a cada App Service una <strong>identidad administrada</strong> y un rol <em>Key Vault Secrets User</em> sobre el vault.</li>
+          <li>Marca todos los parámetros sensibles con <code>@secure()</code>.</li>
+          <li>Deriva <code>DATABASE_URL</code> dentro de la plantilla a partir del server + credenciales, no como parámetro plano.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step step--a reveal">
+      <div class="step__num">A3</div>
+      <div>
+        <div class="step__title">Compilar Bicep → <code>mainTemplate.json</code> (ARM)</div>
+        <p>El paquete del Solution Template se entrega como ARM JSON. Bicep es solo tu fuente; compílalo al artefacto final.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">bash</span></div>
+<pre><span class="k">mkdir</span> -p deploy/azure/marketplace
+
+<span class="k">az</span> bicep build \
+  --file deploy/azure/main.bicep \
+  --outfile deploy/azure/marketplace/mainTemplate.json
+
+<span class="c"># Valida que el ARM despliega en tu subscripción de pruebas</span>
+<span class="k">az</span> deployment group create \
+  --resource-group <span class="s">rg-qametrics-test</span> \
+  --template-file deploy/azure/marketplace/mainTemplate.json \
+  --parameters @deploy/azure/parameters.prod.json</pre>
+        </div>
+        <div class="callout callout--warn">
+          <p class="callout__h">■ Bloqueo si falla</p>
+          <p>Si el <code>deployment group create</code> no termina limpio en tu propia subscripción, <strong>tampoco pasará certificación</strong>. Arréglalo aquí antes de seguir.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--a reveal">
+      <div class="step__num">A4</div>
+      <div>
+        <div class="step__title">Crear <code>createUiDefinition.json</code> — el asistente de instalación</div>
+        <p>Es el formulario que ve el cliente en el portal al instalar. Define los campos y mapea sus valores a los parámetros del <code>mainTemplate.json</code>.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">json · createUiDefinition.json</span></div>
+<pre>{
+  <span class="s">"$schema"</span>: <span class="s">"https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#"</span>,
+  <span class="s">"handler"</span>: <span class="s">"Microsoft.Azure.CreateUIDef"</span>,
+  <span class="s">"version"</span>: <span class="s">"0.1.2-preview"</span>,
+  <span class="s">"parameters"</span>: {
+    <span class="s">"basics"</span>: [
+      { <span class="s">"name"</span>: <span class="s">"adminEmail"</span>, <span class="s">"type"</span>: <span class="s">"Microsoft.Common.TextBox"</span>,
+        <span class="s">"label"</span>: <span class="s">"Email del administrador"</span>,
+        <span class="s">"constraints"</span>: { <span class="s">"required"</span>: true, <span class="s">"regex"</span>: <span class="s">"^\\S+@\\S+$"</span> } }
+    ],
+    <span class="s">"steps"</span>: [
+      { <span class="s">"name"</span>: <span class="s">"infra"</span>, <span class="s">"label"</span>: <span class="s">"Infraestructura"</span>, <span class="s">"elements"</span>: [
+        { <span class="s">"name"</span>: <span class="s">"dbSku"</span>, <span class="s">"type"</span>: <span class="s">"Microsoft.Common.DropDown"</span>,
+          <span class="s">"label"</span>: <span class="s">"Tamaño de PostgreSQL"</span>, <span class="s">"defaultValue"</span>: <span class="s">"Standard_B1ms"</span>,
+          <span class="s">"constraints"</span>: { <span class="s">"allowedValues"</span>: [
+            { <span class="s">"label"</span>: <span class="s">"Burstable B1ms (dev)"</span>, <span class="s">"value"</span>: <span class="s">"Standard_B1ms"</span> },
+            { <span class="s">"label"</span>: <span class="s">"General D2s (prod)"</span>, <span class="s">"value"</span>: <span class="s">"Standard_D2s_v3"</span> } ] } }
+      ] }
+    ],
+    <span class="s">"outputs"</span>: {
+      <span class="s">"adminEmail"</span>:      <span class="s">"[basics('adminEmail')]"</span>,
+      <span class="s">"postgresSkuName"</span>: <span class="s">"[steps('infra').dbSku]"</span>,
+      <span class="s">"location"</span>:        <span class="s">"[location()]"</span>
+    }
+  }
+}</pre>
+        </div>
+        <div class="callout callout--tip">
+          <p class="callout__h">◆ Tip · Sandbox</p>
+          <p>Prueba el formulario sin publicar nada en el <a class="ext" href="https://portal.azure.com/#view/Microsoft_Azure_CreateUIDef/SandboxBlade">CreateUiDefinition Sandbox</a>: pega el JSON y ve el asistente en vivo.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--a reveal">
+      <div class="step__num">A5</div>
+      <div>
+        <div class="step__title">Empaquetar el <code>.zip</code> del offer</div>
+        <p>El paquete es un ZIP con <strong>los archivos en la raíz</strong> (no dentro de una subcarpeta). Mínimo: <code>mainTemplate.json</code> + <code>createUiDefinition.json</code>.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">bash</span></div>
+<pre><span class="k">cd</span> deploy/azure/marketplace
+
+<span class="c"># Los archivos deben quedar en la raíz del zip</span>
+<span class="k">zip</span> -j qa-metrics-solution-template.zip \
+  mainTemplate.json \
+  createUiDefinition.json
+
+<span class="c"># (opcional) valida la estructura con arm-ttk antes de subir</span>
+<span class="c"># https://github.com/Azure/arm-ttk</span></pre>
+        </div>
+        <div class="callout callout--warn">
+          <p class="callout__h">■ Error común</p>
+          <p>Si los <code>.json</code> quedan dentro de una carpeta dentro del zip, Partner Center los rechaza. Usa <code>zip -j</code> (junk paths) o verifica que estén en el nivel superior.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--a reveal">
+      <div class="step__num">A6</div>
+      <div>
+        <div class="step__title">Crear el offer en Partner Center</div>
+        <p>En Partner Center → <em>Commercial Marketplace → Overview → + New offer → <strong>Azure Application</strong></em>.</p>
+        <ul>
+          <li><strong>Offer setup:</strong> ID interno y alias del offer.</li>
+          <li><strong>Properties:</strong> categorías (p.ej. <em>DevOps</em>, <em>Analytics</em>) y sectores.</li>
+          <li><strong>Offer listing:</strong> nombre público, descripción, logos (48/90/216px), capturas, video, links de soporte/privacidad.</li>
+          <li><strong>Preview audience:</strong> IDs de subscripción autorizadas a ver el borrador.</li>
+          <li><strong>Plans → + Create new plan →</strong> tipo <strong>Solution template</strong> → sube <code>qa-metrics-solution-template.zip</code>.</li>
+          <li>Selecciona las <strong>regiones de Azure</strong> donde el plan estará disponible.</li>
+        </ul>
+        <div class="callout callout--ready">
+          <p class="callout__h">● Ventaja</p>
+          <p>El plan Solution template suele publicarse <strong>gratis</strong>: el cliente paga solo los recursos Azure que despliega. No necesitas configurar el perfil de payout para esta ruta.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--a reveal">
+      <div class="step__num">A7</div>
+      <div>
+        <div class="step__title">Validar, previsualizar y publicar</div>
+        <p>Al enviar, Microsoft ejecuta <strong>certificación automática</strong> (valida que la plantilla despliega y cumple políticas).</p>
+        <div class="verify">
+          <p class="verify__h">Checklist antes de Go live</p>
+          <ul>
+            <li>La certificación pasa sin errores (revisa el reporte si falla).</li>
+            <li>Instala el offer desde el <strong>Preview</strong> en una subscripción de prueba, de punta a punta.</li>
+            <li>La app arranca: web responde, API healthcheck OK, Prisma migró contra el Postgres creado.</li>
+            <li>Publicas → Go live → el offer queda listado públicamente.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RUTA B ============ -->
+  <section id="ruta-b">
+    <div class="sec-head reveal">
+      <p class="sec-kicker k-b"><span class="badge">Ruta B</span> SaaS Offer · facturación por Azure</p>
+      <h2>Vender QA Metrics como SaaS multi-tenant</h2>
+      <p class="sec-intro">Tú hospedas una sola instancia; el cliente compra desde el Marketplace y paga en su factura de Azure. Además del empaquetado, esto requiere cambios reales en la app: aislamiento multi-tenant, login federado con Entra ID, y la integración con la Fulfillment API.</p>
+    </div>
+
+    <div class="step step--b reveal">
+      <div class="step__num">B1</div>
+      <div>
+        <div class="step__title">Convertir la app en multi-tenant</div>
+        <p>Hoy cada cliente vive en un deployment con su propia base. Para SaaS, una instancia sirve a muchos tenants con <strong>aislamiento de datos</strong>. El patrón más simple sobre tu Prisma: columna <code>tenantId</code> en cada modelo + scoping obligatorio.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">prisma + express · scoping por tenant</span></div>
+<pre><span class="c">// schema.prisma — añadir a cada modelo de negocio</span>
+model Cliente {
+  id        String @id @default(cuid())
+  tenantId  String            <span class="c">// ← discriminador</span>
+  <span class="c">// ...campos existentes</span>
+  @@index([tenantId])
+}
+
+<span class="c">// middleware express: resuelve el tenant del token y fuerza el filtro</span>
+<span class="k">app</span>.use((req, res, next) => {
+  req.tenantId = <span class="v">resolveTenantFromJwt</span>(req)   <span class="c">// nunca confiar en el body</span>
+  <span class="k">if</span> (!req.tenantId) <span class="k">return</span> res.status(<span class="v">401</span>).end()
+  next()
+})</pre>
+        </div>
+        <div class="callout callout--gap">
+          <p class="callout__h">▲ Gap de tu app · el más grande</p>
+          <p>Es la pieza de mayor esfuerzo. Decide entre <strong>DB compartida con <code>tenantId</code></strong> (más simple) o <strong>schema/DB por tenant</strong> (más aislamiento). Toda query debe filtrar por tenant sin excepción.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--b reveal">
+      <div class="step__num">B2</div>
+      <div>
+        <div class="step__title">Registrar la app multi-tenant en Microsoft Entra ID</div>
+        <p>El Marketplace exige login federado con Entra ID y usa esta app para autenticar los tokens de compra. Regístrala como <strong>multi-tenant</strong>.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">bash · az cli</span></div>
+<pre><span class="k">az</span> ad app create \
+  --display-name <span class="s">"QA Metrics SaaS"</span> \
+  --sign-in-audience <span class="s">AzureADMultipleOrgs</span> \
+  --web-redirect-uris <span class="s">"https://app.qametrics.io/auth/callback"</span>
+
+<span class="c"># Crear un secreto de cliente (guárdalo en Key Vault)</span>
+<span class="k">az</span> ad app credential reset --id <span class="v">&lt;appId&gt;</span> --append</pre>
+        </div>
+        <ul>
+          <li>Anota <code>Application (client) ID</code> y <code>Directory (tenant) ID</code> — van en la configuración técnica del offer.</li>
+          <li>La landing page usará esta app para el SSO del comprador.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step step--b reveal">
+      <div class="step__num">B3</div>
+      <div>
+        <div class="step__title">Construir la landing page de activación</div>
+        <p>Tras comprar, Azure redirige al cliente a tu URL con un <strong>token de Marketplace</strong> en el query string. Esa página inicia el SSO y resuelve la suscripción.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">flujo · redirect de Marketplace</span></div>
+<pre><span class="c"># Azure envía al comprador a:</span>
+https://app.qametrics.io/?token=<span class="v">&lt;marketplace_token&gt;</span>
+
+<span class="c"># Tu landing (Next.js) debe:</span>
+<span class="c"># 1. Autenticar al usuario con Entra ID (SSO)</span>
+<span class="c"># 2. Llamar a Resolve con el token (paso B4)</span>
+<span class="c"># 3. Mostrar onboarding y activar la suscripción</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--b reveal">
+      <div class="step__num">B4</div>
+      <div>
+        <div class="step__title">Integrar la SaaS Fulfillment API v2 — Resolve &amp; Activate</div>
+        <p>Con el token, resuelves la suscripción y luego la activas. Primero obtén un token de acceso para el recurso del Marketplace.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">http · resolve + activate</span></div>
+<pre><span class="c"># 1) Token para el Fulfillment API (client credentials)</span>
+<span class="k">POST</span> https://login.microsoftonline.com/<span class="v">&lt;tenantId&gt;</span>/oauth2/v2.0/token
+  grant_type=client_credentials
+  client_id=<span class="v">&lt;appId&gt;</span>&amp;client_secret=<span class="v">&lt;secret&gt;</span>
+  scope=<span class="s">20e940b3-4c77-4b0b-9a53-9e16a1b010a7/.default</span>
+
+<span class="c"># 2) Resolver la suscripción a partir del token de compra</span>
+<span class="k">POST</span> https://marketplaceapi.microsoft.com/api/saas/subscriptions/resolve?api-version=2018-08-31
+  Authorization: Bearer <span class="v">&lt;aad_token&gt;</span>
+  x-ms-marketplace-token: <span class="v">&lt;marketplace_token (url-decoded)&gt;</span>
+
+<span class="c"># 3) Activar (tras elegir el plan en tu onboarding)</span>
+<span class="k">POST</span> .../api/saas/subscriptions/<span class="v">&lt;subscriptionId&gt;</span>/activate?api-version=2018-08-31
+  { <span class="s">"planId"</span>: <span class="s">"pro-monthly"</span> }</pre>
+        </div>
+        <div class="callout callout--warn">
+          <p class="callout__h">■ Importante</p>
+          <p>El <code>x-ms-marketplace-token</code> viene <strong>URL-encoded</strong> en el query string. Decodifícalo antes de mandarlo en el header o el Resolve falla.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--b reveal">
+      <div class="step__num">B5</div>
+      <div>
+        <div class="step__title">Implementar el webhook de ciclo de vida</div>
+        <p>Azure notifica cambios de la suscripción (cambio de plan, cancelación, suspensión, reactivación) a un endpoint tuyo. Debes actuar y confirmar cada operación.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">express · POST /api/marketplace/webhook</span></div>
+<pre><span class="k">app</span>.post(<span class="s">'/api/marketplace/webhook'</span>, <span class="k">async</span> (req, res) => {
+  <span class="k">const</span> { action, subscriptionId, operationId } = req.body
+  <span class="c">// 1) VERIFICAR: nunca confíes en el body; re-consulta la operación</span>
+  <span class="k">const</span> op = <span class="k">await</span> <span class="v">getOperation</span>(subscriptionId, operationId)
+  <span class="k">if</span> (op.status !== <span class="s">'InProgress'</span>) <span class="k">return</span> res.sendStatus(<span class="v">200</span>)
+
+  <span class="k">switch</span> (action) {
+    <span class="k">case</span> <span class="s">'Unsubscribe'</span>: <span class="k">await</span> <span class="v">deactivateTenant</span>(subscriptionId); <span class="k">break</span>
+    <span class="k">case</span> <span class="s">'ChangePlan'</span>:  <span class="k">await</span> <span class="v">applyPlan</span>(subscriptionId, req.body.planId); <span class="k">break</span>
+    <span class="k">case</span> <span class="s">'Suspend'</span>:     <span class="k">await</span> <span class="v">suspendTenant</span>(subscriptionId); <span class="k">break</span>
+    <span class="k">case</span> <span class="s">'Reinstate'</span>:   <span class="k">await</span> <span class="v">reinstateTenant</span>(subscriptionId); <span class="k">break</span>
+  }
+  <span class="c">// 2) CONFIRMAR el resultado a Azure</span>
+  <span class="k">await</span> <span class="v">patchOperation</span>(subscriptionId, operationId, <span class="s">'Success'</span>)
+  res.sendStatus(<span class="v">200</span>)
+})</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--b reveal">
+      <div class="step__num">B6</div>
+      <div>
+        <div class="step__title">Facturación por uso — opcional</div>
+        <p>Si además del plan fijo quieres cobrar por consumo (p.ej. nº de HUs analizadas o usuarios activos), emite eventos al <strong>Marketplace Metering Service</strong>.</p>
+        <div class="code">
+          <div class="code__bar"><div class="lights"><i></i><i></i><i></i></div><span class="lbl">http · metering</span></div>
+<pre><span class="k">POST</span> https://marketplaceapi.microsoft.com/api/usageEvent?api-version=2018-08-31
+  Authorization: Bearer <span class="v">&lt;aad_token&gt;</span>
+  {
+    <span class="s">"resourceId"</span>: <span class="v">"&lt;subscriptionId&gt;"</span>,
+    <span class="s">"dimension"</span>:  <span class="s">"hus_analizadas"</span>,
+    <span class="s">"quantity"</span>:   <span class="v">1250</span>,
+    <span class="s">"effectiveStartTime"</span>: <span class="s">"2026-07-08T00:00:00Z"</span>
+  }</pre>
+        </div>
+        <div class="callout callout--tip">
+          <p class="callout__h">◆ Tip</p>
+          <p>Las <strong>dimensiones de metering</strong> (como <code>hus_analizadas</code>) se declaran primero en el plan dentro de Partner Center; el nombre debe coincidir exacto.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--b reveal">
+      <div class="step__num">B7</div>
+      <div>
+        <div class="step__title">Configuración técnica del offer en Partner Center</div>
+        <p>En Partner Center → <em>+ New offer → <strong>Software as a Service</strong> → Technical configuration</em>, conecta la app con tu backend:</p>
+        <ul>
+          <li><strong>Landing page URL:</strong> <code>https://app.qametrics.io</code> (paso B3).</li>
+          <li><strong>Connection webhook:</strong> <code>https://app.qametrics.io/api/marketplace/webhook</code> (paso B5).</li>
+          <li><strong>Azure AD tenant ID</strong> y <strong>Azure AD application ID</strong> (paso B2).</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step step--b reveal">
+      <div class="step__num">B8</div>
+      <div>
+        <div class="step__title">Definir planes y precios</div>
+        <p>En la pestaña <em>Plans</em> crea uno o más planes (p.ej. <em>Starter</em>, <em>Pro</em>) con modelo de precio: tarifa plana mensual/anual, por usuario, o por dimensión de uso. Marca el offer como público o privado.</p>
+        <div class="callout callout--gap">
+          <p class="callout__h">▲ Requisito · payout</p>
+          <p>Aquí sí necesitas el <strong>perfil de pago y fiscal</strong> completo del paso 0.1 para recibir los payouts de Microsoft (comisión del Marketplace aplica).</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step step--b reveal">
+      <div class="step__num">B9</div>
+      <div>
+        <div class="step__title">Probar en Preview y publicar</div>
+        <div class="verify">
+          <p class="verify__h">Checklist end-to-end</p>
+          <ul>
+            <li>Con el offer en <strong>Preview</strong>, ejecuta una compra de prueba desde una subscripción autorizada.</li>
+            <li>El flujo completo funciona: compra → landing → SSO Entra ID → Resolve → Activate → tenant creado.</li>
+            <li>El webhook procesa correctamente <em>ChangePlan</em> y <em>Unsubscribe</em>.</li>
+            <li>(Si aplica) los eventos de metering llegan y se reflejan en la facturación de prueba.</li>
+            <li>Certificación OK → Go live.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CERTIFICACION ============ -->
+  <section id="cert">
+    <div class="sec-head reveal">
+      <p class="sec-kicker"><span class="badge">FIN</span> Común a ambas rutas</p>
+      <h2>Certificación y publicación</h2>
+      <p class="sec-intro">El último tramo es igual para las dos rutas: enviar, pasar la revisión de Microsoft y salir en vivo.</p>
+    </div>
+    <div class="step reveal">
+      <div class="step__num">◆</div>
+      <div>
+        <div class="step__title">Del envío al Go live</div>
+        <ul>
+          <li><strong>Review and publish:</strong> Partner Center corre validaciones automáticas + revisión (puede ser manual para SaaS).</li>
+          <li><strong>Preview:</strong> el offer queda visible solo para tu audiencia de prueba — valida todo aquí.</li>
+          <li><strong>Go live:</strong> promueves el offer y pasa a estar público en el Marketplace (indexación puede tardar horas).</li>
+          <li><strong>Actualizaciones:</strong> cada versión nueva (imagen, plantilla, plan) es un nuevo submit que repite certificación.</li>
+        </ul>
+        <div class="callout callout--tip">
+          <p class="callout__h">◆ Docs oficiales</p>
+          <p>Guía base: <a class="ext" href="https://learn.microsoft.com/partner-center/marketplace/">learn.microsoft.com/partner-center/marketplace</a> · Fulfillment API v2 y CreateUiDefinition tienen su propia referencia dentro de ese árbol.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GAPS ============ -->
+  <section id="gaps">
+    <div class="sec-head reveal">
+      <p class="sec-kicker"><span class="badge">TU APP</span> Estado actual</p>
+      <h2>Qué falta en QA Metrics, por ruta</h2>
+      <p class="sec-intro">Resumen de los cambios concretos que tu código necesita hoy, mapeados a cada ruta.</p>
+    </div>
+    <div class="gaps reveal">
+      <table>
+        <thead>
+          <tr><th>Área</th><th>Estado hoy</th><th>Qué hacer</th><th>Ruta</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><b>Bicep de despliegue</b></td>
+            <td>Existe: Postgres + Plan + 2 App Services</td>
+            <td>Reutilizar tal cual; solo empaquetar</td>
+            <td><span class="tag tag--a">Ruta A</span></td>
+          </tr>
+          <tr>
+            <td><b>Secretos</b></td>
+            <td><code>JWT_SECRET</code>, <code>ENCRYPTION_KEY</code> en App Settings en claro</td>
+            <td>Generar en plantilla + Key Vault + identidad administrada</td>
+            <td><span class="tag tag--both">Ambas</span></td>
+          </tr>
+          <tr>
+            <td><b>Imágenes Docker</b></td>
+            <td>Dockerfiles en <code>apps/api</code> y <code>apps/web</code></td>
+            <td>Publicar con tags de versión inmutables</td>
+            <td><span class="tag tag--a">Ruta A</span></td>
+          </tr>
+          <tr>
+            <td><b>Multi-tenancy</b></td>
+            <td>Una DB por deployment</td>
+            <td><code>tenantId</code> + scoping obligatorio en todas las queries</td>
+            <td><span class="tag tag--b">Ruta B</span></td>
+          </tr>
+          <tr>
+            <td><b>Autenticación</b></td>
+            <td>JWT propio (login local)</td>
+            <td>SSO federado con Microsoft Entra ID (multi-tenant)</td>
+            <td><span class="tag tag--b">Ruta B</span></td>
+          </tr>
+          <tr>
+            <td><b>Fulfillment / webhook</b></td>
+            <td>No existe</td>
+            <td>Landing + Resolve/Activate + webhook de ciclo de vida</td>
+            <td><span class="tag tag--b">Ruta B</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="decision reveal">
+      <h3>Recomendación</h3>
+      <p><strong>Empieza por la Ruta A.</strong> Ya tienes el Bicep y el pipeline; con blindar los secretos, publicar las imágenes y armar el paquete (<code>mainTemplate.json</code> + <code>createUiDefinition.json</code>) tienes presencia real en el Marketplace en 1–2 semanas — incluso como oferta gratuita o de contacto.</p>
+      <p><strong>Planifica la Ruta B como evolución.</strong> Si el objetivo es vender por suscripción, el bloqueo principal no es el Marketplace sino tu app: <strong>multi-tenancy + Entra ID SSO</strong>. Aborda eso como un proyecto propio antes de tocar la Fulfillment API.</p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="rule"></div>
+    <div class="foot-mono">QA Metrics · Runbook de publicación en Azure Marketplace · Inovabiz</div>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+    document.querySelectorAll('.reveal').forEach(function (el) { io.observe(el); });
+  })();
+</script>
