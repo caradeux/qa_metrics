@@ -2,17 +2,24 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { prisma } from "@qa-metrics/database";
 import { env } from "../config/env.js";
+import { refreshTtl } from "../lib/session-ttl.js";
 import { logger } from "../middleware/logger.js";
 
 function generateAccessToken(userId: string): string {
   return jwt.sign({ userId }, env.JWT_SECRET, { expiresIn: "8h" });
 }
 
-function generateRefreshToken(userId: string): string {
-  return jwt.sign({ userId }, env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
+/**
+ * El flag `remember` viaja dentro del token para que un refresh posterior
+ * sepa que esta sesion es de larga duracion sin volver a preguntarle al front.
+ */
+function generateRefreshToken(userId: string, rememberMe: boolean): string {
+  return jwt.sign({ userId, remember: rememberMe }, env.JWT_REFRESH_SECRET, {
+    expiresIn: refreshTtl(rememberMe),
+  });
 }
 
-export async function login(email: string, password: string) {
+export async function login(email: string, password: string, rememberMe = false) {
   const user = await prisma.user.findUnique({
     where: { email },
     include: {
@@ -28,7 +35,7 @@ export async function login(email: string, password: string) {
   if (!valid) throw new AuthError("Credenciales invalidas");
 
   const accessToken = generateAccessToken(user.id);
-  const refreshToken = generateRefreshToken(user.id);
+  const refreshToken = generateRefreshToken(user.id, rememberMe);
 
   const hashedRefresh = await bcrypt.hash(refreshToken, 10);
   await prisma.user.update({
@@ -39,6 +46,7 @@ export async function login(email: string, password: string) {
   return {
     accessToken,
     refreshToken,
+    rememberMe,
     user: {
       id: user.id,
       name: user.name,
@@ -57,7 +65,10 @@ export async function login(email: string, password: string) {
 
 export async function refreshAccessToken(refreshToken: string) {
   try {
-    const payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as { userId: string };
+    const payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as {
+      userId: string;
+      remember?: boolean;
+    };
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
@@ -72,7 +83,7 @@ export async function refreshAccessToken(refreshToken: string) {
     }
 
     const accessToken = generateAccessToken(user.id);
-    return { accessToken };
+    return { accessToken, rememberMe: payload.remember === true };
   } catch (error) {
     if (error instanceof AuthError) throw error;
     throw new AuthError("Refresh token invalido o expirado");

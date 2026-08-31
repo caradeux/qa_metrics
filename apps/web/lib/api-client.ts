@@ -77,12 +77,12 @@ export async function apiClient<T = any>(
   return res.json();
 }
 
-export async function apiLogin(email: string, password: string) {
+export async function apiLogin(email: string, password: string, rememberMe = false) {
   const res = await fetch(`${API_URL}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, rememberMe }),
   });
   if (!res.ok) {
     let message = "Login failed";
