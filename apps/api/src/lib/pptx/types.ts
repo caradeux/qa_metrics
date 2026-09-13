@@ -113,6 +113,43 @@ export interface AnalystCapacityCurve {
   projects: string[];               // nombres de proyectos a los que contribuyó
 }
 
+// ── Automatización ────────────────────────────────────────────────────
+// Los proyectos de automatización no tienen HUs: su unidad de trabajo es la
+// línea de prueba y sus métricas son scripts y ejecuciones (AutomationRecord).
+
+export interface AutomationTotals {
+  scriptsCreated: number;
+  scriptsRefactored: number;
+  scriptsFixed: number;
+  execTotal: number;
+  execPassed: number;
+  execFailed: number;
+}
+
+export interface AutomationLineRow extends AutomationTotals {
+  testLineId: string;
+  name: string;
+  responsibles: string[];
+  statusLabel: string;
+  passRatePct: number;
+  lastNote: string | null;         // última nota no vacía del periodo
+}
+
+export interface AutomationTrendPoint extends AutomationTotals {
+  label: string;                   // "Lun 7", "Sem 37", "sep", etc.
+}
+
+export interface AutomationProjectReportData {
+  projectId: string;
+  projectName: string;
+  clientName: string;
+  projectManagerName: string | null;
+  testers: Array<{ id: string; name: string; allocation: number }>;
+  kpis: AutomationTotals & { passRatePct: number };
+  lines: AutomationLineRow[];
+  trend: AutomationTrendPoint[];
+}
+
 export interface ReportSpec {
   period: ReportPeriod;
   periodStart: Date;
@@ -120,6 +157,7 @@ export interface ReportSpec {
   periodLabel: string;             // "Semana del 15 al 19 abr 2026" | "Abril 2026" | "Año 2026"
   clientFilter: { id: string; name: string } | null;
   projects: ProjectReportData[];
+  automationProjects: AutomationProjectReportData[];
   analysts: OccupationResult[];    // reutiliza tipo existente de occupation.ts
   analystCurves: AnalystCapacityCurve[]; // curva por analista (agrupada por User)
   teamCurve: ProjectOccupationCurve;     // curva consolidada del equipo

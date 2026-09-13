@@ -15,6 +15,12 @@ import { addAnalystCapacityCurveSlide } from "./slides/analyst-capacity-curve.js
 import { addAppendixDividerSlide } from "./slides/appendix-divider.js";
 import { addAnalystDetailSlide } from "./slides/analyst-detail.js";
 import { addClosingSlide } from "./slides/closing.js";
+import { addAutomationSummarySlide } from "./slides/automation-summary.js";
+import {
+  addAutomationProjectCoverSlide,
+  addAutomationLinesSlides,
+  addAutomationTrendSlide,
+} from "./slides/automation-project.js";
 
 // pptxgenjs es CJS: según el loader (node ESM vs tsx/esbuild) el default
 // llega como la clase directamente o anidado en `.default`. Normalizamos.
@@ -23,13 +29,50 @@ const PptxGenJS: typeof PptxGenJSImport =
     ? (PptxGenJSImport as any)
     : ((PptxGenJSImport as any).default ?? PptxGenJSImport);
 
-export async function buildReportPptx(spec: ReportSpec): Promise<Buffer> {
+export type ReportDeckKind = "manual" | "automation" | "mixed";
+
+/**
+ * Qué deck corresponde según los proyectos del reporte: solo automatización
+ * genera un informe propio (scripts y ejecuciones, sin HUs ni capacidad);
+ * con ambos tipos se agrega el bloque de automatización al informe QA.
+ */
+export function reportDeckKind(spec: Pick<ReportSpec, "projects" | "automationProjects">): ReportDeckKind {
+  const hasAutomation = (spec.automationProjects?.length ?? 0) > 0;
+  if (!hasAutomation) return "manual";
+  return spec.projects.length === 0 ? "automation" : "mixed";
+}
+
+function newPresentation(title: string) {
   const pres = new PptxGenJS();
   pres.defineLayout({ name: "INOVABIZ_WIDE", width: SLIDE.widthIn, height: SLIDE.heightIn });
   pres.layout = "INOVABIZ_WIDE";
   pres.author = "Inovabiz";
   pres.company = "Inovabiz";
-  pres.title = `Informe QA — ${spec.periodLabel}`;
+  pres.title = title;
+  return pres;
+}
+
+async function addAutomationBlock(pres: InstanceType<typeof PptxGenJS>, spec: ReportSpec): Promise<void> {
+  addAutomationSummarySlide(pres, spec);
+  for (const p of spec.automationProjects) {
+    addAutomationProjectCoverSlide(pres, p);
+    addAutomationLinesSlides(pres, p);
+    await addAutomationTrendSlide(pres, p, spec.period);
+  }
+}
+
+export async function buildReportPptx(spec: ReportSpec): Promise<Buffer> {
+  const kind = reportDeckKind(spec);
+
+  if (kind === "automation") {
+    const pres = newPresentation(`Informe de Automatización QA — ${spec.periodLabel}`);
+    addCoverSlide(pres, spec, { title: "Informe de Automatización QA" });
+    await addAutomationBlock(pres, spec);
+    addClosingSlide(pres);
+    return (await pres.write({ outputType: "nodebuffer" })) as Buffer;
+  }
+
+  const pres = newPresentation(`Informe QA — ${spec.periodLabel}`);
 
   // Bloque A
   addCoverSlide(pres, spec);
@@ -50,6 +93,9 @@ export async function buildReportPptx(spec: ReportSpec): Promise<Buffer> {
     await addPortfolioTrendSlide(pres, spec);
     await addTeamCapacityCurveSlide(pres, spec);
   }
+
+  // Bloque C2 — automatización, cuando el alcance mezcla ambos tipos de proyecto
+  if (kind === "mixed") await addAutomationBlock(pres, spec);
 
   // Bloque D — anexo interno: por cada analista, curva + detalle tabular
   if (spec.includeInternalAppendix && spec.analysts.length > 0) {
