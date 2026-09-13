@@ -64,3 +64,59 @@ export function passRate(x: { execTotal: number; execPassed: number }): number {
   if (x.execTotal <= 0) return 0;
   return x.execPassed / x.execTotal;
 }
+
+export type AutomationMetric = Exclude<keyof AutomationDailyLike, "date">;
+
+const AUTOMATION_METRICS: AutomationMetric[] = [
+  "scriptsCreated",
+  "scriptsRefactored",
+  "scriptsFixed",
+  "execTotal",
+  "execPassed",
+  "execFailed",
+];
+
+export interface AutomationPeriodReport {
+  totals: Record<AutomationMetric, number[]>;
+  passRatePct: number[];
+  scriptsByProject: { project: string; values: number[] }[];
+  execByProject: { project: string; values: number[] }[];
+}
+
+/**
+ * Agrega registros de automatizacion en los periodos (meses o semanas) de un
+ * reporte. `periodKeyFor` recibe la fecha ya normalizada al dia calendario
+ * (las columnas @db.Date llegan como medianoche UTC) y devuelve la clave del
+ * periodo; los registros cuya clave no esta en `periodKeys` se ignoran.
+ */
+export function aggregateAutomationByPeriod(
+  records: (AutomationDailyLike & { projectId: string })[],
+  periodKeys: string[],
+  projects: { id: string; name: string }[],
+  periodKeyFor: (calendarDate: Date) => string
+): AutomationPeriodReport {
+  const index = new Map(periodKeys.map((k, i) => [k, i]));
+  const zeros = () => periodKeys.map(() => 0);
+  const totals = Object.fromEntries(AUTOMATION_METRICS.map((m) => [m, zeros()])) as Record<AutomationMetric, number[]>;
+  const scripts = new Map(projects.map((p) => [p.id, zeros()]));
+  const exec = new Map(projects.map((p) => [p.id, zeros()]));
+
+  for (const r of records) {
+    const i = index.get(periodKeyFor(toLocalCalendarDate(r.date)));
+    if (i === undefined) continue;
+    for (const m of AUTOMATION_METRICS) totals[m][i] += r[m];
+    const s = scripts.get(r.projectId);
+    if (s) s[i] += r.scriptsCreated + r.scriptsRefactored + r.scriptsFixed;
+    const e = exec.get(r.projectId);
+    if (e) e[i] += r.execTotal;
+  }
+
+  return {
+    totals,
+    passRatePct: periodKeys.map((_, i) =>
+      Math.round(passRate({ execTotal: totals.execTotal[i], execPassed: totals.execPassed[i] }) * 100)
+    ),
+    scriptsByProject: projects.map((p) => ({ project: p.name, values: scripts.get(p.id)! })),
+    execByProject: projects.map((p) => ({ project: p.name, values: exec.get(p.id)! })),
+  };
+}

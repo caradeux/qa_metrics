@@ -100,10 +100,21 @@ interface SeriesByProject {
   project: string;
   values: number[];
 }
+type AutomationMetric = "scriptsCreated" | "scriptsRefactored" | "scriptsFixed" | "execTotal" | "execPassed" | "execFailed";
+interface AutomationReport {
+  hasProjects: boolean;
+  totals: Record<AutomationMetric, number[]>;
+  passRatePct: number[];
+  scriptsByProject: SeriesByProject[];
+  execByProject: SeriesByProject[];
+}
 interface Props {
   data: {
     client: { id: string; name: string };
     labels: string[];
+    /** Hay proyectos manuales/ADO (con diseño, ejecución y defectos). */
+    hasManual?: boolean;
+    automation?: AutomationReport;
     designedTotal: SeriesTotal;
     designedByProject: SeriesByProject[];
     designedAverage: SeriesTotal;
@@ -372,6 +383,149 @@ function GroupedBarCard({
   );
 }
 
+function StackedBarCard({
+  title,
+  subtitle,
+  labels,
+  stacks,
+  icon,
+}: {
+  title: string;
+  subtitle?: string;
+  labels: string[];
+  stacks: { key: string; label: string; color: string; values: number[] }[];
+  icon: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const rows = labels.map((label, i) => {
+    const row: Record<string, number | string> = { label };
+    for (const s of stacks) row[s.key] = s.values[i] ?? 0;
+    return row;
+  });
+  return (
+    <div ref={ref} className="relative rounded-xl border bg-white p-4 shadow-sm transition hover:shadow-md print:shadow-none">
+      <CopyChartButton targetRef={ref} />
+      <SectionTitle icon={icon} title={title} subtitle={subtitle} />
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={rows} margin={{ top: 10, right: 8, left: -10, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+          <XAxis dataKey="label" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+          <YAxis allowDecimals={false} stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} />
+          <Tooltip content={<CustomTooltip />} cursor={{ fill: "#1F386410" }} />
+          <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+          {stacks.map((s, i) => (
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              name={s.label}
+              stackId="stack"
+              fill={s.color}
+              radius={i === stacks.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+            />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+const AUTOMATION_COLORS = {
+  created: "#7c3aed",
+  refactored: "#0891b2",
+  fixed: "#ea580c",
+  passed: "#16a34a",
+  failed: "#dc2626",
+};
+
+function AutomationSection({ labels, automation, unitSingular }: { labels: string[]; automation: AutomationReport; unitSingular: string }) {
+  const t = automation.totals;
+  const scriptsTotal = sum(t.scriptsCreated) + sum(t.scriptsRefactored) + sum(t.scriptsFixed);
+  const execTotal = sum(t.execTotal);
+  const execPassed = sum(t.execPassed);
+  const execFailed = sum(t.execFailed);
+  const passRate = execTotal > 0 ? Math.round((execPassed / execTotal) * 100) : 0;
+
+  return (
+    <>
+      <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
+        <span className="mr-2 inline-block h-[2px] w-6 align-middle bg-[#7c3aed]" />
+        Automatización
+      </h2>
+      <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <KPICard
+          title="Scripts trabajados"
+          value={scriptsTotal}
+          icon={ICONS.designed}
+          accent={AUTOMATION_COLORS.created}
+          subtitle={`${sum(t.scriptsCreated)} creados · ${sum(t.scriptsRefactored)} refact. · ${sum(t.scriptsFixed)} corregidos`}
+          hint="Scripts de automatización creados, refactorizados o corregidos en el período."
+        />
+        <KPICard
+          title="Ejecuciones"
+          value={execTotal}
+          icon={ICONS.executed}
+          accent={AUTOMATION_COLORS.refactored}
+          subtitle="Casos automatizados ejecutados"
+          hint="Total de casos ejecutados por las suites automatizadas en el período."
+        />
+        <KPICard
+          title="Fallidos"
+          value={execFailed}
+          icon={ICONS.defects}
+          accent={AUTOMATION_COLORS.failed}
+          subtitle={`${execPassed.toLocaleString("es-CL")} pasados`}
+          hint="Casos automatizados que fallaron en las ejecuciones del período."
+        />
+        <KPICard
+          title="Tasa de éxito"
+          value={passRate}
+          suffix="%"
+          icon={ICONS.average}
+          accent={AUTOMATION_COLORS.passed}
+          subtitle="Pasados ÷ Ejecutados × 100"
+          hint="Porcentaje de casos automatizados que pasaron sobre el total ejecutado."
+        />
+      </div>
+      <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <StackedBarCard
+          title={`Scripts por ${unitSingular}`}
+          subtitle="Creados, refactorizados y corregidos"
+          labels={labels}
+          icon={ICONS.designed}
+          stacks={[
+            { key: "created", label: "Creados", color: AUTOMATION_COLORS.created, values: t.scriptsCreated },
+            { key: "refactored", label: "Refactorizados", color: AUTOMATION_COLORS.refactored, values: t.scriptsRefactored },
+            { key: "fixed", label: "Corregidos", color: AUTOMATION_COLORS.fixed, values: t.scriptsFixed },
+          ]}
+        />
+        <StackedBarCard
+          title={`Ejecuciones por ${unitSingular}`}
+          subtitle="Casos pasados y fallidos"
+          labels={labels}
+          icon={ICONS.executed}
+          stacks={[
+            { key: "passed", label: "Pasados", color: AUTOMATION_COLORS.passed, values: t.execPassed },
+            { key: "failed", label: "Fallidos", color: AUTOMATION_COLORS.failed, values: t.execFailed },
+          ]}
+        />
+        <GroupedBarCard
+          title="Scripts por Proyecto"
+          subtitle="Scripts trabajados por iniciativa de automatización"
+          labels={labels}
+          series={automation.scriptsByProject}
+          icon={ICONS.designed}
+        />
+        <AverageLineCard
+          title={`Tasa de Éxito por ${unitSingular} (%)`}
+          subtitle="Pasados ÷ ejecutados (0 si no hubo ejecuciones)"
+          data={{ labels, values: automation.passRatePct }}
+          color={AUTOMATION_COLORS.passed}
+        />
+      </div>
+    </>
+  );
+}
+
 export function ClientMonthlyReport({
   data,
   mode,
@@ -392,6 +546,10 @@ export function ClientMonthlyReport({
     defects: sum(data.defectsTotal.values),
   };
   const ratio = totals.designed > 0 ? Math.round((totals.executed / totals.designed) * 100) : 0;
+  const showAutomation = !!data.automation?.hasProjects;
+  // Un cliente solo con proyectos de automatizacion no muestra las secciones
+  // manuales en cero; sin ningun proyecto se mantiene el reporte manual vacio.
+  const showManual = data.hasManual !== false || !showAutomation;
 
   return (
     <div className="p-6">
@@ -472,6 +630,7 @@ export function ClientMonthlyReport({
         </div>
       </div>
 
+      {showManual && (<>
       {/* KPIs */}
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         <KPICard
@@ -597,6 +756,11 @@ export function ClientMonthlyReport({
           />
         </div>
       </div>
+      </>)}
+
+      {showAutomation && (
+        <AutomationSection labels={data.labels} automation={data.automation!} unitSingular={unitSingular} />
+      )}
 
       {/* Sección Analistas */}
       <section className="rounded-xl border bg-white p-5 shadow-sm print:shadow-none">

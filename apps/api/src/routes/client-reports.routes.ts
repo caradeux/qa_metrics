@@ -4,9 +4,59 @@ import { addMonths, startOfMonth, endOfMonth, format, startOfWeek, endOfWeek, ad
 import { es } from "date-fns/locale";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
+import { aggregateAutomationByPeriod } from "../services/automation-metrics.service.js";
 
 const router = Router();
 router.use(authMiddleware as any);
+
+type ReportProject = { id: string; name: string; modality: string };
+
+/**
+ * Los proyectos de automatizacion no generan DailyRecord (diseñados/ejecutados/
+ * defectos) sino AutomationRecord (scripts y ejecuciones), asi que el reporte
+ * los agrega por separado. Las series por proyecto incluyen los proyectos
+ * AUTOMATION y cualquier otro que tenga registros de automatizacion.
+ */
+async function automationSection(
+  projects: ReportProject[],
+  range: { start: Date; end: Date },
+  periodKeys: string[],
+  periodKeyFor: (calendarDate: Date) => string
+) {
+  const projectIds = projects.map((p) => p.id);
+  // Las columnas @db.Date se comparan como medianoche UTC: el rango se lleva a
+  // dias calendario UTC para no perder el primer dia en servidores UTC-N.
+  const utcDay = (d: Date) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const records =
+    projectIds.length > 0
+      ? await prisma.automationRecord.findMany({
+          where: {
+            date: { gte: utcDay(range.start), lte: utcDay(range.end) },
+            assignment: { testLine: { projectId: { in: projectIds } } },
+          },
+          select: {
+            date: true,
+            scriptsCreated: true,
+            scriptsRefactored: true,
+            scriptsFixed: true,
+            execTotal: true,
+            execPassed: true,
+            execFailed: true,
+            assignment: { select: { testLine: { select: { projectId: true } } } },
+          },
+        })
+      : [];
+
+  const withRecords = new Set(records.map((r) => r.assignment.testLine.projectId));
+  const seriesProjects = projects.filter((p) => p.modality === "AUTOMATION" || withRecords.has(p.id));
+  const report = aggregateAutomationByPeriod(
+    records.map(({ assignment, ...r }) => ({ ...r, projectId: assignment.testLine.projectId })),
+    periodKeys,
+    seriesProjects,
+    periodKeyFor
+  );
+  return { hasProjects: seriesProjects.length > 0, ...report };
+}
 
 function isLeader(req: AuthRequest) {
   const r = req.user?.role?.name;
@@ -51,7 +101,6 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
     res.status(403).json({ error: "forbidden" });
     return;
   }
-
   const today = new Date();
   const buckets: { start: Date; end: Date; label: string; key: string }[] = [];
   for (let i = monthsCount - 1; i >= 0; i--) {
@@ -144,16 +193,26 @@ router.get("/client/:id/monthly", async (req: AuthRequest, res: Response) => {
       return a.testers.size > 0 ? Math.round(a[field] / a.testers.size) : 0;
     });
 
+  const manualProjects = (client.projects as ReportProject[]).filter((p) => p.modality !== "AUTOMATION");
   const byProjectSeries = (field: "designed" | "executed" | "defects") =>
-    client.projects.map((p: any) => ({
+    manualProjects.map((p: any) => ({
       project: p.name,
       values: buckets.map((b) => byProjectMonth[p.id]![b.key]![field]),
     }));
+
+  const automation = await automationSection(
+    client.projects,
+    { start: buckets[0]!.start, end: buckets[buckets.length - 1]!.end },
+    buckets.map((b) => b.key),
+    (d) => format(d, "yyyy-MM")
+  );
 
   res.json({
     client: { id: client.id, name: client.name },
     months,
     labels: months,
+    hasManual: manualProjects.length > 0,
+    automation,
     designedTotal: { months, labels: months, values: totalValues("designed") },
     designedByProject: byProjectSeries("designed"),
     designedAverage: { months, labels: months, values: avgValues("designed") },
@@ -201,7 +260,6 @@ router.get("/client/:id/weekly", async (req: AuthRequest, res: Response) => {
     res.status(403).json({ error: "forbidden" });
     return;
   }
-
   const today = new Date();
   const buckets: { start: Date; end: Date; label: string; key: string }[] = [];
   for (let i = weeksCount - 1; i >= 0; i--) {
@@ -295,16 +353,26 @@ router.get("/client/:id/weekly", async (req: AuthRequest, res: Response) => {
       return a.testers.size > 0 ? Math.round(a[field] / a.testers.size) : 0;
     });
 
+  const manualProjects = (client.projects as ReportProject[]).filter((p) => p.modality !== "AUTOMATION");
   const byProjectSeries = (field: "designed" | "executed" | "defects") =>
-    client.projects.map((p: any) => ({
+    manualProjects.map((p: any) => ({
       project: p.name,
       values: buckets.map((b) => byProjectWeek[p.id]![b.key]![field]),
     }));
+
+  const automation = await automationSection(
+    client.projects,
+    { start: buckets[0]!.start, end: buckets[buckets.length - 1]!.end },
+    buckets.map((b) => b.key),
+    weekKeyFor
+  );
 
   res.json({
     client: { id: client.id, name: client.name },
     weeks,
     labels: weeks,
+    hasManual: manualProjects.length > 0,
+    automation,
     designedTotal: { weeks, labels: weeks, values: totalValues("designed") },
     designedByProject: byProjectSeries("designed"),
     designedAverage: { weeks, labels: weeks, values: avgValues("designed") },
