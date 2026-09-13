@@ -140,6 +140,7 @@ import type {
   AnalystCapacityCurve,
 } from "./types.js";
 import { PALETTE } from "./theme.js";
+import { buildAutomationProjects } from "./automation-report-data.js";
 
 const STATUS_LABEL: Record<string, string> = {
   REGISTERED: "No Iniciado",
@@ -217,6 +218,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
   const { period, periodStart, periodEnd, scope, clientFilter, userRole, userId } = input;
 
   const loaded = await loadScopedProjects(scope, periodStart, periodEnd);
+  const automation = await buildAutomationProjects({ scope, period, periodStart, periodEnd });
   const holidaysSet = await loadHolidaySet(periodStart, periodEnd);
   const holidaysMs = new Set<number>(Array.from(holidaysSet));
 
@@ -642,6 +644,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
       uniquePeople.add(loadedT?.userId ?? `anon:${t.id}`);
     }
   }
+  for (const key of automation.testerUserKeys) uniquePeople.add(key);
   const totalAnalysts = uniquePeople.size;
 
   // ═══════════════════════════════════════════════════════════════
@@ -706,6 +709,7 @@ export async function buildReportSpec(input: BuildSpecInput): Promise<ReportSpec
     periodLabel: periodLabel(period, periodStart, periodEnd),
     clientFilter,
     projects,
+    automationProjects: automation.projects,
     analysts,
     analystCurves,
     teamCurve,

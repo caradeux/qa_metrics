@@ -11,7 +11,7 @@ const __dirname = dirname(__filename);
 // a apps/api/assets/inovabiz-logo.svg — 4 niveles arriba, luego assets/.
 const LOGO_PATH = join(__dirname, "..", "..", "..", "..", "assets", "inovabiz-logo.svg");
 
-export function addCoverSlide(pres: PptxGenJS, spec: ReportSpec): void {
+export function addCoverSlide(pres: PptxGenJS, spec: ReportSpec, opts?: { title?: string }): void {
   const s = pres.addSlide();
   s.background = { color: PALETTE.navyDeep };
 
@@ -50,7 +50,7 @@ export function addCoverSlide(pres: PptxGenJS, spec: ReportSpec): void {
   });
 
   // Título.
-  s.addText("Informe de Avance QA", {
+  s.addText(opts?.title ?? "Informe de Avance QA", {
     x: 0.9, y: 2.2, w: SLIDE.widthIn - 1.8, h: 1.0,
     fontFace: FONT.face, fontSize: 44, bold: true, color: PALETTE.white,
   });
@@ -78,10 +78,11 @@ export function addCoverSlide(pres: PptxGenJS, spec: ReportSpec): void {
   // Teaser de métricas del portafolio.
   const tk = spec.portfolio?.kpis;
   if (tk) {
+    const totalProjects = tk.totalProjects + (spec.automationProjects?.length ?? 0);
     s.addText(
       [
-        { text: `${tk.totalProjects} `, options: { bold: true, color: PALETTE.white } },
-        { text: tk.totalProjects === 1 ? "proyecto" : "proyectos", options: { color: PALETTE.grayLight } },
+        { text: `${totalProjects} `, options: { bold: true, color: PALETTE.white } },
+        { text: totalProjects === 1 ? "proyecto" : "proyectos", options: { color: PALETTE.grayLight } },
         { text: "      ", options: {} },
         { text: `${tk.totalAnalysts} `, options: { bold: true, color: PALETTE.white } },
         { text: tk.totalAnalysts === 1 ? "analista" : "analistas", options: { color: PALETTE.grayLight } },
