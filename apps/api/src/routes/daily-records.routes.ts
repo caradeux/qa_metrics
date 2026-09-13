@@ -4,6 +4,7 @@ import { addDays, startOfDay } from "date-fns";
 import { prisma } from "@qa-metrics/database";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { ACTIVE_STATUSES, type AssignmentStatus } from "../lib/assignment-states.js";
+import { CATCH_UP_DAYS, isVisibleInWeeklyGrid } from "../lib/weekly-grid-visibility.js";
 
 const router = Router();
 router.use(authMiddleware as any);
@@ -113,13 +114,17 @@ router.get("/", async (req: AuthRequest, res: Response) => {
   // Get assignments overlapping the week. By default ACTIVE statuses + RETURNED_TO_DEV
   // + UAT (en UAT los QA siguen ejecutando pruebas y registrando bugs
   // que aparecen durante la validación del usuario).
+  // ON_HOLD se incluye durante los 7 días posteriores a detenerse: sin esto,
+  // una HU detenida antes de guardar la semana desaparecía y lo diseñado ese
+  // día no se podía registrar.
   // QA_ANALYST además incluye PRODUCTION para permitir cargar datos durante los
   // primeros 7 días tras el pase a producción (catch-up de registros, bugs
-  // tardíos del go-live); pasados los 7 días se oculta (post-filter abajo).
+  // tardíos del go-live). Las ventanas se aplican en isVisibleInWeeklyGrid.
   const baseStatuses: AssignmentStatus[] = [
     ...ACTIVE_STATUSES,
     "RETURNED_TO_DEV",
     "UAT",
+    "ON_HOLD",
   ];
   const defaultStatuses: AssignmentStatus[] = isAnalyst
     ? [...baseStatuses, "PRODUCTION"]
@@ -153,33 +158,39 @@ router.get("/", async (req: AuthRequest, res: Response) => {
         where: { date: { gte: monday, lte: friday } },
       },
       statusLogs: {
-        where: { status: "PRODUCTION" },
+        where: { status: { in: ["PRODUCTION", "ON_HOLD"] } },
         orderBy: { changedAt: "desc" },
-        take: 1,
       },
     },
     orderBy: { createdAt: "asc" },
   });
 
-  // Regla "ocultar PRODUCTION tras 7 días" para QA_ANALYST, pero preserva la
-  // HU si ya tiene registros en la semana (para poder editarlos). Los 7 días
-  // dan margen para cargar registros olvidados o bugs reportados tras el pase.
-  const productionWindowStartMs = today.getTime() - 7 * 24 * 60 * 60 * 1000;
-  const assignments = isAnalyst
-    ? rawAssignments.filter((a) => {
-        if (a.status !== "PRODUCTION") return true;
-        if (a.dailyRecords.length > 0) return true;
-        const last = a.statusLogs[0];
-        if (!last) return false;
-        return new Date(last.changedAt).getTime() >= productionWindowStartMs;
-      })
-    : rawAssignments;
+  // Ventanas de 7 días para PRODUCTION (solo QA_ANALYST) y ON_HOLD; una HU con
+  // registros en la semana se mantiene siempre (para poder editarlos). Con
+  // includeIdle se muestra todo lo que traslapa la semana.
+  const lastLogAt = (logs: { status: string; changedAt: Date }[], status: string) =>
+    logs.find((l) => l.status === status)?.changedAt ?? null;
+  const assignments = includeIdle
+    ? rawAssignments
+    : rawAssignments.filter((a) =>
+        isVisibleInWeeklyGrid(
+          {
+            status: a.status,
+            hasRecordsInWeek: a.dailyRecords.length > 0,
+            lastProductionAt: lastLogAt(a.statusLogs, "PRODUCTION"),
+            lastOnHoldAt: lastLogAt(a.statusLogs, "ON_HOLD"),
+          },
+          { isAnalyst, todayMs: today.getTime() },
+        ),
+      );
+  const productionWindowStartMs = today.getTime() - CATCH_UP_DAYS * 24 * 60 * 60 * 1000;
 
   const result = assignments.map((a) => {
     // Si la HU está en PRODUCTION dentro de los últimos 7 días, extender el
     // rango efectivo hasta hoy para que las celdas no queden disabled por
     // el endDate ya cerrado (catch-up post-pase).
-    const lastProdMs = a.statusLogs[0] ? new Date(a.statusLogs[0].changedAt).getTime() : 0;
+    const lastProd = lastLogAt(a.statusLogs, "PRODUCTION");
+    const lastProdMs = lastProd ? new Date(lastProd).getTime() : 0;
     const isProdRecent = a.status === "PRODUCTION" && lastProdMs >= productionWindowStartMs;
     const rangeEnd = isProdRecent ? today : (a.endDate ?? today);
     const effectiveEnd = rangeEnd < friday ? rangeEnd : friday;
