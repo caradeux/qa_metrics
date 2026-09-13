@@ -1,0 +1,21 @@
+{
+  "name": "@qa-metrics/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Servidor MCP (stdio) para crear proyectos y cargar ejecuciones en QA Metrics via la API.",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "login": "tsx src/login.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}
